@@ -1,0 +1,167 @@
+import { reactive, computed } from 'vue'
+import { seed, uid } from '../data/mock.js'
+
+const data = seed()
+
+export const store = reactive({
+  folders: data.folders,
+  dashboards: data.dashboards,
+  library: data.library,
+  modules: data.modules,
+  owners: data.owners,
+  currentUser: 'Aarav Mehta',
+  toasts: [],
+  ui: { createOpen: false, theme: 'light', listingOpen: false, listingQuery: '' },
+  // global view-time controls (per the rebuilt Time Filter + Auto-Refresh)
+  timeFilter: { preset: 'last30', label: 'Last 30 days', from: null, to: null },
+  autoRefresh: { interval: 'off', label: 'Off' },
+})
+
+// ---------- getters ----------
+export const live = computed(() => store.dashboards.filter((d) => !d.archived))
+export const archived = computed(() => store.dashboards.filter((d) => d.archived))
+export const favorites = computed(() => live.value.filter((d) => d.favorite))
+export const recents = computed(() =>
+  live.value.filter((d) => d.viewedAt).slice().sort((a, b) => (a.viewedAt < b.viewedAt ? 1 : -1)).slice(0, 6))
+
+export const byId = (id) => store.dashboards.find((d) => d.id === id)
+export const folderName = (id) => store.folders.find((f) => f.id === id)?.name || 'Unfiled'
+
+// ---------- toasts ----------
+let tId = 0
+export function toast(message, kind = 'info') {
+  const id = ++tId
+  store.toasts.push({ id, message, kind })
+  setTimeout(() => { store.toasts = store.toasts.filter((t) => t.id !== id) }, 3200)
+}
+
+// ---------- dashboard actions ----------
+export function toggleFavorite(d) {
+  d.favorite = !d.favorite
+  toast(d.favorite ? `Added “${d.name}” to Favorites` : `Removed “${d.name}” from Favorites`)
+}
+export function markDefault(d) {
+  store.dashboards.forEach((x) => (x.default = false))
+  d.default = true
+  toast(`“${d.name}” is now your default dashboard`)
+}
+export function archiveDashboard(d) {
+  d.archived = true
+  toast(`Archived “${d.name}” — restore it from the Archive`, 'warn')
+}
+export function restoreDashboard(d) {
+  d.archived = false
+  toast(`Restored “${d.name}”`, 'success')
+}
+export function deleteForever(d) {
+  store.dashboards = store.dashboards.filter((x) => x.id !== d.id)
+  toast(`Permanently deleted “${d.name}”`, 'danger')
+}
+export function cloneDashboard(d) {
+  const copy = JSON.parse(JSON.stringify(d))
+  copy.id = uid('d')
+  copy.name = `Copy of ${d.name}`
+  copy.predefined = false; copy.certified = false; copy.default = false
+  copy.favorite = false; copy.clone = true; copy.clonedFrom = d.id
+  copy.owner = store.currentUser; copy.mine = true
+  copy.updated = new Date().toISOString(); copy.viewedAt = new Date().toISOString()
+  copy.tiles = copy.tiles.map((t) => ({ ...t, id: uid('t') }))
+  store.dashboards.unshift(copy)
+  toast(`Cloned to “${copy.name}”`)
+  return copy
+}
+export function createDashboard({ name, access, category, folder, description, techAccess, groupAccess }) {
+  const d = {
+    id: uid('d'), name: name.trim(), access, category: category || '', folder: folder || null,
+    description: description || '', owner: store.currentUser, mine: true, predefined: false,
+    favorite: false, enabled: true, archived: false, default: false,
+    tiles: [], updated: new Date().toISOString(), viewedAt: new Date().toISOString(),
+    techAccess: techAccess || (access === 'public' ? ['All technicians'] : access === 'private' ? [store.currentUser] : []),
+    groupAccess: groupAccess || (access === 'public' ? ['All technician groups'] : []),
+  }
+  store.dashboards.unshift(d)
+  toast(`Created “${d.name}”`, 'success')
+  return d
+}
+export function recordView(d) { if (d) d.viewedAt = new Date().toISOString() }
+
+// ---------- tile actions ----------
+import { kpi, chart, shortcut } from '../data/mock.js'
+const sampleFor = (libTile) => {
+  const t = libTile.type
+  if (t === 'kpi') return kpi(libTile.title, Math.floor(40 + Math.random() * 400), '', { dir: Math.random() > .5 ? 'up' : 'down', pct: +(Math.random() * 12).toFixed(1) }, ['good', 'warn', 'bad'][Math.floor(Math.random() * 3)], `${libTile.title} — from ${libTile.module}.`)
+  if (t === 'chart') return chart(libTile.title, { kind: ['bar', 'line', 'donut'][Math.floor(Math.random() * 3)], labels: ['A', 'B', 'C', 'D'], series: [{ name: libTile.title, values: [12, 28, 19, 34].map((v) => v + Math.floor(Math.random() * 10)) }] }, `${libTile.title} — from ${libTile.module}.`)
+  return shortcut(libTile.title, ['ID', 'Subject', 'Status'], [['REC-1', 'Sample record', 'Open'], ['REC-2', 'Another record', 'In Progress']], `${libTile.title} — from ${libTile.module}.`)
+}
+export function addTilesToDashboard(d, libTiles) {
+  libTiles.forEach((lt) => d.tiles.push(sampleFor(lt)))
+  d.updated = new Date().toISOString()
+  toast(`Added ${libTiles.length} ${libTiles.length === 1 ? 'tile' : 'tiles'} to “${d.name}”`, 'success')
+}
+export function addBuiltTile(d, tile) {
+  d.tiles.push(tile); d.updated = new Date().toISOString()
+  toast(`Added “${tile.title}”`, 'success')
+}
+export function removeTile(d, tile) {
+  d.tiles = d.tiles.filter((t) => t.id !== tile.id)
+  toast(`Removed “${tile.title}”`)
+}
+export function toggleLibFavorite(lt) { lt.favorite = !lt.favorite }
+export function duplicateLibTile(lt) {
+  const copy = { ...lt, id: uid('lt'), title: `${lt.title} (copy)`, favorite: false }
+  const i = store.library.findIndex((x) => x.id === lt.id)
+  store.library.splice(i + 1, 0, copy)
+  toast(`Duplicated “${lt.title}”`)
+}
+export function deleteLibTile(lt) {
+  store.library = store.library.filter((x) => x.id !== lt.id)
+  toast(`Deleted “${lt.title}”`)
+}
+
+export const MAX_BULK_ADD = 8 // bulk-add guardrail
+
+// ---------- starter templates (ClickUp-style template gallery) ----------
+const WK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+export const TEMPLATES = [
+  { key: 'helpdesk', name: 'Helpdesk', icon: 'inbox', color: '#7b68ee', desc: 'Open volume, SLA, backlog & P1 worklist' },
+  { key: 'sla', name: 'SLA & Performance', icon: 'trend', color: '#2f80ed', desc: 'Compliance, MTTR and backlog trend' },
+  { key: 'asset', name: 'Asset Health', icon: 'grid', color: '#1f9d63', desc: 'Estate, warranty & patch compliance' },
+  { key: 'exec', name: 'Executive', icon: 'sparkles', color: '#d98a0b', desc: 'Leadership KPIs and volume trends' },
+  { key: 'blank', name: 'Start from scratch', icon: 'plus', color: '#71748a', desc: 'A blank canvas — add tiles yourself' },
+]
+export function seedTemplate(d, key) {
+  const T = {
+    helpdesk: () => [
+      kpi('Open Tickets', 248, '', { dir: 'up', pct: 4 }, 'warn', 'Requests in an open state.'),
+      kpi('Overdue', 31, '', { dir: 'up', pct: 12 }, 'bad', 'Past SLA due date.'),
+      kpi('Resolved Today', 86, '', { dir: 'up', pct: 8 }, 'good', 'Resolved today.'),
+      chart('Created vs Resolved', { kind: 'bar', labels: WK, series: [{ name: 'Created', values: [42, 51, 38, 60, 55] }, { name: 'Resolved', values: [39, 48, 41, 57, 50] }] }, 'Daily created vs resolved.'),
+      chart('By Priority', { kind: 'donut', labels: ['P1', 'P2', 'P3', 'P4'], series: [{ name: 'Priority', values: [18, 64, 120, 46] }] }, 'Open by priority.'),
+      shortcut('My Open P1s', ['ID', 'Subject', 'Status'], [['INC-2041', 'VPN down', 'In Progress'], ['INC-2038', 'Email delayed', 'Open']], 'My P1 requests.'),
+    ],
+    sla: () => [
+      kpi('SLA Compliance', 94.2, '%', { dir: 'down', pct: 1.1 }, 'warn', 'Resolved within SLA.'),
+      kpi('MTTR', 6.4, 'h', { dir: 'down', pct: 7 }, 'good', 'Mean time to resolve.'),
+      chart('Compliance Trend', { kind: 'line', labels: MON, series: [{ name: 'SLA %', values: [91, 92, 90, 93, 94, 94] }] }, 'SLA % by month.'),
+      chart('Backlog', { kind: 'line', labels: MON, series: [{ name: 'Backlog', values: [180, 210, 198, 240, 232, 248] }] }, 'Backlog at month end.'),
+    ],
+    asset: () => [
+      kpi('Total Assets', 4820, '', { dir: 'up', pct: 2 }, 'good', 'All managed assets.'),
+      kpi('Out of Warranty', 312, '', { dir: 'up', pct: 6 }, 'warn', 'Past warranty.'),
+      chart('Assets by Type', { kind: 'bar', labels: ['Laptop', 'Desktop', 'Server', 'Mobile'], series: [{ name: 'Assets', values: [2100, 1200, 320, 900] }] }, 'By type.'),
+      chart('Patch Compliance', { kind: 'donut', labels: ['Compliant', 'Pending', 'Failed'], series: [{ name: 'Patch', values: [3800, 700, 320] }] }, 'Patch status.'),
+    ],
+    exec: () => [
+      kpi('MTTR', 6.4, 'h', { dir: 'down', pct: 7 }, 'good', 'Mean time to resolve.'),
+      kpi('CSAT', 4.3, '/5', { dir: 'up', pct: 3 }, 'good', 'Satisfaction.'),
+      kpi('Backlog', 248, '', { dir: 'up', pct: 4 }, 'warn', 'Open backlog.'),
+      chart('Volume by Month', { kind: 'line', labels: MON, series: [{ name: 'Volume', values: [820, 910, 880, 1020, 990, 1040] }] }, 'Requests per month.'),
+    ],
+    blank: () => [],
+  }
+  const tiles = (T[key] || T.blank)()
+  tiles.forEach((t) => d.tiles.push(t))
+  d.updated = new Date().toISOString()
+  if (tiles.length) toast(`Started from “${TEMPLATES.find((x) => x.key === key)?.name}” template`, 'success')
+}

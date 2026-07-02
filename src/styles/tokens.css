@@ -1,0 +1,73 @@
+/* Design tokens — ServiceOps Dashboards revamp (ClickUp-inspired, modern light) */
+:root {
+  /* Brand — Motadata ServiceOps (from ServiceOps_Design_Token/Light.tokens.json) */
+  --primary: #3d8bd0;          /* Primary Blue */
+  --primary-600: #3179bb;
+  --primary-700: #2b6aa6;
+  --primary-soft: #e8f1f9;     /* Navigation Active BG (Primary @12%) */
+  --primary-softer: #f3f8fc;
+  --accent: #3279be;           /* Primary Alt / Gauge Text */
+
+  /* Status */
+  --green: #1f9d63;  --green-soft: #e6f6ee;
+  --amber: #d98a0b;  --amber-soft: #fdf3e2;
+  --red: #e0483d;    --red-soft: #fdecea;
+  --blue: #3279be;   --blue-soft: #e7f0f9;
+
+  /* Neutrals — ServiceOps token source */
+  --bg: #f9fafb;               /* Light BG / Card Foreground */
+  --surface: #ffffff;          /* White / Widget BG / Nav BG */
+  --surface-2: #eef2f6;        /* Action Box / Switch / Nav Hover BG */
+  --border: #dfe5ed;           /* Border Color */
+  --border-strong: #cbd6e1;
+  --ink: #364658;              /* Page Text Color */
+  --ink-2: #4f6075;
+  --muted: #7b8fa5;            /* Gray Label / Neutral Regular */
+  --muted-2: #a5bad0;          /* Light Gray Text / Neutral Light */
+
+  /* Radius */
+  --r-sm: 6px;
+  --r: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* Shadow */
+  --sh-sm: 0 1px 2px rgba(27, 28, 46, 0.06), 0 1px 1px rgba(27, 28, 46, 0.04);
+  --sh: 0 4px 14px rgba(27, 28, 46, 0.08);
+  --sh-lg: 0 12px 34px rgba(27, 28, 46, 0.14);
+  --sh-pop: 0 8px 28px rgba(27, 28, 46, 0.18);
+
+  /* Type — ServiceOps uses Poppins */
+  --font: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Layout */
+  --sidebar-w: 244px;
+  --topbar-h: 56px;
+}
+
+/* ---------- Dark theme (ClickUp-style) ---------- */
+[data-theme="dark"] {
+  --primary-soft: #0e3346;
+  --primary-softer: #0c2937;
+
+  --green-soft: #133227; --amber-soft: #332811; --red-soft: #3a1f1d; --blue-soft: #122844;
+
+  --bg: #14141c;
+  --surface: #1d1d27;
+  --surface-2: #25252f;
+  --border: #2f2f3b;
+  --border-strong: #3a3a48;
+  --ink: #ececf3;
+  --ink-2: #c4c5d4;
+  --muted: #8e90a6;
+  --muted-2: #6a6c80;
+
+  --sh-sm: 0 1px 2px rgba(0,0,0,.4);
+  --sh: 0 4px 14px rgba(0,0,0,.45);
+  --sh-lg: 0 12px 34px rgba(0,0,0,.6);
+  --sh-pop: 0 8px 28px rgba(0,0,0,.6);
+}
+[data-theme="dark"] .badge-pre { color: #fff; }
+[data-theme="dark"] .toast { background: #2a2a38; }
+[data-theme="dark"] .tt { background: #0e0e16; }
