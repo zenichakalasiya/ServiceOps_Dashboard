@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue'
-import { seed, uid } from '../data/mock.js'
+import { seed, uid, CATEGORIES } from '../data/mock.js'
 
 const data = seed()
 
@@ -9,9 +9,10 @@ export const store = reactive({
   library: data.library,
   modules: data.modules,
   owners: data.owners,
+  categories: [...CATEGORIES],
   currentUser: 'Aarav Mehta',
   toasts: [],
-  ui: { createOpen: false, theme: 'light', listingOpen: false, listingQuery: '' },
+  ui: { createOpen: false, cloneTarget: null, editTarget: null, theme: 'light', listingOpen: false, listingQuery: '' },
   // global view-time controls (per the rebuilt Time Filter + Auto-Refresh)
   timeFilter: { preset: 'last30', label: 'Last 30 days', from: null, to: null },
   autoRefresh: { interval: 'off', label: 'Off' },
@@ -70,15 +71,23 @@ export function cloneDashboard(d) {
   toast(`Cloned to “${copy.name}”`)
   return copy
 }
-export function createDashboard({ name, access, category, folder, description, techAccess, groupAccess }) {
+export function addCategory(name) {
+  const n = (name || '').trim()
+  if (n && !store.categories.some((c) => c.toLowerCase() === n.toLowerCase())) store.categories.unshift(n)
+  return n
+}
+export function createDashboard({ name, access, category, folder, description, techAccess, groupAccess, makeDefault, layout, tiles }) {
   const d = {
     id: uid('d'), name: name.trim(), access, category: category || '', folder: folder || null,
     description: description || '', owner: store.currentUser, mine: true, predefined: false,
     favorite: false, enabled: true, archived: false, default: false,
-    tiles: [], updated: new Date().toISOString(), viewedAt: new Date().toISOString(),
+    tiles: tiles || [], groups: [], history: [], schedules: [], updated: new Date().toISOString(), viewedAt: new Date().toISOString(),
     techAccess: techAccess || (access === 'public' ? ['All technicians'] : access === 'private' ? [store.currentUser] : []),
     groupAccess: groupAccess || (access === 'public' ? ['All technician groups'] : []),
+    // per-dashboard layout (from the create/clone panel)
+    headerFont: layout?.headerFont || 'M', hGap: layout?.hGap ?? 14, vGap: layout?.vGap ?? 14, rowHeight: layout?.rowHeight ?? 140,
   }
+  if (makeDefault) { store.dashboards.forEach((x) => (x.default = false)); d.default = true }
   store.dashboards.unshift(d)
   toast(`Created “${d.name}”`, 'success')
   return d

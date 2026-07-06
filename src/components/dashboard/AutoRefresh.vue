@@ -29,7 +29,7 @@ onUnmounted(() => timer && clearInterval(timer))
 <template>
   <div class="ar">
     <button class="refresh" @click="manual" title="Refresh now">
-      <Icon name="refresh" :size="16" :class="{ spin }" /> Refresh
+      <Icon name="refresh" :size="17" :class="{ spin }" />
     </button>
     <div class="rel">
       <button class="interval" :class="{ on: open || store.autoRefresh.interval !== 'off' }" @click.stop="open = !open" title="Auto-refresh interval">
@@ -47,7 +47,7 @@ onUnmounted(() => timer && clearInterval(timer))
 
 <style scoped>
 .ar { display: inline-flex; align-items: stretch; height: 36px; }
-.refresh { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); font-weight: 500; font-size: 13px; border-radius: 9px 0 0 9px; border-right: none; }
+.refresh { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 36px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px 0 0 9px; border-right: none; }
 .refresh:hover { background: var(--surface-2); }
 .spin { animation: sp .7s linear infinite; } @keyframes sp { to { transform: rotate(360deg); } }
 .rel { position: relative; }

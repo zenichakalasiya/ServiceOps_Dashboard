@@ -1,14 +1,18 @@
 <script setup>
 import { reactive, computed, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
+import Dropdown from '../ui/Dropdown.vue'
 import MiniChart from './MiniChart.vue'
 import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut } from '../../data/mock.js'
-const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null } }) // type: { id,label,type,kind }
-const emit = defineEmits(['close', 'created', 'saved'])
+const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null } }) // type: { id,label,type,kind }
+const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary'])
 
 const ex = props.existing
 const editing = computed(() => !!props.existing)
+const libMode = computed(() => !!props.libItem)   // duplicate/edit a library tile → returns to listing
+const prefix = computed(() => (libMode.value ? 'Clone' : editing.value ? 'Update' : 'Create'))
+const ctaLabel = computed(() => (props.type.type === 'chart' ? 'Widget' : props.type.label))
 const spinning = ref(false)
 function refreshPreview() { spinning.value = true; setTimeout(() => { spinning.value = false }, 650) }
 const isChart = computed(() => props.type.type === 'chart')
@@ -23,24 +27,28 @@ const manualMode = computed(() => !isShortcut.value && cfg.mode === 'manual')
 // Placeholder shown in the Query field — greyed (placeholder color), per attached spec.
 const SQL_PLACEHOLDER = "SELECT id, subject, priority, status\nFROM requests\nWHERE priority = 'P1' AND status = 'open'"
 
+// dropdown option lists
+const GROUP_OPTS = ['Service Desk', 'Network Team', 'NOC Viewers']
+const XAXIS_OPTS = ['Priority', 'Status', 'Team', 'Created date']
+const YFUNC_OPTS = ['Count Of', 'Sum Of', 'Average Of', 'Distinct Count']
+const YCOL_OPTS = ['Requests', 'Effort hours', 'Resolution time']
+const DATEF_OPTS = ['Created date', 'Updated date', 'Resolved date', 'Due date']
+const TOPN_OPTS = [{ value: '', label: 'Select' }, { value: '5', label: '5' }, { value: '10', label: '10' }, { value: '15', label: '15' }]
+
 // ServiceOps "Create Widget" fields. Prefilled from the existing tile when editing.
-const cfg = reactive({
-  name: ex?.title || `New ${props.type.label}`,
-  module: 'Request',
-  techAccess: store.currentUser,
-  groupAccess: '',
-  mode: ex?.sql ? 'query' : 'manual',   // Manual | Query Based
-  xAxis: 'Priority',
-  yFunc: 'Count Of',
-  yColumn: 'Requests',
-  assetType: '',
-  dateFilter: 'Created date',
-  description: ex?.info || '',
-  sortOrder: 'none',
-  topN: '',
-  excludeZero: false,
-  sqlQuery: ex?.sql || '',
-})
+function initCfg() {
+  return {
+    name: ex?.title || props.libItem?.title || `New ${props.type.label}`,
+    module: 'Request', techAccess: [store.currentUser], groupAccess: '',
+    mode: ex?.sql ? 'query' : 'manual',   // Manual | Query Based
+    xAxis: 'Priority', yFunc: 'Count Of', yColumn: 'Requests',
+    assetType: '', dateFilter: 'Created date', description: ex?.info || '',
+    sortOrder: 'none', topN: '', excludeZero: false, sqlQuery: ex?.sql || '',
+    sharedAccess: ex?.sharedAccess || 'view',   // access granted to people it's shared with
+  }
+}
+const cfg = reactive(initCfg())
+function reset() { Object.assign(cfg, initCfg()) }
 
 const previewTile = computed(() => {
   const title = cfg.name || `New ${props.type.label}`
@@ -69,9 +77,16 @@ const previewTile = computed(() => {
       [['INC-2041', 'VPN down for finance team', 'P1', 'In Progress'], ['INC-2038', 'Email delivery delayed', 'P1', 'Open']], cfg.description)
 })
 
-function save() {
+// place = true  → "{prefix} & Add Widget" (put it on the canvas, redirect)
+// place = false → "{prefix} Widget"        (save the definition, don't place)
+function save(place) {
   const pv = previewTile.value
-  // --- edit in place ---
+  // --- library duplicate/edit: hand the config back to the listing ---
+  if (props.libItem) {
+    emit('librarySaved', { title: cfg.name, module: cfg.module, type: props.type.type, sharedAccess: cfg.sharedAccess, place })
+    return
+  }
+  // --- edit an existing board tile in place ---
   if (props.existing) {
     const t = props.existing
     t.title = cfg.name || t.title
@@ -80,17 +95,23 @@ function save() {
     if (isShortcut.value) { t.columns = pv.columns; t.rows = pv.rows; t.sql = cfg.sqlQuery }
     if (isKpi.value) { t.value = pv.value; t.unit = pv.unit }
     if (!isShortcut.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
+    t.sharedAccess = cfg.sharedAccess
     props.d.updated = new Date().toISOString()
-    emit('saved', t.id)
+    emit('saved', { id: t.id, place })
     return
   }
   // --- create new ---
-  pv.w = isChart.value ? 6 : isShortcut.value ? 6 : 3
-  pv.h = isKpi.value ? 1 : 2
-  if (queryMode.value) pv.sql = cfg.sqlQuery
-  props.d.tiles.push(pv)
-  props.d.updated = new Date().toISOString()
-  emit('created', pv.id)
+  if (place) {
+    pv.w = isChart.value ? 6 : isShortcut.value ? 6 : 3
+    pv.h = isKpi.value ? 1 : 2
+    if (queryMode.value) pv.sql = cfg.sqlQuery
+    pv.sharedAccess = cfg.sharedAccess
+    props.d.tiles.push(pv)
+    props.d.updated = new Date().toISOString()
+    emit('created', pv.id)
+  } else {
+    emit('savedToLibrary', { title: cfg.name, module: cfg.module, type: props.type.type, sharedAccess: cfg.sharedAccess })
+  }
 }
 </script>
 
@@ -100,7 +121,7 @@ function save() {
       <div class="builder">
         <!-- Header (ClickUp-style) -->
         <header class="bhead">
-          <div class="crumb"><span class="muted">Dashboard</span> <Icon name="chevron-right" :size="13" class="sep" /> <span v-if="editing" class="muted">Edit</span> <b>{{ cfg.name || ('New ' + type.label) }}</b></div>
+          <div class="crumb"><span class="muted">Dashboard</span> <Icon name="chevron-right" :size="13" class="sep" /> <span v-if="editing || libMode" class="muted">Edit</span> <b>{{ cfg.name || ('New ' + type.label) }}</b></div>
           <div class="hacts">
             <button class="ic" title="Refresh preview" @click="refreshPreview"><Icon name="refresh" :size="16" :class="{ spin: spinning }" /></button>
             <button class="ic" @click="emit('close')" title="Close"><Icon name="x" :size="18" /></button>
@@ -128,11 +149,20 @@ function save() {
                 <div class="sec-h">{{ isShortcut ? 'Basic Shortcut Details' : 'Basic Widget Details' }}</div>
                 <div class="grid2">
                   <div class="fld"><label>Name <i>*</i></label><input class="input" v-model="cfg.name" placeholder="Name" /></div>
-                  <div class="fld"><label>Module <i>*</i></label><div class="selw"><select v-model="cfg.module" class="input"><option v-for="m in store.modules" :key="m" :value="m">{{ m }}</option></select><Icon name="chevron-down" :size="13" class="chev" /></div></div>
+                  <div class="fld"><label>Module <i>*</i></label><Dropdown v-model="cfg.module" :options="store.modules" /></div>
                 </div>
                 <div class="grid2">
-                  <div class="fld"><label>Technician Access Level <i>*</i></label><input class="input" v-model="cfg.techAccess" /></div>
-                  <div class="fld"><label>Technician Group Access Level <i>*</i></label><div class="selw"><select v-model="cfg.groupAccess" class="input"><option value="">Select</option><option>Service Desk</option><option>Network Team</option><option>NOC Viewers</option></select><Icon name="chevron-down" :size="13" class="chev" /></div></div>
+                  <div class="fld"><label>Technician Access Level <i>*</i></label><Dropdown v-model="cfg.techAccess" :options="store.owners" :multiple="true" placeholder="Select technicians" /></div>
+                  <div class="fld"><label>Technician Group Access Level <i>*</i></label><Dropdown v-model="cfg.groupAccess" :options="GROUP_OPTS" placeholder="Select" /></div>
+                </div>
+                <div class="fld" style="margin-top:12px">
+                  <label>Access when shared</label>
+                  <div class="seg">
+                    <button class="seg-b" :class="{ on: cfg.sharedAccess==='view' }" @click="cfg.sharedAccess='view'">View</button>
+                    <button class="seg-b" :class="{ on: cfg.sharedAccess==='edit' }" @click="cfg.sharedAccess='edit'">Edit</button>
+                    <button class="seg-b" :class="{ on: cfg.sharedAccess==='both' }" @click="cfg.sharedAccess='both'">View &amp; Edit</button>
+                  </div>
+                  <p class="hint" style="margin:6px 0 0">People you share this with can Edit only if you grant Edit access here.</p>
                 </div>
                 <template v-if="!isShortcut">
                   <div class="seg">
@@ -159,17 +189,17 @@ function save() {
               <!-- Axes (charts, Manual mode only) -->
               <div v-if="isChart && manualMode" class="sec">
                 <div class="sec-h">Axes</div>
-                <div class="fld"><label>X-Axis <i>*</i></label><div class="selw"><select v-model="cfg.xAxis" class="input"><option>Priority</option><option>Status</option><option>Team</option><option>Created date</option></select><Icon name="chevron-down" :size="13" class="chev" /></div></div>
+                <div class="fld"><label>X-Axis <i>*</i></label><Dropdown v-model="cfg.xAxis" :options="XAXIS_OPTS" /></div>
                 <div class="grid2">
-                  <div class="fld"><label>Y-Axis Function <i>*</i></label><div class="selw"><select v-model="cfg.yFunc" class="input"><option>Count Of</option><option>Sum Of</option><option>Average Of</option><option>Distinct Count</option></select><Icon name="chevron-down" :size="13" class="chev" /></div></div>
-                  <div class="fld"><label>Y-Axis Column <i>*</i></label><div class="selw"><select v-model="cfg.yColumn" class="input"><option>Requests</option><option>Effort hours</option><option>Resolution time</option></select><Icon name="chevron-down" :size="13" class="chev" /></div></div>
+                  <div class="fld"><label>Y-Axis Function <i>*</i></label><Dropdown v-model="cfg.yFunc" :options="YFUNC_OPTS" /></div>
+                  <div class="fld"><label>Y-Axis Column <i>*</i></label><Dropdown v-model="cfg.yColumn" :options="YCOL_OPTS" /></div>
                 </div>
               </div>
 
               <!-- Data Configuration -->
               <div v-if="manualMode" class="sec">
                 <div class="sec-h">Data Configuration</div>
-                <div class="fld"><label>Date Filter <i>*</i></label><div class="selw"><select v-model="cfg.dateFilter" class="input"><option>Created date</option><option>Updated date</option><option>Resolved date</option><option>Due date</option></select><Icon name="chevron-down" :size="13" class="chev" /></div></div>
+                <div class="fld"><label>Date Filter <i>*</i></label><Dropdown v-model="cfg.dateFilter" :options="DATEF_OPTS" /></div>
                 <div class="fld"><label>Description</label><textarea class="input" rows="3" v-model="cfg.description" placeholder="Description" /></div>
               </div>
 
@@ -183,7 +213,7 @@ function save() {
                     <button class="seg-b" :class="{ on: cfg.sortOrder==='desc' }" @click="cfg.sortOrder='desc'">Descending</button>
                   </div>
                 </div>
-                <div class="fld"><label>Top N</label><div class="selw"><select v-model="cfg.topN" class="input"><option value="">Select</option><option>5</option><option>10</option><option>15</option></select><Icon name="chevron-down" :size="13" class="chev" /></div></div>
+                <div class="fld"><label>Top N</label><Dropdown v-model="cfg.topN" :options="TOPN_OPTS" placeholder="Select" /></div>
                 <label class="toggle"><span>Exclude Zero Count Values</span><button class="sw" :class="{ on: cfg.excludeZero }" @click="cfg.excludeZero=!cfg.excludeZero"><i /></button></label>
               </div>
 
@@ -203,10 +233,9 @@ function save() {
             </div>
 
             <footer class="cfg-foot">
-              <button class="btn" @click="emit('close')">Cancel</button>
-              <button class="btn btn-primary" @click="save">
-                <Icon :name="editing ? 'check' : 'plus'" :size="16" /> {{ editing ? 'Save Changes' : 'Create & Add to Dashboard' }}
-              </button>
+              <button class="btn" @click="reset">Reset</button>
+              <button class="btn" @click="save(false)">{{ prefix }} {{ ctaLabel }}</button>
+              <button class="btn btn-primary" @click="save(true)"><Icon name="plus" :size="16" /> {{ prefix }} &amp; Add {{ ctaLabel }}</button>
             </footer>
           </aside>
         </div>

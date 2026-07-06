@@ -4,7 +4,19 @@ import Icon from '../ui/Icon.vue'
 import MiniChart from './MiniChart.vue'
 import { toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean })
-const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag'])
+const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin'])
+
+// classify a table cell into a soft status/priority pill
+function pillClass(v) {
+  const s = String(v).toLowerCase().trim()
+  if (['open', 'pending', 'to do', 'new', 'assigned'].includes(s)) return 'pill pill-blue'
+  if (['in progress', 'active', 'running', 'on hold', 'watch'].includes(s)) return 'pill pill-amber'
+  if (['resolved', 'closed', 'done', 'completed', 'compliant'].includes(s)) return 'pill pill-green'
+  if (['expired', 'breached', 'overdue', 'failed', 'critical'].includes(s)) return 'pill pill-red'
+  const m = s.match(/^p([1-4])$/)
+  if (m) return 'pill pill-p' + m[1]
+  return ''
+}
 
 const loading = ref(false)
 const menu = ref(false)
@@ -33,6 +45,25 @@ const present = ref(false)
 const infoHover = ref(false)
 function refresh() { loading.value = true; setTimeout(() => { loading.value = false }, 750) }
 
+// Empty-widget states: unconfigured vs error vs no-data vs ok (distinct copy each)
+const tileState = computed(() => {
+  if (props.tile.state === 'error') return 'error'
+  if (props.tile.state === 'unconfigured') return 'unconfigured'
+  if (props.tile.type === 'kpi') return (props.tile.value == null || props.tile.value === '') ? 'nodata' : 'ok'
+  if (props.tile.type === 'chart') {
+    const s = props.tile.chart?.series || []
+    const total = s.flatMap((x) => x.values || []).reduce((a, b) => a + b, 0)
+    return (!s.length || total === 0) ? 'nodata' : 'ok'
+  }
+  return (props.tile.rows || []).length ? 'ok' : 'nodata'
+})
+const WS = {
+  nodata: { icon: 'chart-bar', title: 'No data in this range', sub: 'Try a wider time filter or different conditions.' },
+  error: { icon: 'alert', title: 'Couldn’t load data', sub: 'Something went wrong fetching this tile.' },
+  unconfigured: { icon: 'settings', title: 'Not configured yet', sub: 'Pick a data source to start showing data.' },
+}
+function retry() { loading.value = true; setTimeout(() => { props.tile.state = undefined; loading.value = false }, 800) }
+
 function download(fmt) { menu.value = false; exportOpen.value = false; toast(`Exporting “${props.tile.title}” as ${fmt}`) }
 function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 </script>
@@ -43,6 +74,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
     <header class="thead">
       <div class="left">
         <span class="draghandle" title="Drag to move" @mousedown="emit('armdrag', tile)"><Icon name="drag" :size="16" /></span>
+        <span v-if="tile.pinned" class="pinbadge" title="Pinned"><Icon name="pin" :size="12" /></span>
         <span class="title ellip">{{ tile.title }}</span>
         <span class="info" @mouseenter="infoHover = true" @mouseleave="infoHover = false">
           <Icon name="info" :size="14" />
@@ -65,6 +97,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false" />
       <transition name="pop">
         <div v-if="menu" class="menu tile-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+          <button class="menu-item" @click="menu = false; emit('pin', tile)"><Icon name="pin" :size="15" /> {{ tile.pinned ? 'Unpin' : 'Pin to top' }}</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
           <button v-if="tile.type === 'chart'" class="menu-item" @click="showLegend = !showLegend"><Icon name="list" :size="15" /> {{ showLegend ? 'Hide legend' : 'Show legend' }}</button>
           <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->
@@ -85,6 +118,15 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <div v-if="loading" class="loading">
         <div class="skeleton" style="height:60%;width:80%" />
         <div class="skeleton" style="height:14px;width:50%;margin-top:10px" />
+      </div>
+
+      <!-- empty-widget states: unconfigured / error / no-data -->
+      <div v-else-if="tileState !== 'ok'" class="wstate" :class="{ err: tileState === 'error' }">
+        <span class="ws-ico"><Icon :name="WS[tileState].icon" :size="22" /></span>
+        <b>{{ WS[tileState].title }}</b>
+        <span class="ws-sub">{{ WS[tileState].sub }}</span>
+        <button v-if="tileState === 'error'" class="btn btn-sm" @click="retry"><Icon name="refresh" :size="14" /> Retry</button>
+        <button v-else-if="tileState === 'unconfigured'" class="btn btn-sm btn-primary" @click="emit('edit', tile)"><Icon name="edit" :size="14" /> Configure</button>
       </div>
 
       <template v-else-if="tile.type === 'kpi'">
@@ -114,7 +156,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
             <table>
               <thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead>
               <tbody>
-                <tr v-for="(r, i) in filteredRows" :key="i"><td v-for="(cell, j) in r" :key="j">{{ cell }}</td></tr>
+                <tr v-for="(r, i) in filteredRows" :key="i"><td v-for="(cell, j) in r" :key="j"><span v-if="pillClass(cell)" :class="pillClass(cell)">{{ cell }}</span><template v-else>{{ cell }}</template></td></tr>
                 <tr v-if="!filteredRows.length"><td :colspan="tile.columns.length" class="nodata">{{ tableSearch ? 'No records match your search' : 'No records in this range' }}</td></tr>
               </tbody>
             </table>
@@ -132,7 +174,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
           <div class="pbody">
             <MiniChart v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="420" />
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
-            <div v-else class="stbl big"><table><thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in tile.rows" :key="i"><td v-for="(c,j) in r" :key="j">{{ c }}</td></tr></tbody></table></div>
+            <div v-else class="stbl big"><table><thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in tile.rows" :key="i"><td v-for="(c,j) in r" :key="j"><span v-if="pillClass(c)" :class="pillClass(c)">{{ c }}</span><template v-else>{{ c }}</template></td></tr></tbody></table></div>
           </div>
         </div>
       </div>
@@ -142,13 +184,14 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 
 <style scoped>
 .tile { display: flex; flex-direction: column; overflow: hidden; min-height: 130px; }
-.thead { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 2px 14px; gap: 8px; }
+.thead { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 2px 12px; gap: 8px; }
 .left { display: flex; align-items: center; gap: 6px; min-width: 0; }
 /* 6-dot drag handle — appears on hover, before the title */
 .draghandle { display: inline-grid; place-items: center; color: var(--muted-2); cursor: grab; opacity: 0; transition: opacity .14s; flex: none; margin-left: -4px; }
 .draghandle:active { cursor: grabbing; }
 .tile:hover .draghandle { opacity: 1; }
-.title { font-weight: 600; font-size: 13.5px; }
+.pinbadge { display: inline-grid; place-items: center; color: var(--primary); flex: none; transform: rotate(35deg); }
+.title { font-weight: 600; font-size: var(--tile-title, 13.5px); }
 .info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
 .info:hover { color: var(--primary); }
 .info-tt { top: 22px; left: -6px; width: 240px; }
@@ -168,6 +211,13 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 .submenu { position: absolute; top: -7px; right: 100%; min-width: 124px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); padding: 6px; }
 .tbody { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; min-height: 0; }
 .loading { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+/* empty-widget states */
+.wstate { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 5px; color: var(--muted); padding: 14px; }
+.wstate b { color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
+.ws-sub { font-size: 12px; max-width: 230px; line-height: 1.45; }
+.ws-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); margin-bottom: 3px; }
+.wstate.err .ws-ico { background: var(--red-soft); color: var(--red); }
+.wstate .btn { margin-top: 9px; }
 /* full-area hover: the whole numeric region (below the title) fills on hover,
    with generous padding so the highlight surrounds the number on every side */
 .kpi { display: flex; flex-direction: column; justify-content: center; align-items: center; flex: 1; text-align: center; padding: 18px 16px; border-radius: 12px; background: transparent; transition: background .15s; }
@@ -187,6 +237,16 @@ table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
 td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .nodata { text-align: center; color: var(--muted-2); padding: 18px; }
+/* soft status / priority pills in shortcut tables */
+.pill { display: inline-flex; align-items: center; height: 20px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .2px; white-space: nowrap; }
+.pill-blue { background: var(--blue-soft); color: var(--blue); }
+.pill-amber { background: var(--amber-soft); color: var(--amber); }
+.pill-green { background: var(--green-soft); color: var(--green); }
+.pill-red { background: var(--red-soft); color: var(--red); }
+.pill-p1 { background: var(--red-soft); color: var(--red); }
+.pill-p2 { background: var(--amber-soft); color: var(--amber); }
+.pill-p3 { background: var(--blue-soft); color: var(--blue); }
+.pill-p4 { background: var(--surface-2); color: var(--muted); }
 .viewall { display: inline-flex; align-items: center; gap: 3px; margin-top: 6px; color: var(--primary-700); font-weight: 600; font-size: 12px; cursor: pointer; }
 .present { background: #fff; border-radius: var(--r-xl); width: min(880px, 92vw); box-shadow: var(--sh-lg); overflow: hidden; }
 .phead { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); font-size: 15px; }

@@ -35,7 +35,6 @@ function applyAbs() {
   open.value = false
 }
 function openPicker(el) { try { el?.showPicker?.() } catch (e) { el?.focus() } }
-function copyRange() { navigator.clipboard?.writeText(store.timeFilter.label).catch(() => {}); toast('Time range copied') }
 </script>
 
 <template>
@@ -72,19 +71,7 @@ function copyRange() { navigator.clipboard?.writeText(store.timeFilter.label).ca
             </div>
           </div>
 
-          <div class="cp">
-            <button class="cpbtn" title="Copy range" @click="copyRange"><Icon name="copy" :size="14" /></button>
-            <button class="cpbtn" title="Paste range" @click="toast('Nothing to paste')"><Icon name="clipboard" :size="14" /></button>
-          </div>
-
           <button class="btn btn-primary apply" @click="applyAbs"><Icon name="check" :size="15" /> Apply time range</button>
-
-          <p class="help">Recently used absolute ranges will appear here once you apply one.</p>
-
-          <div class="tz">
-            <span><b>Browser Time</b> IST</span>
-            <span class="utc">UTC+05:30</span>
-          </div>
         </div>
 
         <!-- Quick ranges -->
@@ -124,14 +111,7 @@ function copyRange() { navigator.clipboard?.writeText(store.timeFilter.label).ca
 .dt .input::-webkit-calendar-picker-indicator { opacity: 0; }
 .cal { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
 .cal:hover { background: var(--surface-2); color: var(--ink); }
-.cp { display: flex; gap: 6px; margin-bottom: 10px; }
-.cpbtn { width: 32px; height: 30px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
-.cpbtn:hover { background: var(--surface-2); color: var(--ink); }
-.apply { width: 100%; }
-.help { font-size: 11px; color: var(--muted); line-height: 1.45; margin: 12px 0 0; }
-.tz { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-.tz b { color: var(--ink-2); }
-.utc { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+.apply { width: 100%; margin-top: 4px; }
 .quick { padding: 12px 10px; display: flex; flex-direction: column; min-height: 0; }
 .qsearch { display: flex; align-items: center; gap: 7px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 9px; height: 34px; margin-bottom: 8px; }
 .qsearch input { border: none; outline: none; background: transparent; width: 100%; font-size: 12.5px; }

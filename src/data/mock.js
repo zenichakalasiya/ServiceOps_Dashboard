@@ -71,6 +71,34 @@ function execTiles() {
   ]
 }
 
+// demo tiles that showcase the empty-widget states (unconfigured / error / no-data)
+function demoStateTiles() {
+  return [
+    { id: uid('t'), type: 'kpi', title: 'Draft KPI', info: 'Not wired to a data source yet.', state: 'unconfigured', value: null, w: 3, h: 1 },
+    { id: uid('t'), type: 'chart', title: 'Revenue (load failed)', info: 'Simulated fetch error — hit Retry.', state: 'error', chart: bars(['A', 'B', 'C'], [12, 20, 8]), w: 6, h: 2 },
+    shortcut('Escalations (empty)', ['ID', 'Subject', 'Status'], [], 'No records match this query in the current range.'),
+  ]
+}
+
+// change/version history (per dashboard)
+function demoHistory() {
+  return [
+    { event: 'Update Access Level', date: '2026-04-29', when: '29 Apr 2026 07:38 PM', module: 'Dashboard', user: 'Sakshi', summary: 'Access level updated from Public to Restricted.' },
+    { event: 'Update Restricted Group', date: '2026-04-29', when: '29 Apr 2026 07:38 PM', module: 'Dashboard', user: 'Sakshi', summary: "For access level 'Restricted' updated groups to Service Desk." },
+    { event: 'Add Widget', date: '2025-05-23', when: '23 May 2025 10:14 AM', module: 'Widget', user: 'Jeremy Draper', summary: 'Added widget “Created vs Resolved”.' },
+    { event: 'Rename Dashboard', date: '2024-11-13', when: '13 Nov 2024 11:31 AM', module: 'Dashboard', user: 'Rakesh Rathod', summary: 'Renamed dashboard.' },
+    { event: 'Update Access Level', date: '2024-11-13', when: '13 Nov 2024 11:29 AM', module: 'Dashboard', user: 'Rakesh Rathod', summary: 'Access level updated from Public to Restricted.' },
+    { event: 'Create Dashboard', date: '2022-12-02', when: '02 Dec 2022 03:21 PM', module: 'Dashboard', user: 'Aarav Mehta', summary: 'Dashboard created.' },
+  ]
+}
+// scheduled deliveries (per dashboard)
+function demoSchedules() {
+  return [
+    { id: uid('sch'), name: 'Weekly SLA report', type: 'Weekly', timeFilter: 'This Week', enabled: true },
+    { id: uid('sch'), name: 'Daily digest', type: 'Daily', timeFilter: 'Today', enabled: false },
+  ]
+}
+
 const owners = ['Aarav Mehta', 'Priya Nair', 'Rohan Iyer', 'Sneha Patil', 'Vikram Deshpande']
 
 export function seed() {
@@ -88,9 +116,10 @@ export function seed() {
     { name: 'Network NOC Wall', folder: 'f-noc', category: 'NOC', owner: 'Rohan Iyer', access: 'restricted', predefined: false, favorite: false, description: 'Operations wallboard for the network team.', tiles: helpdeskTiles().slice(0, 6), updated: days(3), sharedWithMe: true },
     { name: 'Helpdesk Dashboard - 02-12-2022', folder: null, category: '', owner: 'Sneha Patil', access: 'private', predefined: false, favorite: false, description: '', tiles: helpdeskTiles().slice(0, 4), updated: days(540), clone: true },
     { name: 'Asset', folder: null, category: '', owner: 'Sneha Patil', access: 'private', predefined: false, favorite: false, description: '', tiles: assetTiles().slice(0, 3), updated: days(120), clone: true },
-    { name: 'My SLA drafts', folder: 'f-mine', category: '', owner: 'Aarav Mehta', access: 'private', predefined: false, favorite: false, description: 'Work in progress.', tiles: execTiles().slice(0, 3), updated: days(5), mine: true },
+    { name: 'My SLA drafts', folder: 'f-mine', category: '', owner: 'Aarav Mehta', access: 'private', predefined: false, favorite: false, description: 'Work in progress — includes empty-widget state demos.', tiles: [...execTiles().slice(0, 3), ...demoStateTiles()], updated: days(5), mine: true },
   ].map((d, i) => ({
-    id: uid('d'), enabled: true, archived: false, default: i === 0,
+    id: uid('d'), enabled: true, archived: false, default: i === 0, groups: [],
+    history: demoHistory(), schedules: demoSchedules(),
     mine: d.owner === 'Aarav Mehta', viewedAt: i < 3 ? days(i) : null, ...d,
     // Technician Access Level + Technician Group Access Level (from .185 Manage list)
     techAccess: d.access === 'public' ? ['All technicians']
@@ -104,7 +133,7 @@ export function seed() {
   // Library of reusable tiles for the Add-Widget flow
   const modules = ['Request', 'Asset', 'Problem', 'Change', 'Contract', 'Service Catalog']
   const lib = []
-  const push = (type, title, prov, module, fav = false) => lib.push({ id: uid('lt'), type, title, prov, module, favorite: fav })
+  const push = (type, title, prov, module, fav = false, sharedAccess = 'view') => lib.push({ id: uid('lt'), type, title, prov, module, favorite: fav, sharedAccess })
   // predefined
   push('kpi', 'Open Requests', 'predefined', 'Request', true)
   push('kpi', 'SLA Compliance %', 'predefined', 'Request', true)
@@ -123,10 +152,11 @@ export function seed() {
   push('chart', 'tete', 'user', 'Problem')
   push('kpi', 'ssss', 'user', 'Request')
   push('shortcut', 'Failing CIs', 'user', 'Asset')
-  // shared with me
-  push('chart', 'Vendor Spend', 'shared', 'Contract')
-  push('kpi', 'Patch Compliance %', 'shared', 'Asset', true)
-  push('shortcut', 'Escalations (Team)', 'shared', 'Request')
+  // shared with me — 3 widgets + 1 KPI (owner grants View or Edit access)
+  push('chart', 'Vendor Spend', 'shared', 'Contract', false, 'view')
+  push('chart', 'Change Success Rate', 'shared', 'Change', false, 'edit')
+  push('chart', 'Asset Aging', 'shared', 'Asset', false, 'view')
+  push('kpi', 'Patch Compliance %', 'shared', 'Asset', false, 'both')
 
   return { folders, dashboards, library: lib, modules, owners }
 }

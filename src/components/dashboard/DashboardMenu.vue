@@ -1,18 +1,11 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
-import { cloneDashboard, markDefault, archiveDashboard, toast } from '../../store/index.js'
+import { store, markDefault, archiveDashboard } from '../../store/index.js'
 const props = defineProps({ d: Object, align: { type: String, default: 'right' } })
-const emit = defineEmits(['share', 'open'])
-const router = useRouter()
+const emit = defineEmits(['present'])
 const open = ref(false)
 function act(fn) { open.value = false; fn() }
-function copyLink() {
-  const url = `${location.origin}${location.pathname}#/dashboard/${props.d.id}`
-  navigator.clipboard?.writeText(url).catch(() => {})
-  toast('Governed link copied to clipboard')
-}
 </script>
 
 <template>
@@ -23,12 +16,10 @@ function copyLink() {
     <div v-if="open" class="backdrop" @click="open = false" />
     <transition name="pop">
       <div v-if="open" class="menu" :class="align" @click.stop>
-        <button class="menu-item" @click="act(() => router.push(`/dashboard/${d.id}?edit=1`))"><Icon name="edit" :size="16" /> Edit</button>
-        <button class="menu-item" @click="act(() => cloneDashboard(d))"><Icon name="copy" :size="16" /> Clone</button>
-        <button class="menu-item" @click="act(() => markDefault(d))"><Icon name="pin" :size="16" /> Mark as default</button>
-        <div class="menu-sep" />
-        <button class="menu-item" @click="act(() => emit('share'))"><Icon name="share" :size="16" /> Share dashboard</button>
-        <button class="menu-item" @click="act(copyLink)"><Icon name="link" :size="16" /> Copy link</button>
+        <button class="menu-item" @click="act(() => { store.ui.cloneTarget = null; store.ui.editTarget = d; store.ui.createOpen = true })"><Icon name="edit" :size="16" /> Edit</button>
+        <button class="menu-item" @click="act(() => emit('present'))"><Icon name="maximize-tile" :size="16" /> Present</button>
+        <button class="menu-item" @click="act(() => { store.ui.cloneTarget = d; store.ui.createOpen = true })"><Icon name="copy" :size="16" /> Clone</button>
+        <button class="menu-item" @click="act(() => markDefault(d))"><Icon name="pin" :size="16" /> Mark as default landing</button>
         <div class="menu-sep" />
         <button class="menu-item danger" @click="act(() => archiveDashboard(d))"><Icon name="archive" :size="16" /> Delete / Archive</button>
       </div>
@@ -41,6 +32,7 @@ function copyLink() {
 .btn-icon.on { background: var(--surface-2); color: var(--ink); }
 .backdrop { position: fixed; inset: 0; z-index: 55; }
 .menu { top: 38px; }
+.menu-item:disabled { opacity: .45; cursor: not-allowed; }
 .menu.right { right: 0; }
 .menu.left { left: 0; }
 </style>

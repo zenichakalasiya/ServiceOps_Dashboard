@@ -34,7 +34,7 @@ const px = computed(() => (typeof props.size === 'number' ? props.size : parseFl
 const opsz = computed(() => Math.max(20, Math.min(48, px.value)))
 const styleVar = computed(() => ({
   fontSize: px.value + 'px',
-  fontVariationSettings: `'FILL' ${FILLED.has(props.name) ? 1 : 0}, 'wght' 400, 'GRAD' 0, 'opsz' ${opsz.value}`,
+  fontVariationSettings: `'FILL' ${FILLED.has(props.name) ? 1 : 0}, 'wght' 300, 'GRAD' 0, 'opsz' ${opsz.value}`,
 }))
 </script>
 

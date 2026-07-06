@@ -20,7 +20,7 @@ function nyi(label) { toast(`${label} — outside this dashboards prototype`) }
     <!-- Right: Ask AI · + (Create) · calendar · bell · history · settings · keyboard · info · avatar -->
     <div class="right">
       <button class="askai" @click="nyi('Ask AI')"><Icon name="sparkles" :size="15" /> Ask AI</button>
-      <button class="plus" title="Create Dashboard" @click="store.ui.createOpen = true"><Icon name="plus" :size="20" /></button>
+      <button class="plus" title="Create Dashboard" @click="store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true"><Icon name="plus" :size="20" /></button>
       <button class="ic" title="Calendar" @click="nyi('Calendar')"><Icon name="calendar2" :size="18" /></button>
       <button class="ic" title="Notifications"><Icon name="bell" :size="18" /></button>
       <button class="ic" title="History" @click="nyi('History')"><Icon name="history" :size="18" /></button>
@@ -36,7 +36,7 @@ function nyi(label) { toast(`${label} — outside this dashboards prototype`) }
 </template>
 
 <style scoped>
-.topbar { height: var(--topbar-h); border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex: none; }
+.topbar { height: var(--topbar-h); border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: space-between; padding: 0 12px; flex: none; }
 .left { display: flex; align-items: center; gap: 10px; }
 .logo { display: flex; align-items: center; gap: 9px; }
 .mark { display: grid; grid-template-columns: 6px 6px; gap: 3px; }

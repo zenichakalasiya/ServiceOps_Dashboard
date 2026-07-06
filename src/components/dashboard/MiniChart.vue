@@ -30,6 +30,20 @@ const bars = computed(() => {
   }
   return out
 })
+// horizontal bars (single or grouped) — the "Bar" chart type
+const hbars = computed(() => {
+  const n = labels.value.length, m = series.value.length
+  const gh = (H - PAD * 2) / n, bh = Math.min(16, (gh - 6) / m)
+  const out = []
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {
+    const v = series.value[j].values[i]
+    const w = (v / maxV.value) * (W - PAD * 2)
+    const y = PAD + i * gh + (gh - bh * m) / 2 + j * bh
+    const label = m > 1 ? `${labels.value[i] ?? ''} · ${series.value[j].name}` : (labels.value[i] ?? '')
+    out.push({ x: PAD, y, w, h: bh - 2, c: PAL[j % PAL.length], label, value: v, pct: pctOf(v) })
+  }
+  return out
+})
 // line
 const linePts = computed(() => {
   const s = series.value[0]; if (!s) return ''
@@ -65,6 +79,10 @@ const arcs = computed(() => {
     <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">
       <template v-if="kind === 'bar'">
         <rect v-for="(b, i) in bars" :key="i" class="seg" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
+          @mousemove="showTip($event, b)" @mouseleave="hideTip" />
+      </template>
+      <template v-else-if="kind === 'hbar'">
+        <rect v-for="(b, i) in hbars" :key="i" class="seg" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
           @mousemove="showTip($event, b)" @mouseleave="hideTip" />
       </template>
       <template v-else-if="kind === 'line'">
@@ -103,7 +121,7 @@ const arcs = computed(() => {
 <style scoped>
 .chart { display: flex; flex-direction: column; }
 .chart svg { flex: 1; min-height: 0; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 4px 0; }
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; padding: 6px 4px 0; }
 .lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
 .lg i { width: 9px; height: 9px; border-radius: 3px; }
 .lg b { color: var(--ink-2); }

@@ -26,10 +26,10 @@ const groups = computed(() => {
   const set = new Set(tabbed.value.map((d) => d.id))
   const inTab = (d) => set.has(d.id)
   const g = []
-  const rec = recents.value.filter(inTab)
-  if (rec.length) g.push({ name: 'Recently used', items: rec })
   const fav = tabbed.value.filter((d) => d.favorite)
   if (fav.length) g.push({ name: 'My Favourite', items: fav })
+  const rec = recents.value.filter(inTab)
+  if (rec.length) g.push({ name: 'Recently used', items: rec })
   const cats = {}
   tabbed.value.forEach((d) => { const c = d.category || 'Other'; (cats[c] ||= []).push(d) })
   Object.keys(cats).sort().forEach((c) => g.push({ name: c, items: cats[c] }))
@@ -37,6 +37,9 @@ const groups = computed(() => {
 })
 
 const isCustom = (d) => d.mine && !d.predefined
+// identify a dashboard by icon: predefined · shared-with-me · created-by-me
+function dashKind(d) { return d.predefined ? 'pre' : d.sharedWithMe ? 'shared' : d.mine ? 'mine' : 'other' }
+function dashIcon(d) { return ({ pre: 'sparkles', shared: 'users', mine: 'user-check', other: 'layout' })[dashKind(d)] }
 function openBoard(d) { recordView(d); router.push(`/dashboard/${d.id}`) }
 function del(d) { archiveDashboard(d) }
 </script>
@@ -48,7 +51,7 @@ function del(d) { archiveDashboard(d) }
         <button class="ic" title="Collapse panel" @click="emit('close')"><Icon name="chevron-left" :size="17" /></button>
         <span class="ftitle">Dashboards</span>
       </div>
-      <button class="addbtn" title="Create dashboard" @click="store.ui.createOpen = true"><Icon name="plus" :size="15" /></button>
+      <button class="addbtn" title="Create dashboard" @click="store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true"><Icon name="plus" :size="15" /></button>
     </div>
 
     <div class="tabs2">
@@ -68,8 +71,7 @@ function del(d) { archiveDashboard(d) }
         </button>
         <div v-if="open.has(grp.name)" class="items">
           <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id }" @click="openBoard(d)">
-            <Icon v-if="d.access === 'private'" name="lock" :size="13" class="lk" />
-            <Icon v-else name="layout" :size="13" class="lk" />
+            <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
             <span class="iname ellip">{{ d.name }}</span>
             <span v-if="d.predefined && grp.name !== 'Recently used' && grp.name !== 'My Favourite'" class="tag-pre">Predefined</span>
             <span class="hov">
@@ -115,6 +117,9 @@ function del(d) { archiveDashboard(d) }
 .item.active { background: var(--primary-softer); }
 .item.active .iname { color: var(--primary-700); font-weight: 400; }
 .lk { color: var(--muted-2); flex: none; }
+.lk.ic-pre { color: var(--primary); }
+.lk.ic-shared { color: var(--blue); }
+.lk.ic-mine { color: var(--green); }
 .iname { flex: 1; font-size: 13px; }
 .tag-pre { font-size: 9.5px; font-weight: 500; color: var(--primary-700); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; flex: none; }
 .hov { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
