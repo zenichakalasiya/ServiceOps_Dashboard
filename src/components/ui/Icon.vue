@@ -25,7 +25,7 @@ const MAP = {
   moon: 'dark_mode', sun: 'light_mode', calendar2: 'event', rows: 'view_list',
   template: 'dashboard_customize', alert: 'warning', package: 'inventory_2', sitemap: 'account_tree',
   bulb: 'lightbulb', 'user-check': 'how_to_reg', clipboard: 'checklist', team: 'groups',
-  menu: 'menu', keyboard: 'keyboard', history: 'history',
+  menu: 'menu', keyboard: 'keyboard', history: 'history', 'predefined-monitor': 'desktop_windows',
 }
 const FILLED = new Set(['star-fill'])
 

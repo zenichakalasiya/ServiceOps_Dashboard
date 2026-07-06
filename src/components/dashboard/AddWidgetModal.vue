@@ -149,7 +149,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 
       <!-- top tabs -->
       <div class="aw-tabs">
-        <button class="awt" :class="{ on: tab === 'chart' }" @click="tab = 'chart'">Chart type</button>
+        <button class="awt" :class="{ on: tab === 'chart' }" @click="tab = 'chart'">Create Widget</button>
         <button class="awt" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Predefined</button>
         <button class="awt" :class="{ on: tab === 'user' }" @click="tab = 'user'">User Defined</button>
         <button class="awt" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>

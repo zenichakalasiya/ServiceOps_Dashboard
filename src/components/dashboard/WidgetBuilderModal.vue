@@ -12,12 +12,28 @@ const ex = props.existing
 const editing = computed(() => !!props.existing)
 const libMode = computed(() => !!props.libItem)   // duplicate/edit a library tile → returns to listing
 const prefix = computed(() => (libMode.value ? 'Clone' : editing.value ? 'Update' : 'Create'))
-const ctaLabel = computed(() => (props.type.type === 'chart' ? 'Widget' : props.type.label))
 const spinning = ref(false)
 function refreshPreview() { spinning.value = true; setTimeout(() => { spinning.value = false }, 650) }
-const isChart = computed(() => props.type.type === 'chart')
-const isKpi = computed(() => props.type.type === 'kpi')
-const isShortcut = computed(() => props.type.type === 'shortcut')
+
+// Switchable tile types — tabs above the live preview
+const TYPES = [
+  { id: 'line', label: 'Line', icon: 'chart-line', type: 'chart', kind: 'line' },
+  { id: 'bar', label: 'Bar', icon: 'chart-bar', type: 'chart', kind: 'hbar' },
+  { id: 'column', label: 'Column', icon: 'chart-bar', type: 'chart', kind: 'bar' },
+  { id: 'pie', label: 'Pie', icon: 'chart-pie', type: 'chart', kind: 'donut' },
+  { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null },
+  { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
+]
+const curType = ref(TYPES.find((t) => t.id === props.type.id) || props.type)
+const showTypeTabs = computed(() => !editing.value && !libMode.value)
+const isChart = computed(() => curType.value.type === 'chart')
+const isKpi = computed(() => curType.value.type === 'kpi')
+const isShortcut = computed(() => curType.value.type === 'shortcut')
+const ctaLabel = computed(() => (isChart.value ? 'Widget' : curType.value.label))
+function switchType(t) {
+  if (!cfg.name || cfg.name === `New ${curType.value.label}`) cfg.name = `New ${t.label}`
+  curType.value = t
+}
 
 // Manual vs Query-Based: the SQL Query field (with Tap Preview) shows for Shortcuts
 // and for any Widget/KPI once the user switches to the Query Based tab.
@@ -38,7 +54,7 @@ const TOPN_OPTS = [{ value: '', label: 'Select' }, { value: '5', label: '5' }, {
 // ServiceOps "Create Widget" fields. Prefilled from the existing tile when editing.
 function initCfg() {
   return {
-    name: ex?.title || props.libItem?.title || `New ${props.type.label}`,
+    name: ex?.title || props.libItem?.title || `New ${curType.value.label}`,
     module: 'Request', techAccess: [store.currentUser], groupAccess: '',
     mode: ex?.sql ? 'query' : 'manual',   // Manual | Query Based
     xAxis: 'Priority', yFunc: 'Count Of', yColumn: 'Requests',
@@ -51,7 +67,7 @@ const cfg = reactive(initCfg())
 function reset() { Object.assign(cfg, initCfg()) }
 
 const previewTile = computed(() => {
-  const title = cfg.name || `New ${props.type.label}`
+  const title = cfg.name || `New ${curType.value.label}`
   if (isKpi.value) {
     return ex
       ? mkKpi(title, ex.value, ex.unit, ex.delta, ex.status, cfg.description)
@@ -63,13 +79,13 @@ const previewTile = computed(() => {
       labels = ex.chart.labels
       series = ex.chart.series.map((s) => ({ ...s, values: [...s.values] }))
     } else {
-      const donut = props.type.kind === 'donut'
+      const donut = curType.value.kind === 'donut'
       labels = donut ? ['P1', 'P2', 'P3', 'P4'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
       series = [{ name: cfg.yFunc, values: donut ? [18, 64, 120, 46] : [42, 51, 38, 60, 55] }]
     }
     if (cfg.sortOrder === 'asc') series = series.map((s) => ({ ...s, values: [...s.values].sort((a, b) => a - b) }))
     if (cfg.sortOrder === 'desc') series = series.map((s) => ({ ...s, values: [...s.values].sort((a, b) => b - a) }))
-    return mkChart(title, { kind: props.type.kind, labels, series }, cfg.description)
+    return mkChart(title, { kind: curType.value.kind, labels, series }, cfg.description)
   }
   return ex
     ? mkShortcut(title, ex.columns, ex.rows.map((r) => [...r]), cfg.description)
@@ -83,7 +99,7 @@ function save(place) {
   const pv = previewTile.value
   // --- library duplicate/edit: hand the config back to the listing ---
   if (props.libItem) {
-    emit('librarySaved', { title: cfg.name, module: cfg.module, type: props.type.type, sharedAccess: cfg.sharedAccess, place })
+    emit('librarySaved', { title: cfg.name, module: cfg.module, type: curType.value.type, sharedAccess: cfg.sharedAccess, place })
     return
   }
   // --- edit an existing board tile in place ---
@@ -110,7 +126,7 @@ function save(place) {
     props.d.updated = new Date().toISOString()
     emit('created', pv.id)
   } else {
-    emit('savedToLibrary', { title: cfg.name, module: cfg.module, type: props.type.type, sharedAccess: cfg.sharedAccess })
+    emit('savedToLibrary', { title: cfg.name, module: cfg.module, type: curType.value.type, sharedAccess: cfg.sharedAccess })
   }
 }
 </script>
@@ -121,7 +137,7 @@ function save(place) {
       <div class="builder">
         <!-- Header (ClickUp-style) -->
         <header class="bhead">
-          <div class="crumb"><span class="muted">Dashboard</span> <Icon name="chevron-right" :size="13" class="sep" /> <span v-if="editing || libMode" class="muted">Edit</span> <b>{{ cfg.name || ('New ' + type.label) }}</b></div>
+          <div class="crumb"><span class="muted">Dashboard</span> <Icon name="chevron-right" :size="13" class="sep" /> <span v-if="editing || libMode" class="muted">Edit</span> <b>{{ cfg.name || ('New ' + curType.label) }}</b></div>
           <div class="hacts">
             <button class="ic" title="Refresh preview" @click="refreshPreview"><Icon name="refresh" :size="16" :class="{ spin: spinning }" /></button>
             <button class="ic" @click="emit('close')" title="Close"><Icon name="x" :size="18" /></button>
@@ -131,6 +147,12 @@ function save(place) {
         <div class="bbody">
           <!-- LEFT: live preview (ServiceOps) -->
           <section class="preview">
+            <!-- switch tile type (updates preview + right-side config) -->
+            <div v-if="showTypeTabs" class="pv-tabs">
+              <button v-for="t in TYPES" :key="t.id" class="pv-tab" :class="{ on: curType.id === t.id }" @click="switchType(t)">
+                <Icon :name="t.icon" :size="16" :class="{ rot90: t.id === 'bar' }" /> {{ t.label }}
+              </button>
+            </div>
             <div class="pv-card">
               <div class="pv-canvas">
                 <div v-if="isKpi" class="pv-kpi">{{ previewTile.value }}<span v-if="previewTile.unit" class="u">{{ previewTile.unit }}</span><span class="d">▲ {{ previewTile.delta?.pct }}%</span></div>
@@ -245,8 +267,8 @@ function save(place) {
 </template>
 
 <style scoped>
-.overlay { position: fixed; inset: 0; background: rgba(20,21,38,.5); backdrop-filter: blur(2px); z-index: 120; display: grid; place-items: center; padding: 24px; }
-.builder { width: min(1380px, 96vw); height: min(780px, 92vh); background: var(--surface); border-radius: var(--r-xl); box-shadow: var(--sh-lg); display: flex; flex-direction: column; overflow: hidden; }
+.overlay { position: fixed; inset: 0; background: rgba(20,21,38,.5); backdrop-filter: blur(2px); z-index: 120; display: grid; place-items: center; padding: 16px; }
+.builder { width: 100%; height: 100%; background: var(--surface); border-radius: var(--r-xl); box-shadow: var(--sh-lg); display: flex; flex-direction: column; overflow: hidden; }
 .bhead { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); flex: none; }
 .crumb { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .crumb .sep { color: var(--muted-2); }
@@ -254,7 +276,12 @@ function save(place) {
 .ic { width: 34px; height: 34px; border: none; background: transparent; color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
 .bbody { flex: 1; display: flex; min-height: 0; }
-.preview { flex: 1.5; display: flex; flex-direction: column; min-width: 0; padding: 22px; background: var(--bg); border-right: 1px solid var(--border); }
+.preview { flex: 1.5; display: flex; flex-direction: column; min-width: 0; padding: 18px 22px 22px; background: var(--bg); border-right: 1px solid var(--border); }
+.pv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.pv-tab { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 13px; }
+.pv-tab:hover { background: var(--surface-2); }
+.pv-tab.on { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--sh-sm); }
+.pv-tab .rot90 { transform: rotate(90deg); }
 .pv-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; }
 .pv-canvas { flex: 1; display: grid; place-items: center; padding: 22px; min-height: 0; }
 .pv-canvas > * { width: 100%; }

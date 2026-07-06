@@ -38,8 +38,20 @@ const groups = computed(() => {
 
 const isCustom = (d) => d.mine && !d.predefined
 // identify a dashboard by icon: predefined · shared-with-me · created-by-me
-function dashKind(d) { return d.predefined ? 'pre' : d.sharedWithMe ? 'shared' : d.mine ? 'mine' : 'other' }
-function dashIcon(d) { return ({ pre: 'sparkles', shared: 'users', mine: 'user-check', other: 'layout' })[dashKind(d)] }
+function dashKind(d) {
+  // In the Created-by-me / Shared-with-me tabs the icon reflects the tab.
+  if (tab.value === 'mine') return 'mine'
+  if (tab.value === 'shared') return 'shared'
+  // All tab — categorize by the dashboard's real relationship to me.
+  // Ownership / sharing wins over the predefined flag, so the monitor icon only
+  // shows on a genuinely predefined board that is neither mine nor shared to me.
+  if (d.mine) return 'mine'             // created by me → person
+  if (d.sharedWithMe) return 'shared'   // shared with me → share
+  if (d.predefined) return 'pre'        // predefined / out-of-box → monitor
+  return 'shared'                       // owned by someone else, surfaced to me → shared
+}
+// pre = monitor (predefined) · shared = share icon · mine = person
+function dashIcon(d) { return ({ pre: 'predefined-monitor', shared: 'share', mine: 'user' })[dashKind(d)] }
 function openBoard(d) { recordView(d); router.push(`/dashboard/${d.id}`) }
 function del(d) { archiveDashboard(d) }
 </script>

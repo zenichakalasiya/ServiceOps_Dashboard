@@ -15,7 +15,7 @@ import SharePopover from '../components/dashboard/SharePopover.vue'
 import ShareDialog from '../components/dashboard/ShareDialog.vue'
 import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
 import { store, byId, recordView, toggleFavorite, removeTile, toast } from '../store/index.js'
-import { ACCESS, uid } from '../data/mock.js'
+import { uid } from '../data/mock.js'
 const route = useRoute()
 const router = useRouter()
 
@@ -28,8 +28,8 @@ const showSchedule = ref(false)
 const showHistory = ref(false)
 const showDownload = ref(false)
 const sharePop = ref(false)
-const accessOpen = ref(false)
-const restrictHover = ref(false)
+const restrictOpen = ref(false)
+const descHover = ref(false)
 const presenting = ref(false)
 const loadingBoard = ref(true)
 const highlightId = ref(null)
@@ -142,7 +142,11 @@ function onWidgetCreated(id) {
   })
 }
 
-onMounted(() => { recordView(d.value); setTimeout(() => (loadingBoard.value = false), 550) })
+onMounted(() => {
+  recordView(d.value)
+  setTimeout(() => (loadingBoard.value = false), 550)
+  if (store.ui.pendingAddWidget) { store.ui.pendingAddWidget = false; addToGroup.value = null; showAdd.value = true }
+})
 
 function onRemove(t) { removeTile(d.value, t); dirty.value = true }
 // Open the builder pre-filled with this tile, in edit mode (with live preview).
@@ -178,32 +182,26 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <div class="titles">
           <div class="t-row">
             <h1>{{ d.name }}</h1>
-            <div class="acc-wrap">
-              <button class="acc-btn" :class="'acc-' + d.access" @click.stop="accessOpen = !accessOpen" title="Who can access this dashboard">
-                {{ ACCESS[d.access].label }} <Icon name="chevron-down" :size="11" class="acc-chev" />
-              </button>
-              <!-- restricted: hover the restrict icon to see technician + group access -->
-              <span v-if="d.access === 'restricted'" class="restrict-ic" @mouseenter="restrictHover = true" @mouseleave="restrictHover = false">
-                <Icon name="users" :size="14" />
-                <transition name="fade">
-                  <div v-if="restrictHover" class="restrict-pop card">
-                    <div class="ap-sec">
-                      <label>Technician Access Level</label>
-                      <div class="ap-chips"><span v-for="t in d.techAccess" :key="t" class="chip sm"><Icon name="user" :size="11" /> {{ t }}</span><span v-if="!d.techAccess.length" class="muted small">None</span></div>
-                    </div>
-                    <div class="ap-sec">
-                      <label>Technician Group Access Level</label>
-                      <div class="ap-chips"><span v-for="g in d.groupAccess" :key="g" class="chip sm"><Icon name="users" :size="11" /> {{ g }}</span><span v-if="!d.groupAccess.length" class="muted small">None</span></div>
-                    </div>
-                  </div>
-                </transition>
-              </span>
-              <div v-if="accessOpen" class="backdrop" @click="accessOpen = false" />
+            <span v-if="d.description" class="dinfo" @mouseenter="descHover = true" @mouseleave="descHover = false">
+              <Icon name="info" :size="15" />
+              <transition name="fade"><span v-if="descHover" class="tt dinfo-tt">{{ d.description }}</span></transition>
+            </span>
+            <!-- Only Restricted dashboards show an access indicator; click it for the technician fields -->
+            <div v-if="d.access === 'restricted'" class="acc-wrap">
+              <button class="restrict-ic" @click.stop="restrictOpen = !restrictOpen" title="Restricted access"><Icon name="users" :size="15" /></button>
+              <div v-if="restrictOpen" class="backdrop" @click="restrictOpen = false" />
               <transition name="pop">
-                <div v-if="accessOpen" class="acc-pop card" @click.stop>
-                  <div class="ap-h"><Icon :name="ACCESS[d.access].icon" :size="14" /> {{ ACCESS[d.access].label }} — who can access</div>
-                  <p class="ap-desc">{{ d.access === 'public' ? 'Everyone with portal access can open this dashboard.' : d.access === 'private' ? `Private — only ${d.owner} can open this dashboard.` : 'Restricted — only selected technicians / groups can open it. Hover the restrict icon to see them.' }}</p>
-                  <button class="ap-edit" @click="accessOpen = false; showShare = true"><Icon name="edit" :size="13" /> Manage access &amp; sharing</button>
+                <div v-if="restrictOpen" class="restrict-pop card" @click.stop>
+                  <div class="ap-h"><Icon name="users" :size="14" /> Restricted — who can access</div>
+                  <div class="ap-sec">
+                    <label>Technician Access Level</label>
+                    <div class="ap-chips"><span v-for="t in d.techAccess" :key="t" class="chip sm"><Icon name="user" :size="11" /> {{ t }}</span><span v-if="!d.techAccess.length" class="muted small">None</span></div>
+                  </div>
+                  <div class="ap-sec">
+                    <label>Technician Group Access Level</label>
+                    <div class="ap-chips"><span v-for="g in d.groupAccess" :key="g" class="chip sm"><Icon name="users" :size="11" /> {{ g }}</span><span v-if="!d.groupAccess.length" class="muted small">None</span></div>
+                  </div>
+                  <button class="ap-edit" @click="restrictOpen = false; showShare = true"><Icon name="edit" :size="13" /> Manage access &amp; sharing</button>
                 </div>
               </transition>
             </div>
@@ -214,17 +212,15 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <TimeFilter />
         <AutoRefresh />
         <span class="vsep" />
-        <button class="btn ico-only" @click="showSchedule = true" title="Schedule report"><Icon name="calendar2" :size="17" /></button>
         <div class="pop-wrap">
-          <button class="btn ico-only" :class="{ on: sharePop }" @click.stop="sharePop = !sharePop" title="Share"><Icon name="share" :size="17" /></button>
+          <button class="btn ico-only" :class="{ on: sharePop }" @click.stop="sharePop = !sharePop" title="Share / Export"><Icon name="share" :size="17" /></button>
           <SharePopover v-if="sharePop" :d="d" @close="sharePop = false" />
         </div>
         <div class="pop-wrap">
           <button class="btn ico-only" :class="{ on: showDownload }" @click.stop="showDownload = !showDownload" title="Download"><Icon name="download" :size="17" /></button>
           <DownloadDialog v-if="showDownload" :d="d" @close="showDownload = false" />
         </div>
-        <button class="btn ico-only" @click="showHistory = true" title="Version history"><Icon name="history" :size="17" /></button>
-        <DashboardMenu :d="d" align="right" @present="presenting = true" />
+        <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" />
       </div>
     </header>
 
@@ -260,6 +256,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
       <!-- tiles (ungrouped + collapsible groups) -->
       <div v-else class="board-groups" ref="gridEl">
+        <div class="bg-toolbar"><button class="add-group" @click="addGroup"><Icon name="plus" :size="15" /> New group</button></div>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
           @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
@@ -270,8 +267,6 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
           </div>
         </div>
-        <div v-else-if="(d.groups || []).length" class="ungrouped-drop" :class="{ 'drop-into': dropGroup === null }"
-          @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">Drag a widget here to remove it from its group.</div>
 
         <!-- groups -->
         <section v-for="g in (d.groups || [])" :key="g.id" class="group" :class="{ 'drop-into': dropGroup === g.id }"
@@ -298,8 +293,6 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             </div>
           </div>
         </section>
-
-        <button class="add-group" @click="addGroup"><Icon name="plus" :size="15" /> New group</button>
       </div>
     </div>
 
@@ -331,16 +324,14 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .t-row { display: flex; align-items: center; gap: 9px; }
 .t-row h1 { margin: 0; font-size: 19px; letter-spacing: -.3px; }
 .acc-wrap { position: relative; }
-/* access control — outlined button (distinct from the flat filled Predefined tag) */
-.acc-btn { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px 0 9px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; }
-.acc-btn:hover { background: var(--surface-2); border-color: #c7cad9; }
-.acc-chev { color: var(--muted-2); }
-/* restricted → hover to see technician + group access */
-.restrict-ic { position: relative; display: inline-grid; place-items: center; width: 26px; height: 24px; border: 1px solid var(--border-strong); border-radius: 7px; color: var(--amber); cursor: help; }
+.dinfo { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
+.dinfo:hover { color: var(--primary); }
+.dinfo-tt { top: 26px; left: -8px; width: 260px; }
+/* restricted → click the icon to see technician + group access */
+.restrict-ic { display: inline-grid; place-items: center; width: 28px; height: 26px; border: 1px solid var(--border-strong); background: var(--surface); border-radius: 7px; color: var(--amber); cursor: pointer; }
 .restrict-ic:hover { background: var(--amber-soft); border-color: transparent; }
-.restrict-pop { position: absolute; top: 30px; left: 0; z-index: 60; width: 280px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.restrict-pop { position: absolute; top: 34px; left: 0; z-index: 60; width: 300px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .backdrop { position: fixed; inset: 0; z-index: 55; }
-.acc-pop { position: absolute; top: 30px; left: 0; z-index: 60; width: 300px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .ap-h { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }
 .ap-sec label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted-2); font-weight: 600; margin-bottom: 7px; }
 .ap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -382,7 +373,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 /* widget groups (collapsible rows) */
 .board-groups { display: flex; flex-direction: column; gap: 16px; }
 .group { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); padding: 6px 12px 14px; transition: box-shadow .15s, border-color .15s; }
-.group.drop-into, .grid.drop-into, .ungrouped-drop.drop-into { border: 1px solid var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); border-radius: var(--r-lg); }
+.group.drop-into, .grid.drop-into { border: 1px solid var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); border-radius: var(--r-lg); }
 .grid.drop-into { padding: 4px; }
 .grp-head { display: flex; align-items: center; gap: 8px; padding: 6px 2px 12px; }
 .grp-toggle { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; }
@@ -397,9 +388,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-add:hover { background: var(--primary-soft); border-color: transparent; }
 .grp-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
 .grp-empty p { margin: 0; }
-.ungrouped-drop { padding: 22px; text-align: center; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
-.add-group { align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; border: 1px dashed var(--border-strong); background: transparent; border-radius: 9px; padding: 9px 14px; font-weight: 500; font-size: 13px; color: var(--primary-700); }
-.add-group:hover { background: var(--primary-softer); border-color: transparent; }
+.bg-toolbar { display: flex; justify-content: flex-end; }
+.add-group { display: inline-flex; align-items: center; gap: 7px; border: none; background: transparent; border-radius: 9px; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--primary-700); }
+.add-group:hover { background: var(--primary-softer); }
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 64px 20px; text-align: center; }
 /* illustration — a small cluster of the three tile types */
 .empty-ill { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 10px; }

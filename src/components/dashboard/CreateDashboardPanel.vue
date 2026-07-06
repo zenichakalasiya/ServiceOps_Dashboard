@@ -50,7 +50,7 @@ function saveCat() {
 const PREVIEW = ['Top Server Monitors', 'Monitor Availability', 'CPU Utilisation', 'Logs by Severity']
 
 function close() { store.ui.createOpen = false; store.ui.cloneTarget = null; store.ui.editTarget = null }
-function submit() {
+function submit(openAdd = false) {
   if (!name.value.trim()) { err.value = 'Give your dashboard a name.'; return }
   const ta = access.value === 'restricted' ? techAccess.value : undefined
   const ga = access.value === 'restricted' && groupAccess.value ? [groupAccess.value] : undefined
@@ -73,6 +73,7 @@ function submit() {
   }
   if (isClone.value) opts.tiles = src.tiles.map((t) => ({ ...JSON.parse(JSON.stringify(t)), id: uid('t') }))
   const d = createDashboard(opts)
+  if (openAdd) store.ui.pendingAddWidget = true   // open Add-Widget once the board loads
   close()
   router.push(`/dashboard/${d.id}`)
 }
@@ -187,7 +188,7 @@ function submit() {
 
       <div class="foot">
         <button class="btn" @click="close">Cancel</button>
-        <button class="btn btn-primary" @click="submit">
+        <button class="btn btn-primary" @click="submit(false)">
           <Icon :name="isEdit ? 'check' : isClone ? 'copy' : 'plus'" :size="16" /> {{ isEdit ? 'Save changes' : isClone ? 'Clone Dashboard' : 'Create' }}
         </button>
       </div>

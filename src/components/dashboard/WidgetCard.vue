@@ -43,6 +43,8 @@ const filteredRows = computed(() => {
 })
 const present = ref(false)
 const infoHover = ref(false)
+// narrow widgets keep only the high-value actions (Refresh · Edit · ⋯); Full screen moves into ⋯
+const compact = computed(() => (props.tile.w || 3) <= 3)
 function refresh() { loading.value = true; setTimeout(() => { loading.value = false }, 750) }
 
 // Empty-widget states: unconfigured vs error vs no-data vs ok (distinct copy each)
@@ -84,7 +86,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <div class="right">
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
         <button class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
-        <button class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
+        <button v-if="!compact" class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
         <button class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
         <div class="mwrap">
           <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
@@ -97,6 +99,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false" />
       <transition name="pop">
         <div v-if="menu" class="menu tile-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+          <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="menu = false; emit('pin', tile)"><Icon name="pin" :size="15" /> {{ tile.pinned ? 'Unpin' : 'Pin to top' }}</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
           <button v-if="tile.type === 'chart'" class="menu-item" @click="showLegend = !showLegend"><Icon name="list" :size="15" /> {{ showLegend ? 'Hide legend' : 'Show legend' }}</button>
