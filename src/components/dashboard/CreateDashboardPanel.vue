@@ -188,7 +188,7 @@ function submit() {
       <div class="foot">
         <button class="btn" @click="close">Cancel</button>
         <button class="btn btn-primary" @click="submit">
-          <Icon :name="isEdit ? 'check' : isClone ? 'copy' : 'plus'" :size="16" /> {{ isEdit ? 'Save changes' : isClone ? 'Clone Dashboard' : 'Create & add widgets' }}
+          <Icon :name="isEdit ? 'check' : isClone ? 'copy' : 'plus'" :size="16" /> {{ isEdit ? 'Save changes' : isClone ? 'Clone Dashboard' : 'Create' }}
         </button>
       </div>
     </div>

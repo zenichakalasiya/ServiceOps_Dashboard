@@ -110,17 +110,16 @@ const delTarget = ref(null)
 function delLib(l) { delTarget.value = l }
 function confirmDel() { deleteLibTile(delTarget.value); delTarget.value = null }
 
-// ---- per-tab / per-type action rules ----
-// Predefined: KPI/Shortcut → Duplicate · User: KPI/Shortcut → Duplicate·Edit·Delete
-// Shared: all types → Duplicate, and KPI additionally → Edit (Widgets: Duplicate only)
-function canDuplicate(l) { return tab.value === 'shared' ? true : l.type !== 'chart' }
+// ---- per-tab action rules (same for Widget / KPI / Shortcut) ----
+// Predefined: Duplicate only · User Defined: Duplicate·Edit·Delete
+// Shared: Duplicate always, Edit only if the owner granted Edit access
+function canDuplicate() { return true }
 function canEdit(l) {
-  if (tab.value === 'user') return l.type !== 'chart'
-  // Shared: only if the owner granted Edit access when creating/sharing it
+  if (tab.value === 'user') return true
   if (tab.value === 'shared') return l.sharedAccess === 'edit' || l.sharedAccess === 'both'
-  return false
+  return false   // predefined → no edit
 }
-function canDelete(l) { return tab.value === 'user' && l.type !== 'chart' }
+function canDelete() { return tab.value === 'user' }
 function hasActions(l) { return canDuplicate(l) || canEdit(l) || canDelete(l) }
 
 const TYPE_LABEL = { kpi: 'KPI', chart: 'Widget', shortcut: 'Shortcut' }

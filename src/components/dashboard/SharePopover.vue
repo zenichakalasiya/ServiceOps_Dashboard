@@ -28,7 +28,6 @@ function exportPdf() { toast(`Exporting “${props.d.name}” as PDF${pwd.value 
       <button class="copylink" @click="copyLink"><Icon name="link" :size="14" /> Copy link</button>
     </div>
     <div class="sep" />
-    <div class="pv-title">Export Dashboard as PDF</div>
 
     <label class="fld">Emails <i>*</i></label>
     <div class="emails">

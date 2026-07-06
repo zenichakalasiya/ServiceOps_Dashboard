@@ -29,6 +29,7 @@ const showHistory = ref(false)
 const showDownload = ref(false)
 const sharePop = ref(false)
 const accessOpen = ref(false)
+const restrictHover = ref(false)
 const presenting = ref(false)
 const loadingBoard = ref(true)
 const highlightId = ref(null)
@@ -177,17 +178,15 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <div class="titles">
           <div class="t-row">
             <h1>{{ d.name }}</h1>
-            <span v-if="d.predefined" class="chip badge-pre">Predefined</span>
             <div class="acc-wrap">
               <button class="acc-btn" :class="'acc-' + d.access" @click.stop="accessOpen = !accessOpen" title="Who can access this dashboard">
                 {{ ACCESS[d.access].label }} <Icon name="chevron-down" :size="11" class="acc-chev" />
               </button>
-              <div v-if="accessOpen" class="backdrop" @click="accessOpen = false" />
-              <transition name="pop">
-                <div v-if="accessOpen" class="acc-pop card" @click.stop>
-                  <div class="ap-h"><Icon :name="ACCESS[d.access].icon" :size="14" /> {{ ACCESS[d.access].label }} — who can access</div>
-                  <!-- Technician / group access levels apply only to Restricted dashboards -->
-                  <template v-if="d.access === 'restricted'">
+              <!-- restricted: hover the restrict icon to see technician + group access -->
+              <span v-if="d.access === 'restricted'" class="restrict-ic" @mouseenter="restrictHover = true" @mouseleave="restrictHover = false">
+                <Icon name="users" :size="14" />
+                <transition name="fade">
+                  <div v-if="restrictHover" class="restrict-pop card">
                     <div class="ap-sec">
                       <label>Technician Access Level</label>
                       <div class="ap-chips"><span v-for="t in d.techAccess" :key="t" class="chip sm"><Icon name="user" :size="11" /> {{ t }}</span><span v-if="!d.techAccess.length" class="muted small">None</span></div>
@@ -196,8 +195,14 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
                       <label>Technician Group Access Level</label>
                       <div class="ap-chips"><span v-for="g in d.groupAccess" :key="g" class="chip sm"><Icon name="users" :size="11" /> {{ g }}</span><span v-if="!d.groupAccess.length" class="muted small">None</span></div>
                     </div>
-                  </template>
-                  <p v-else class="ap-desc">{{ d.access === 'public' ? 'Everyone with portal access can open this dashboard.' : `Private — only ${d.owner} can open this dashboard.` }}</p>
+                  </div>
+                </transition>
+              </span>
+              <div v-if="accessOpen" class="backdrop" @click="accessOpen = false" />
+              <transition name="pop">
+                <div v-if="accessOpen" class="acc-pop card" @click.stop>
+                  <div class="ap-h"><Icon :name="ACCESS[d.access].icon" :size="14" /> {{ ACCESS[d.access].label }} — who can access</div>
+                  <p class="ap-desc">{{ d.access === 'public' ? 'Everyone with portal access can open this dashboard.' : d.access === 'private' ? `Private — only ${d.owner} can open this dashboard.` : 'Restricted — only selected technicians / groups can open it. Hover the restrict icon to see them.' }}</p>
                   <button class="ap-edit" @click="accessOpen = false; showShare = true"><Icon name="edit" :size="13" /> Manage access &amp; sharing</button>
                 </div>
               </transition>
@@ -330,6 +335,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .acc-btn { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px 0 9px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; }
 .acc-btn:hover { background: var(--surface-2); border-color: #c7cad9; }
 .acc-chev { color: var(--muted-2); }
+/* restricted → hover to see technician + group access */
+.restrict-ic { position: relative; display: inline-grid; place-items: center; width: 26px; height: 24px; border: 1px solid var(--border-strong); border-radius: 7px; color: var(--amber); cursor: help; }
+.restrict-ic:hover { background: var(--amber-soft); border-color: transparent; }
+.restrict-pop { position: absolute; top: 30px; left: 0; z-index: 60; width: 280px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .backdrop { position: fixed; inset: 0; z-index: 55; }
 .acc-pop { position: absolute; top: 30px; left: 0; z-index: 60; width: 300px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .ap-h { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }

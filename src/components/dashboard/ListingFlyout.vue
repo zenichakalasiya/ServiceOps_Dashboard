@@ -73,7 +73,6 @@ function del(d) { archiveDashboard(d) }
           <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id }" @click="openBoard(d)">
             <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
             <span class="iname ellip">{{ d.name }}</span>
-            <span v-if="d.predefined && grp.name !== 'Recently used' && grp.name !== 'My Favourite'" class="tag-pre">Predefined</span>
             <span class="hov">
               <button class="hb fav" :class="{ on: d.favorite }" title="Favourite" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="13" /></button>
               <button v-if="isCustom(d)" class="hb del" title="Delete" @click.stop="del(d)"><Icon name="trash" :size="13" /></button>
