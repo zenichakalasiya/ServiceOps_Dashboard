@@ -49,8 +49,11 @@ const typeCounts = computed(() => {
 // ---- multi-select: add is ONLY via checkbox + footer (no per-row quick add) ----
 const MAX_SEL = 10
 const selected = ref(new Set())
+// a library item already on this dashboard can't be added again — it shows as checked+locked
+function isPlaced(l) { return props.d.tiles.some((t) => t.title === l.title && t.type === l.type) }
 function isSel(l) { return selected.value.has(l.id) }
 function toggleSel(l) {
+  if (isPlaced(l)) return   // already on the dashboard
   const s = new Set(selected.value)
   if (s.has(l.id)) s.delete(l.id)
   else if (s.size >= MAX_SEL) { toast(`You can add up to ${MAX_SEL} at once`, 'warn'); return }
@@ -206,14 +209,14 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
         <!-- REUSE TABS: listing with actions -->
         <template v-else>
           <div v-if="list.length" class="lst">
-            <div v-for="l in list" :key="l.id" class="lrow" :class="{ sel: isSel(l) }" @mouseenter="showTip(l, $event)" @mouseleave="hideTip">
-              <input type="checkbox" class="lcb" :checked="isSel(l)" @change="toggleSel(l)" />
+            <div v-for="l in list" :key="l.id" class="lrow" :class="{ sel: isSel(l), placed: isPlaced(l) }" @mouseenter="showTip(l, $event)" @mouseleave="hideTip">
+              <input type="checkbox" class="lcb" :checked="isSel(l) || isPlaced(l)" :disabled="isPlaced(l)" @change="toggleSel(l)" />
               <div class="lt-main">
-                <div class="lt-name-row"><span class="lt-name ellip">{{ l.title }}</span></div>
+                <div class="lt-name-row"><span class="lt-name ellip">{{ l.title }}</span><span v-if="isPlaced(l)" class="placed-tag"><Icon name="check" :size="11" /> On dashboard</span></div>
                 <div class="lt-meta">{{ TYPE_LABEL[l.type] }} · {{ l.module }}</div>
               </div>
               <!-- actions per tab/type (see canDuplicate / canEdit / canDelete) -->
-              <div v-if="hasActions(l)" class="lt-acts">
+              <div v-if="hasActions(l) && !isPlaced(l)" class="lt-acts">
                 <button v-if="canDuplicate(l)" class="la" title="Duplicate" @click="openLibBuilder(l)"><Icon name="copy" :size="15" /></button>
                 <button v-if="canEdit(l)" class="la" title="Edit" @click="openLibBuilder(l)"><Icon name="edit" :size="15" /></button>
                 <button v-if="canDelete(l)" class="la del" title="Delete" @click="delLib(l)"><Icon name="trash" :size="15" /></button>
@@ -301,6 +304,9 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .lrow { display: flex; align-items: center; gap: 12px; padding: 10px 10px; border-radius: 10px; }
 .lrow:hover { background: var(--surface-2); }
 .lrow.sel { background: var(--primary-softer); }
+.lrow.placed { opacity: .72; }
+.lrow.placed .lcb { cursor: not-allowed; }
+.placed-tag { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--green); background: var(--green-soft); padding: 1px 7px 1px 5px; border-radius: 999px; flex: none; }
 .lcb { width: 16px; height: 16px; accent-color: var(--primary); flex: none; cursor: pointer; margin: 0; }
 .lt-main { flex: 1; min-width: 0; }
 .lt-name-row { display: flex; align-items: center; gap: 7px; } .lt-name { font-weight: 500; font-size: 13.5px; }

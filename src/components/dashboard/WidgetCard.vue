@@ -43,6 +43,13 @@ const filteredRows = computed(() => {
 })
 const present = ref(false)
 const infoHover = ref(false)
+const infoEl = ref(null)
+const infoPos = ref({ top: 0, left: 0 })
+function showInfo() {
+  const r = infoEl.value?.getBoundingClientRect()
+  if (r) infoPos.value = { top: r.bottom + 7, left: Math.min(r.left - 6, window.innerWidth - 256) }
+  infoHover.value = true
+}
 // Measure the real rendered width so actions collapse as the tile is resized smaller,
 // not just by column count. compact → Full screen into ⋯; tiny → Refresh + Edit + Full screen all into ⋯.
 const cardEl = ref(null)
@@ -99,14 +106,8 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
         <span class="draghandle" title="Drag to move" @mousedown="emit('armdrag', tile)"><Icon name="drag" :size="16" /></span>
         <span v-if="tile.pinned" class="pinbadge" title="Pinned"><Icon name="pin" :size="12" /></span>
         <span class="title ellip">{{ tile.title }}</span>
-        <span class="info" @mouseenter="infoHover = true" @mouseleave="infoHover = false">
+        <span ref="infoEl" class="info" @mouseenter="showInfo" @mouseleave="infoHover = false">
           <Icon name="info" :size="14" />
-          <transition name="fade">
-            <span v-if="infoHover" class="tt info-tt">
-              <b class="tt-prov">{{ provMeta.label }}</b>
-              <span v-if="tile.info" class="tt-desc">{{ tile.info }}</span>
-            </span>
-          </transition>
         </span>
       </div>
       <div class="right">
@@ -119,6 +120,16 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
         </div>
       </div>
     </header>
+
+    <!-- info tooltip: teleported so it isn't clipped by the card's overflow -->
+    <teleport to="body">
+      <transition name="fade">
+        <span v-if="infoHover" class="tt info-tt" :style="{ top: infoPos.top + 'px', left: infoPos.left + 'px' }">
+          <b class="tt-prov">{{ provMeta.label }}</b>
+          <span v-if="tile.info" class="tt-desc">{{ tile.info }}</span>
+        </span>
+      </transition>
+    </teleport>
 
     <!-- ⋯ menu: teleported so it overlays the card instead of being clipped by overflow -->
     <teleport to="body">
@@ -230,7 +241,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 .tt-desc { display: block; font-weight: 400; margin-top: 4px; color: rgba(255,255,255,.78); }
 .info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
 .info:hover { color: var(--primary); }
-.info-tt { top: 22px; left: -6px; width: 240px; }
+.info-tt { position: fixed; z-index: 200; width: 240px; }
 .right { display: flex; align-items: center; gap: 1px; opacity: 0; transition: opacity .14s; }
 .tile:hover .right, .tile.searching .right { opacity: 1; }
 .ti { width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; }
