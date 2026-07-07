@@ -60,9 +60,9 @@ function refresh() { loading.value = true; setTimeout(() => { loading.value = fa
 // provenance: predefined tiles can't be edited or deleted (only "other" actions)
 const prov = computed(() => props.tile.prov || 'user')
 const PROV = {
-  predefined: { icon: 'verified', label: 'Predefined widget' },
-  user: { icon: 'user', label: 'User-defined widget' },
-  shared: { icon: 'share', label: 'Shared with me' },
+  predefined: { label: 'Predefined' },
+  user: { label: 'User-defined' },
+  shared: { label: 'Shared with me' },
 }
 const provMeta = computed(() => PROV[prov.value] || PROV.user)
 const canEdit = computed(() => prov.value !== 'predefined')
@@ -98,11 +98,15 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <div class="left">
         <span class="draghandle" title="Drag to move" @mousedown="emit('armdrag', tile)"><Icon name="drag" :size="16" /></span>
         <span v-if="tile.pinned" class="pinbadge" title="Pinned"><Icon name="pin" :size="12" /></span>
-        <span class="prov" :class="'prov-' + prov" :title="provMeta.label"><Icon :name="provMeta.icon" :size="13" /></span>
         <span class="title ellip">{{ tile.title }}</span>
         <span class="info" @mouseenter="infoHover = true" @mouseleave="infoHover = false">
           <Icon name="info" :size="14" />
-          <transition name="fade"><span v-if="infoHover && tile.info" class="tt info-tt">{{ tile.info }}</span></transition>
+          <transition name="fade">
+            <span v-if="infoHover" class="tt info-tt">
+              <b class="tt-prov">{{ provMeta.label }}</b>
+              <span v-if="tile.info" class="tt-desc">{{ tile.info }}</span>
+            </span>
+          </transition>
         </span>
       </div>
       <div class="right">
@@ -220,12 +224,10 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 .draghandle:active { cursor: grabbing; }
 .tile:hover .draghandle { opacity: 1; }
 .pinbadge { display: inline-grid; place-items: center; color: var(--primary); flex: none; transform: rotate(35deg); }
-/* provenance marker before the title: predefined / user-defined / shared */
-.prov { display: inline-grid; place-items: center; flex: none; margin-right: 1px; }
-.prov.prov-predefined { color: var(--primary); }
-.prov.prov-user { color: var(--green); }
-.prov.prov-shared { color: var(--blue); }
 .title { font-weight: 600; font-size: var(--tile-title, 13.5px); }
+/* provenance + description shown in the info-icon tooltip */
+.tt-prov { display: block; font-weight: 600; color: #fff; }
+.tt-desc { display: block; font-weight: 400; margin-top: 4px; color: rgba(255,255,255,.78); }
 .info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
 .info:hover { color: var(--primary); }
 .info-tt { top: 22px; left: -6px; width: 240px; }
