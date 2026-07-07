@@ -155,10 +155,10 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
         <button class="awt" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
       </div>
 
-      <!-- module filter + search (every tab) -->
-      <div class="aw-filters">
+      <!-- module filter + search (reuse tabs only — the Create Widget tab has no search) -->
+      <div v-if="tab !== 'chart'" class="aw-filters">
         <div class="srch"><Icon name="search" :size="15" class="muted" /><input v-model="search" placeholder="Search…" /></div>
-        <div v-if="tab !== 'chart' && fType !== 'shortcut'" class="modsel"><Dropdown v-model="fModule" :options="moduleOptions" placeholder="All modules" /></div>
+        <div v-if="fType !== 'shortcut'" class="modsel"><Dropdown v-model="fModule" :options="moduleOptions" placeholder="All modules" /></div>
       </div>
 
       <!-- type filter (reuse tabs) — bifurcate KPI / Widget / Shortcut -->

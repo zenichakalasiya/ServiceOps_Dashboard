@@ -25,7 +25,9 @@ const TYPES = [
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
 ]
 const curType = ref(TYPES.find((t) => t.id === props.type.id) || props.type)
-const showTypeTabs = computed(() => !editing.value && !libMode.value)
+// Editing an existing tile (or duplicating a library tile) locks the type — the tabs stay
+// visible for context but are disabled so the chart type can't be switched.
+const typeLocked = computed(() => editing.value || libMode.value)
 const isChart = computed(() => curType.value.type === 'chart')
 const isKpi = computed(() => curType.value.type === 'kpi')
 const isShortcut = computed(() => curType.value.type === 'shortcut')
@@ -148,8 +150,8 @@ function save(place) {
           <!-- LEFT: live preview (ServiceOps) -->
           <section class="preview">
             <!-- switch tile type (updates preview + right-side config) -->
-            <div v-if="showTypeTabs" class="pv-tabs">
-              <button v-for="t in TYPES" :key="t.id" class="pv-tab" :class="{ on: curType.id === t.id }" @click="switchType(t)">
+            <div class="pv-tabs" :class="{ locked: typeLocked }">
+              <button v-for="t in TYPES" :key="t.id" class="pv-tab" :class="{ on: curType.id === t.id }" :disabled="typeLocked" @click="switchType(t)">
                 <Icon :name="t.icon" :size="16" :class="{ rot90: t.id === 'bar' }" /> {{ t.label }}
               </button>
             </div>
@@ -182,7 +184,6 @@ function save(place) {
                   <div class="seg">
                     <button class="seg-b" :class="{ on: cfg.sharedAccess==='view' }" @click="cfg.sharedAccess='view'">View</button>
                     <button class="seg-b" :class="{ on: cfg.sharedAccess==='edit' }" @click="cfg.sharedAccess='edit'">Edit</button>
-                    <button class="seg-b" :class="{ on: cfg.sharedAccess==='both' }" @click="cfg.sharedAccess='both'">View &amp; Edit</button>
                   </div>
                   <p class="hint" style="margin:6px 0 0">People you share this with can Edit only if you grant Edit access here.</p>
                 </div>
@@ -281,6 +282,8 @@ function save(place) {
 .pv-tab { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 13px; }
 .pv-tab:hover { background: var(--surface-2); }
 .pv-tab.on { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--sh-sm); }
+.pv-tab:disabled { opacity: .45; cursor: not-allowed; }
+.pv-tab.on:disabled { opacity: 1; }
 .pv-tab .rot90 { transform: rotate(90deg); }
 .pv-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; }
 .pv-canvas { flex: 1; display: grid; place-items: center; padding: 22px; min-height: 0; }
