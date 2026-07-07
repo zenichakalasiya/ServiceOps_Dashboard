@@ -2,7 +2,8 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
-import { store, live, recents, toggleFavorite, archiveDashboard, recordView } from '../../store/index.js'
+import ShareDialog from './ShareDialog.vue'
+import { store, live, recents, toggleFavorite, archiveDashboard, markDefault, recordView } from '../../store/index.js'
 import { ACCESS } from '../../data/mock.js'
 const route = useRoute()
 const router = useRouter()
@@ -54,6 +55,21 @@ function dashKind(d) {
 function dashIcon(d) { return ({ pre: 'predefined-monitor', shared: 'share', mine: 'user' })[dashKind(d)] }
 function openBoard(d) { recordView(d); router.push(`/dashboard/${d.id}`) }
 function del(d) { archiveDashboard(d) }
+
+// ---- per-row actions menu (Edit · Clone · Mark as default · Share · Archive) ----
+const menuId = ref(null)
+const menuPos = ref({ top: 0, left: 0 })
+const menuDash = computed(() => (menuId.value ? live.value.find((d) => d.id === menuId.value) : null))
+const shareTarget = ref(null)
+function openMenu(d, e) {
+  if (menuId.value === d.id) { menuId.value = null; return }
+  const r = e.currentTarget.getBoundingClientRect()
+  menuPos.value = { top: r.bottom + 6, left: Math.max(8, r.right - 190) }
+  menuId.value = d.id
+}
+function menuAct(fn) { menuId.value = null; fn() }
+function doEdit(d) { store.ui.cloneTarget = null; store.ui.editTarget = d; store.ui.createOpen = true }
+function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; store.ui.createOpen = true }
 </script>
 
 <template>
@@ -82,12 +98,13 @@ function del(d) { archiveDashboard(d) }
           <span class="gcount">{{ grp.items.length }}</span>
         </button>
         <div v-if="open.has(grp.name)" class="items">
-          <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id }" @click="openBoard(d)">
+          <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id, 'menu-open': menuId === d.id }" @click="openBoard(d)">
             <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
             <span class="iname ellip">{{ d.name }}</span>
+            <Icon v-if="d.default" name="default-home" :size="14" class="def-ic" title="Default landing dashboard" />
             <span class="hov">
               <button class="hb fav" :class="{ on: d.favorite }" title="Favourite" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="13" /></button>
-              <button v-if="isCustom(d)" class="hb del" title="Delete" @click.stop="del(d)"><Icon name="trash" :size="13" /></button>
+              <button class="hb" title="Actions" @click.stop="openMenu(d, $event)"><Icon name="dots-v" :size="14" /></button>
             </span>
           </div>
         </div>
@@ -96,6 +113,23 @@ function del(d) { archiveDashboard(d) }
     </div>
 
     <button class="archive-link" @click="router.push('/archive')"><Icon name="archive" :size="15" /> Archive</button>
+
+    <!-- per-row actions menu (teleported so it overlays instead of being clipped) -->
+    <teleport to="body">
+      <div v-if="menuId" class="row-backdrop" @click="menuId = null" />
+      <transition name="pop">
+        <div v-if="menuDash" class="menu row-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+          <button class="menu-item" @click="menuAct(() => doEdit(menuDash))"><Icon name="edit" :size="15" /> Edit</button>
+          <button class="menu-item" @click="menuAct(() => doClone(menuDash))"><Icon name="copy" :size="15" /> Clone</button>
+          <button v-if="!menuDash.default" class="menu-item" @click="menuAct(() => markDefault(menuDash))"><Icon name="pin" :size="15" /> Mark as default landing</button>
+          <button class="menu-item" @click="menuAct(() => { shareTarget = menuDash })"><Icon name="share" :size="15" /> Share</button>
+          <div class="menu-sep" />
+          <button class="menu-item danger" @click="menuAct(() => del(menuDash))"><Icon name="archive" :size="15" /> Archive</button>
+        </div>
+      </transition>
+    </teleport>
+
+    <ShareDialog v-if="shareTarget" :d="shareTarget" @close="shareTarget = null" />
   </aside>
 </template>
 
@@ -133,12 +167,17 @@ function del(d) { archiveDashboard(d) }
 .lk.ic-mine { color: var(--green); }
 .iname { flex: 1; font-size: 13px; }
 .tag-pre { font-size: 9.5px; font-weight: 500; color: var(--primary-700); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; flex: none; }
+.def-ic { color: var(--primary); flex: none; }
 .hov { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
-.item:hover .hov { opacity: 1; }
+.item:hover .hov, .item.menu-open .hov { opacity: 1; }
+.item.menu-open { background: var(--surface-2); }
 .hb { width: 24px; height: 24px; border: none; background: transparent; color: var(--muted); border-radius: 6px; display: grid; place-items: center; }
 .hb:hover { background: var(--surface); }
 .hb.fav:hover, .hb.fav.on { color: #f5a623; }
 .hb.del:hover { color: var(--red); background: var(--red-soft); }
+/* teleported per-row menu — fixed to viewport so it isn't clipped by the scroll area */
+.row-menu { position: fixed; z-index: 61; }
+.row-backdrop { position: fixed; inset: 0; z-index: 59; }
 .archive-link { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border: none; border-top: 1px solid var(--border); background: transparent; color: var(--muted); font-weight: 500; font-size: 13px; }
 .archive-link:hover { background: var(--surface-2); color: var(--ink); }
 .none { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }

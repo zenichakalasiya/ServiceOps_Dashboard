@@ -268,8 +268,13 @@ function save(place) {
 
             <footer class="cfg-foot">
               <button class="btn" @click="reset">Reset</button>
+              <!-- Canvas duplicate → single Duplicate · Canvas edit → single Update ·
+                   Library edit/clone + new create → both {prefix} and {prefix} & Add -->
               <template v-if="duplicate">
                 <button class="btn btn-primary" @click="save(true)"><Icon name="copy" :size="16" /> Duplicate {{ ctaLabel }}</button>
+              </template>
+              <template v-else-if="editing">
+                <button class="btn btn-primary" @click="save(false)"><Icon name="check" :size="16" /> Update {{ ctaLabel }}</button>
               </template>
               <template v-else>
                 <button class="btn" @click="save(false)">{{ prefix }} {{ ctaLabel }}</button>

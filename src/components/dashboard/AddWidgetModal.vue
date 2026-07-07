@@ -123,6 +123,11 @@ function canDelete() { return tab.value === 'user' }
 function hasActions(l) { return canDuplicate(l) || canEdit(l) || canDelete(l) }
 
 const TYPE_LABEL = { kpi: 'KPI', chart: 'Widget', shortcut: 'Shortcut' }
+// short description shown in a left tooltip on hover of each library row
+function libDesc(l) {
+  const kind = l.type === 'kpi' ? 'A headline KPI number' : l.type === 'shortcut' ? 'A record list / table' : 'A chart widget'
+  return `${kind} from the ${l.module} module.`
+}
 const TAB_LABEL = { predefined: 'Predefined', user: 'User Defined', shared: 'Shared with me' }
 const emptyMsg = computed(() => {
   const plural = fType.value ? (fType.value === 'kpi' ? 'KPIs' : TYPE_LABEL[fType.value] + 's') : 'items'
@@ -192,6 +197,8 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
                 <div class="lt-name-row"><span class="lt-name ellip">{{ l.title }}</span></div>
                 <div class="lt-meta">{{ TYPE_LABEL[l.type] }} · {{ l.module }}</div>
               </div>
+              <!-- description on hover — tooltip opens to the left -->
+              <span class="lt-info"><Icon name="info" :size="14" /><span class="lt-tt">{{ libDesc(l) }}</span></span>
               <!-- actions per tab/type (see canDuplicate / canEdit / canDelete) -->
               <div v-if="hasActions(l)" class="lt-acts">
                 <button v-if="canDuplicate(l)" class="la" title="Duplicate" @click="openLibBuilder(l)"><Icon name="copy" :size="15" /></button>
@@ -277,6 +284,12 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .lt-main { flex: 1; min-width: 0; }
 .lt-name-row { display: flex; align-items: center; gap: 7px; } .lt-name { font-weight: 500; font-size: 13.5px; }
 .lt-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+/* per-row description — info icon with a left-opening tooltip */
+.lt-info { position: relative; display: inline-grid; place-items: center; width: 26px; height: 26px; flex: none; color: var(--muted-2); cursor: help; }
+.lt-info:hover { color: var(--primary); }
+.lt-tt { position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%); width: 224px; background: #20223a; color: #fff; font-size: 11.5px; line-height: 1.45; padding: 8px 11px; border-radius: 8px; box-shadow: var(--sh-pop); opacity: 0; visibility: hidden; transition: opacity .14s; z-index: 8; pointer-events: none; text-align: left; }
+.lt-tt::after { content: ''; position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 5px solid transparent; border-left-color: #20223a; }
+.lt-info:hover .lt-tt { opacity: 1; visibility: visible; }
 /* hover actions (Duplicate / Edit / Delete) — revealed on row hover */
 .lt-acts { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
 .lrow:hover .lt-acts { opacity: 1; }

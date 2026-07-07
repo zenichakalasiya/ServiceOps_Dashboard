@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import Icon from '../ui/Icon.vue'
 import MiniChart from './MiniChart.vue'
 import { toast } from '../../store/index.js'
@@ -43,8 +43,18 @@ const filteredRows = computed(() => {
 })
 const present = ref(false)
 const infoHover = ref(false)
-// narrow widgets keep only the high-value actions (Refresh · Edit · ⋯); Full screen moves into ⋯
-const compact = computed(() => (props.tile.w || 3) <= 3)
+// Measure the real rendered width so actions collapse as the tile is resized smaller,
+// not just by column count. compact → Full screen into ⋯; tiny → Refresh + Edit + Full screen all into ⋯.
+const cardEl = ref(null)
+const cardW = ref(9999)
+let ro
+onMounted(() => {
+  ro = new ResizeObserver((entries) => { cardW.value = entries[0].contentRect.width })
+  if (cardEl.value) ro.observe(cardEl.value)
+})
+onBeforeUnmount(() => ro?.disconnect())
+const compact = computed(() => cardW.value < 340)
+const tiny = computed(() => cardW.value < 258)
 function refresh() { loading.value = true; setTimeout(() => { loading.value = false }, 750) }
 
 // Empty-widget states: unconfigured vs error vs no-data vs ok (distinct copy each)
@@ -71,7 +81,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 </script>
 
 <template>
-  <div class="tile card" :class="{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen }">
+  <div ref="cardEl" class="tile card" :class="{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen }">
     <!-- Standardized header: title + info (left) · refresh · fullscreen · edit · ⋯ (right) -->
     <header class="thead">
       <div class="left">
@@ -85,9 +95,9 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       </div>
       <div class="right">
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
-        <button class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
+        <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
         <button v-if="!compact" class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
-        <button class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
+        <button v-if="!tiny" class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
         <div class="mwrap">
           <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
         </div>
@@ -99,6 +109,8 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false" />
       <transition name="pop">
         <div v-if="menu" class="menu tile-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+          <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
+          <button v-if="tiny" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="menu = false; emit('pin', tile)"><Icon name="pin" :size="15" /> {{ tile.pinned ? 'Unpin' : 'Pin to top' }}</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>

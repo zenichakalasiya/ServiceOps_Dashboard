@@ -35,6 +35,7 @@ const loadingBoard = ref(true)
 const highlightId = ref(null)
 const editTile = ref(null)   // tile currently open in the builder (edit mode)
 const dupTile = ref(null)    // tile being duplicated (builder opens pre-filled, saves a copy)
+const fabMenu = ref(false)   // FAB slide-up: Create Dashboard / Create Widget
 const gridEl = ref(null)
 
 // ---- drag-to-reorder / drag-into-group (armed from each card's 6-dot handle) ----
@@ -286,7 +287,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             <span class="grp-count">{{ tilesIn(g.id).length }}</span>
             <div class="grow" />
             <button v-if="tilesIn(g.id).length" class="grp-add" title="Add widget to this group" @click="addWidgetToGroup(g.id)"><Icon name="plus" :size="14" /> Add widget</button>
-            <button class="grp-act" title="Ungroup" @click="ungroup(g)"><Icon name="trash" :size="14" /></button>
+            <button class="grp-act" title="Ungroup" @click="ungroup(g)"><Icon name="ungroup" :size="15" /></button>
           </header>
           <div v-if="!g.collapsed" class="grid" :style="gridStyle">
             <div v-for="t in tilesIn(g.id)" :key="t.id" :data-tile="t.id" class="cell"
@@ -304,8 +305,21 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       </div>
     </div>
 
-    <!-- Floating Add-Widget FAB (bottom-right) -->
-    <button class="fab" @click="addToGroup = null; showAdd = true" title="Add widget"><Icon name="plus" :size="26" /></button>
+    <!-- Floating Add FAB (bottom-right) → slide-up: Create Dashboard / Create Widget -->
+    <div class="fab-wrap">
+      <div v-if="fabMenu" class="fab-backdrop" @click="fabMenu = false" />
+      <transition name="fabpop">
+        <div v-if="fabMenu" class="fab-menu">
+          <button class="fab-opt" @click="fabMenu = false; store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true">
+            <span class="fo-ic dash"><Icon name="layout" :size="18" /></span> Create Dashboard
+          </button>
+          <button class="fab-opt" @click="fabMenu = false; addToGroup = null; showAdd = true">
+            <span class="fo-ic wid"><Icon name="chart-bar" :size="18" /></span> Create Widget
+          </button>
+        </div>
+      </transition>
+      <button class="fab" :class="{ on: fabMenu }" @click="fabMenu = !fabMenu" title="Add"><Icon name="plus" :size="26" /></button>
+    </div>
 
     <AddWidgetModal v-if="showAdd" :d="d" :group="addToGroup" @close="showAdd = false; addToGroup = null" @created="onWidgetCreated" />
     <WidgetBuilderModal v-if="editTile" :d="d" :type="typeForTile(editTile)" :existing="editTile" @close="editTile = null" @saved="onTileSaved" />
@@ -412,8 +426,22 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .empty p b { color: var(--ink-2); font-weight: 600; }
 .big-cta { height: 40px; padding: 0 20px; font-size: 14px; }
 .missing { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 90px; color: var(--muted); }
-.fab { position: fixed; right: 26px; bottom: 26px; z-index: 40; width: 56px; height: 56px; border-radius: 50%; border: none; background: var(--primary); color: #fff; display: grid; place-items: center; box-shadow: 0 8px 22px rgba(61,139,208,.42); transition: transform .12s, box-shadow .15s, background .15s; }
+.fab-wrap { position: fixed; right: 26px; bottom: 26px; z-index: 40; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.fab-backdrop { position: fixed; inset: 0; z-index: -1; }
+.fab { position: relative; width: 56px; height: 56px; border-radius: 50%; border: none; background: var(--primary); color: #fff; display: grid; place-items: center; box-shadow: 0 8px 22px rgba(61,139,208,.42); transition: transform .18s, box-shadow .15s, background .15s; }
 .fab:hover { background: var(--primary-600); transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 28px rgba(61,139,208,.5); }
 .fab:active { transform: translateY(0) scale(.98); }
+.fab.on { transform: rotate(45deg); }
+.fab.on:hover { transform: rotate(45deg) translateY(-2px) scale(1.04); }
+/* slide-up menu above the FAB */
+.fab-menu { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+.fab-opt { display: inline-flex; align-items: center; gap: 11px; height: 46px; padding: 0 18px 0 14px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 999px; font-weight: 600; font-size: 13.5px; box-shadow: var(--sh-md); white-space: nowrap; }
+.fab-opt:hover { background: var(--surface-2); border-color: var(--primary); color: var(--primary-700); transform: translateY(-1px); }
+.fo-ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none; }
+.fo-ic.dash { background: var(--primary); }
+.fo-ic.wid { background: var(--green); }
+.fabpop-enter-active { transition: opacity .2s ease, transform .22s cubic-bezier(.2,.8,.2,1); }
+.fabpop-leave-active { transition: opacity .14s ease, transform .14s ease; }
+.fabpop-enter-from, .fabpop-leave-to { opacity: 0; transform: translateY(16px); }
 @media (max-width: 1100px) { .span-3 { grid-column: span 6; } .span-6 { grid-column: span 12; } }
 </style>
