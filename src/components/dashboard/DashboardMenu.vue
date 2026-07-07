@@ -18,7 +18,7 @@ function act(fn) { open.value = false; fn() }
       <div v-if="open" class="menu" :class="align" @click.stop>
         <button class="menu-item" @click="act(() => { store.ui.cloneTarget = null; store.ui.editTarget = d; store.ui.createOpen = true })"><Icon name="edit" :size="16" /> Edit</button>
         <button class="menu-item" @click="act(() => emit('present'))"><Icon name="maximize-tile" :size="16" /> Present</button>
-        <button class="menu-item" @click="act(() => emit('schedule'))"><Icon name="calendar2" :size="16" /> Schedule report</button>
+        <button class="menu-item" @click="act(() => emit('schedule'))"><Icon name="calendar2" :size="16" /> Schedule dashboard</button>
         <button class="menu-item" @click="act(() => emit('history'))"><Icon name="history" :size="16" /> Version history</button>
         <button class="menu-item" @click="act(() => { store.ui.cloneTarget = d; store.ui.createOpen = true })"><Icon name="copy" :size="16" /> Clone</button>
         <button class="menu-item" @click="act(() => markDefault(d))"><Icon name="pin" :size="16" /> Mark as default landing</button>

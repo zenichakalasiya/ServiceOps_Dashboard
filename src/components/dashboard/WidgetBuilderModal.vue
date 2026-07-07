@@ -5,13 +5,15 @@ import Dropdown from '../ui/Dropdown.vue'
 import MiniChart from './MiniChart.vue'
 import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut } from '../../data/mock.js'
-const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null } }) // type: { id,label,type,kind }
-const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary'])
+const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
+const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary', 'duplicated'])
 
 const ex = props.existing
-const editing = computed(() => !!props.existing)
+// "duplicate" opens the builder pre-filled from a board tile, but saving creates a NEW copy
+// (unlike edit, which mutates the original in place).
+const editing = computed(() => !!props.existing && !props.duplicate)
 const libMode = computed(() => !!props.libItem)   // duplicate/edit a library tile → returns to listing
-const prefix = computed(() => (libMode.value ? 'Clone' : editing.value ? 'Update' : 'Create'))
+const prefix = computed(() => (libMode.value ? 'Clone' : props.duplicate ? 'Duplicate' : editing.value ? 'Update' : 'Create'))
 const spinning = ref(false)
 function refreshPreview() { spinning.value = true; setTimeout(() => { spinning.value = false }, 650) }
 
@@ -25,9 +27,9 @@ const TYPES = [
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
 ]
 const curType = ref(TYPES.find((t) => t.id === props.type.id) || props.type)
-// Editing an existing tile (or duplicating a library tile) locks the type — the tabs stay
-// visible for context but are disabled so the chart type can't be switched.
-const typeLocked = computed(() => editing.value || libMode.value)
+// Editing / duplicating a tile locks the type — the tabs stay visible for context
+// but are disabled so the chart type can't be switched.
+const typeLocked = computed(() => editing.value || libMode.value || props.duplicate)
 const isChart = computed(() => curType.value.type === 'chart')
 const isKpi = computed(() => curType.value.type === 'kpi')
 const isShortcut = computed(() => curType.value.type === 'shortcut')
@@ -56,7 +58,7 @@ const TOPN_OPTS = [{ value: '', label: 'Select' }, { value: '5', label: '5' }, {
 // ServiceOps "Create Widget" fields. Prefilled from the existing tile when editing.
 function initCfg() {
   return {
-    name: ex?.title || props.libItem?.title || `New ${curType.value.label}`,
+    name: props.duplicate ? `Copy of ${ex.title}` : ex?.title || props.libItem?.title || `New ${curType.value.label}`,
     module: 'Request', techAccess: [store.currentUser], groupAccess: '',
     mode: ex?.sql ? 'query' : 'manual',   // Manual | Query Based
     xAxis: 'Priority', yFunc: 'Count Of', yColumn: 'Requests',
@@ -99,6 +101,15 @@ const previewTile = computed(() => {
 // place = false → "{prefix} Widget"        (save the definition, don't place)
 function save(place) {
   const pv = previewTile.value
+  // --- duplicate a board tile: build a NEW copy from the (re)configured data ---
+  if (props.duplicate) {
+    pv.w = ex.w; pv.h = ex.h
+    if (ex.group != null) pv.group = ex.group
+    if (queryMode.value) pv.sql = cfg.sqlQuery
+    pv.sharedAccess = cfg.sharedAccess
+    emit('duplicated', { tile: pv, afterId: ex.id })
+    return
+  }
   // --- library duplicate/edit: hand the config back to the listing ---
   if (props.libItem) {
     emit('librarySaved', { title: cfg.name, module: cfg.module, type: curType.value.type, sharedAccess: cfg.sharedAccess, place })
@@ -139,7 +150,7 @@ function save(place) {
       <div class="builder">
         <!-- Header (ClickUp-style) -->
         <header class="bhead">
-          <div class="crumb"><span class="muted">Dashboard</span> <Icon name="chevron-right" :size="13" class="sep" /> <span v-if="editing || libMode" class="muted">Edit</span> <b>{{ cfg.name || ('New ' + curType.label) }}</b></div>
+          <div class="crumb"><span class="muted">Dashboard</span> <Icon name="chevron-right" :size="13" class="sep" /> <span v-if="duplicate" class="muted">Duplicate</span><span v-else-if="editing || libMode" class="muted">Edit</span> <b>{{ cfg.name || ('New ' + curType.label) }}</b></div>
           <div class="hacts">
             <button class="ic" title="Refresh preview" @click="refreshPreview"><Icon name="refresh" :size="16" :class="{ spin: spinning }" /></button>
             <button class="ic" @click="emit('close')" title="Close"><Icon name="x" :size="18" /></button>
@@ -257,8 +268,13 @@ function save(place) {
 
             <footer class="cfg-foot">
               <button class="btn" @click="reset">Reset</button>
-              <button class="btn" @click="save(false)">{{ prefix }} {{ ctaLabel }}</button>
-              <button class="btn btn-primary" @click="save(true)"><Icon name="plus" :size="16" /> {{ prefix }} &amp; Add {{ ctaLabel }}</button>
+              <template v-if="duplicate">
+                <button class="btn btn-primary" @click="save(true)"><Icon name="copy" :size="16" /> Duplicate {{ ctaLabel }}</button>
+              </template>
+              <template v-else>
+                <button class="btn" @click="save(false)">{{ prefix }} {{ ctaLabel }}</button>
+                <button class="btn btn-primary" @click="save(true)"><Icon name="plus" :size="16" /> {{ prefix }} &amp; Add {{ ctaLabel }}</button>
+              </template>
             </footer>
           </aside>
         </div>

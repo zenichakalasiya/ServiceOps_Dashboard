@@ -34,6 +34,7 @@ const presenting = ref(false)
 const loadingBoard = ref(true)
 const highlightId = ref(null)
 const editTile = ref(null)   // tile currently open in the builder (edit mode)
+const dupTile = ref(null)    // tile being duplicated (builder opens pre-filled, saves a copy)
 const gridEl = ref(null)
 
 // ---- drag-to-reorder / drag-into-group (armed from each card's 6-dot handle) ----
@@ -160,14 +161,21 @@ function onTileSaved({ id, place }) {
     setTimeout(() => { if (highlightId.value === id) highlightId.value = null }, 1500)
   })
 }
-// Duplicate a tile in place (inserted right after the original).
-function onDuplicate(t) {
-  const copy = JSON.parse(JSON.stringify(t)); copy.id = uid('t')
-  const i = d.value.tiles.findIndex((x) => x.id === t.id)
-  d.value.tiles.splice(i + 1, 0, copy)
+// Duplicate → open the builder pre-filled with the tile so the user can reconfigure
+// the copy's data, then clone it in place (inserted right after the original).
+function onDuplicate(t) { dupTile.value = t }
+function onTileDuplicated({ tile, afterId }) {
+  const i = d.value.tiles.findIndex((x) => x.id === afterId)
+  d.value.tiles.splice(i < 0 ? d.value.tiles.length : i + 1, 0, tile)
   d.value.updated = new Date().toISOString()
+  dupTile.value = null
   dirty.value = true
-  toast(`Duplicated “${t.title}”`)
+  nextTick(() => {
+    document.querySelector(`[data-tile="${tile.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightId.value = tile.id
+    setTimeout(() => { if (highlightId.value === tile.id) highlightId.value = null }, 1500)
+  })
+  toast(`Duplicated “${tile.title}”`, 'success')
 }
 function saveEdit() { dirty.value = false; edit.value = false; toast('Layout saved', 'success') }
 function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) return; dirty.value = false; edit.value = false }
@@ -301,6 +309,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
     <AddWidgetModal v-if="showAdd" :d="d" :group="addToGroup" @close="showAdd = false; addToGroup = null" @created="onWidgetCreated" />
     <WidgetBuilderModal v-if="editTile" :d="d" :type="typeForTile(editTile)" :existing="editTile" @close="editTile = null" @saved="onTileSaved" />
+    <!-- Duplicate: builder pre-filled with the tile; save creates a new copy in place -->
+    <WidgetBuilderModal v-if="dupTile" :d="d" :type="typeForTile(dupTile)" :existing="dupTile" :duplicate="true" @close="dupTile = null" @duplicated="onTileDuplicated" />
     <ShareDialog v-if="showShare" :d="d" @close="showShare = false" />
     <ScheduleDialog v-if="showSchedule" :d="d" @close="showSchedule = false" />
     <HistoryDialog v-if="showHistory" :d="d" @close="showHistory = false" />
