@@ -91,6 +91,52 @@ function onNewGroup() {
   showAdd.value = false; addToGroup.value = null
   toast('Empty group added — use its “Add widget” button to fill it', 'success')
 }
+
+// ---- New group by MARQUEE drag: rubber-band a rectangle over placed widgets ----
+const groupSelect = ref(false)
+const groupPicks = ref(new Set())
+const marquee = ref({ active: false, l: 0, t: 0, w: 0, h: 0 })  // viewport coords (fixed overlay)
+let mqStart = null
+function startGroupSelect() { groupSelect.value = true; groupPicks.value = new Set() }
+function cancelGroupSelect() { groupSelect.value = false; groupPicks.value = new Set(); marquee.value = { active: false, l: 0, t: 0, w: 0, h: 0 } }
+function mqDown(e) {
+  if (!groupSelect.value || e.button !== 0) return
+  if (e.target.closest && e.target.closest('.gs-bar')) return   // don't start a drag on the banner
+  mqStart = { x: e.clientX, y: e.clientY }
+  marquee.value = { active: true, l: e.clientX, t: e.clientY, w: 0, h: 0 }
+  window.addEventListener('mousemove', mqMove)
+  window.addEventListener('mouseup', mqUp)
+  e.preventDefault()
+}
+function mqMove(e) {
+  if (!marquee.value.active) return
+  const l = Math.min(mqStart.x, e.clientX), t = Math.min(mqStart.y, e.clientY)
+  const w = Math.abs(e.clientX - mqStart.x), h = Math.abs(e.clientY - mqStart.y)
+  marquee.value = { active: true, l, t, w, h }
+  const box = { left: l, top: t, right: l + w, bottom: t + h }
+  const s = new Set()
+  gridEl.value?.querySelectorAll(':scope > .grid [data-tile]').forEach((el) => {
+    const r = el.getBoundingClientRect()
+    if (!(r.right < box.left || r.left > box.right || r.bottom < box.top || r.top > box.bottom)) s.add(el.getAttribute('data-tile'))
+  })
+  groupPicks.value = s
+}
+function mqUp() {
+  window.removeEventListener('mousemove', mqMove)
+  window.removeEventListener('mouseup', mqUp)
+  marquee.value = { ...marquee.value, active: false }
+}
+function createGroupFromPicks() {
+  if (!groupPicks.value.size) { cancelGroupSelect(); return }
+  if (!d.value.groups) d.value.groups = []
+  const g = { id: uid('g'), name: `New group ${d.value.groups.length + 1}`, collapsed: false }
+  d.value.groups.push(g)
+  const n = groupPicks.value.size
+  d.value.tiles.forEach((t) => { if (groupPicks.value.has(t.id)) t.group = g.id })
+  d.value.updated = new Date().toISOString(); dirty.value = true
+  toast(`Grouped ${n} widget${n > 1 ? 's' : ''} — the rest stay on the dashboard`, 'success')
+  cancelGroupSelect()
+}
 function addWidgetToGroup(gid) { addToGroup.value = gid; showAdd.value = true }
 function ungroup(g) {
   d.value.tiles.forEach((t) => { if (t.group === g.id) t.group = null })
@@ -273,13 +319,25 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       </div>
 
       <!-- tiles (ungrouped + collapsible groups) -->
-      <div v-else class="board-groups" ref="gridEl">
-        <div class="bg-toolbar"><button class="add-group" @click="addGroup()"><Icon name="plus" :size="15" /> New group</button></div>
+      <div v-else class="board-groups" ref="gridEl" :class="{ selecting: groupSelect }" @mousedown="mqDown">
+        <div class="bg-toolbar">
+          <button v-if="!groupSelect" class="add-group" @click="startGroupSelect()"><Icon name="plus" :size="15" /> New group</button>
+        </div>
+        <!-- marquee-select banner -->
+        <transition name="fade">
+          <div v-if="groupSelect" class="gs-bar">
+            <Icon name="new-group" :size="16" /> <b>Drag a box</b> across the widgets to include in the new group — the rest stay on the dashboard.
+            <span class="gs-count">{{ groupPicks.size }} selected</span>
+            <div class="grow" />
+            <button class="btn btn-sm" @click="cancelGroupSelect">Cancel</button>
+            <button class="btn btn-sm btn-primary" :disabled="!groupPicks.size" @click="createGroupFromPicks"><Icon name="check" :size="14" /> Create group</button>
+          </div>
+        </transition>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
           @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
           <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
-            :class="{ flash: highlightId === t.id, dragging: dragId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
+            :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupSelect && groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !groupSelect"
             @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)">
             <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
             <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
@@ -313,6 +371,11 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         </section>
       </div>
     </div>
+
+    <!-- rubber-band selection rectangle (fixed to viewport) -->
+    <teleport to="body">
+      <div v-if="marquee.active" class="marquee" :style="{ left: marquee.l + 'px', top: marquee.t + 'px', width: marquee.w + 'px', height: marquee.h + 'px' }" />
+    </teleport>
 
     <!-- Floating Add FAB (bottom-right) → slide-up: Create Dashboard / Create Widget -->
     <div class="fab-wrap">
@@ -423,6 +486,13 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
 .grp-empty p { margin: 0; }
 .bg-toolbar { display: flex; justify-content: flex-end; }
+/* marquee (rubber-band) group selection */
+.gs-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; margin-bottom: 12px; background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 10px; color: var(--primary-700); font-size: 13px; }
+.gs-count { font-weight: 600; background: #fff; border: 1px solid var(--primary-soft); border-radius: 999px; padding: 1px 10px; font-size: 12px; }
+.board-groups.selecting { cursor: crosshair; user-select: none; }
+.board-groups.selecting :deep(.tile), .board-groups.selecting .resize { pointer-events: none; }
+.cell.pick-on { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: 0 0 0 4px var(--primary-soft); border-radius: var(--r-lg); }
+.marquee { position: fixed; z-index: 300; border: 1.5px dashed var(--primary); background: rgba(61,139,208,.12); border-radius: 4px; pointer-events: none; }
 .add-group { display: inline-flex; align-items: center; gap: 7px; border: none; background: transparent; border-radius: 9px; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--primary-700); }
 .add-group:hover { background: var(--primary-softer); }
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 64px 20px; text-align: center; }
