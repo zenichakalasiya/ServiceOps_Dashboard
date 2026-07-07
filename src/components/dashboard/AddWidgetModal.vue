@@ -6,7 +6,7 @@ import WidgetBuilderModal from './WidgetBuilderModal.vue'
 import { store, addTilesToDashboard, deleteLibTile, toast } from '../../store/index.js'
 import { uid } from '../../data/mock.js'
 const props = defineProps({ d: Object, group: { type: String, default: null } })
-const emit = defineEmits(['close', 'created'])
+const emit = defineEmits(['close', 'created', 'newgroup'])
 function tagGroup(id) { if (props.group && id != null) { const t = props.d.tiles.find((x) => x.id === id); if (t) t.group = props.group } }
 
 const tab = ref('chart')              // chart | predefined | user | shared
@@ -176,6 +176,15 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
       <div class="aw-body">
         <!-- CHART TYPE: category card grid → opens centered builder -->
         <template v-if="tab === 'chart'">
+          <section class="cat">
+            <div class="cat-h">Layout</div>
+            <div class="cards">
+              <button class="tc tc-group" @click="emit('newgroup')">
+                <div class="tc-ico"><Icon name="new-group" :size="40" /></div>
+                <span class="tc-label">Empty Group</span>
+              </button>
+            </div>
+          </section>
           <section v-for="g in filteredGroups" :key="g.cat" class="cat">
             <div class="cat-h">{{ g.cat }}</div>
             <div class="cards">
@@ -273,6 +282,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .tc { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 30px 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; color: var(--ink-2); }
 .tc:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); box-shadow: var(--sh-sm); transform: translateY(-2px); }
+.tc-group { border-style: dashed; border-color: var(--border-strong); }
 .tc-ico { width: 60px; height: 60px; display: grid; place-items: center; }
 .tc-ico.rot90 { transform: rotate(90deg); }
 .tc-label { font-size: 13px; font-weight: 500; }

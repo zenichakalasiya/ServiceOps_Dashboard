@@ -74,14 +74,22 @@ function tilesIn(gid) {
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))   // pinned float to top
 }
 const addToGroup = ref(null)   // group id a newly-added widget should land in
-function addGroup() {
+function addGroup(absorb = true) {
   if (!d.value.groups) d.value.groups = []
   const g = { id: uid('g'), name: `New group ${d.value.groups.length + 1}`, collapsed: false }
   const first = d.value.groups.length === 0
   d.value.groups.push(g)
-  // The very first group absorbs all currently-ungrouped widgets.
-  if (first) d.value.tiles.forEach((t) => { if (!t.group) t.group = g.id })
+  // The very first group absorbs all currently-ungrouped widgets (canvas "New group").
+  // An Empty Group created from the Add-Widget flow (absorb=false) stays empty.
+  if (first && absorb === true) d.value.tiles.forEach((t) => { if (!t.group) t.group = g.id })
   dirty.value = true
+  return g.id
+}
+// "Empty Group" card in the Add-Widget flow → make a genuinely empty group, then close.
+function onNewGroup() {
+  addGroup(false)
+  showAdd.value = false; addToGroup.value = null
+  toast('Empty group added — use its “Add widget” button to fill it', 'success')
 }
 function addWidgetToGroup(gid) { addToGroup.value = gid; showAdd.value = true }
 function ungroup(g) {
@@ -266,7 +274,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
       <!-- tiles (ungrouped + collapsible groups) -->
       <div v-else class="board-groups" ref="gridEl">
-        <div class="bg-toolbar"><button class="add-group" @click="addGroup"><Icon name="plus" :size="15" /> New group</button></div>
+        <div class="bg-toolbar"><button class="add-group" @click="addGroup()"><Icon name="plus" :size="15" /> New group</button></div>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
           @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
@@ -322,7 +330,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       <button class="fab" :class="{ on: fabMenu }" @click="fabMenu = !fabMenu" title="Add"><Icon name="plus" :size="26" /></button>
     </div>
 
-    <AddWidgetModal v-if="showAdd" :d="d" :group="addToGroup" @close="showAdd = false; addToGroup = null" @created="onWidgetCreated" />
+    <AddWidgetModal v-if="showAdd" :d="d" :group="addToGroup" @close="showAdd = false; addToGroup = null" @created="onWidgetCreated" @newgroup="onNewGroup" />
     <WidgetBuilderModal v-if="editTile" :d="d" :type="typeForTile(editTile)" :existing="editTile" @close="editTile = null" @saved="onTileSaved" />
     <!-- Duplicate: builder pre-filled with the tile; save creates a new copy in place -->
     <WidgetBuilderModal v-if="dupTile" :d="d" :type="typeForTile(dupTile)" :existing="dupTile" :duplicate="true" @close="dupTile = null" @duplicated="onTileDuplicated" />

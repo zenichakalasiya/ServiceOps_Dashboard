@@ -113,6 +113,7 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <div v-if="!groups.length" class="none">No dashboards match.</div>
     </div>
 
+    <button class="manage-link" @click="emit('close'); router.push('/dashboards')"><Icon name="list" :size="15" /> Manage all dashboards <Icon name="chevron-right" :size="14" class="ml-arrow" /></button>
     <button class="archive-link" @click="router.push('/archive')"><Icon name="archive" :size="15" /> Archive</button>
 
     <!-- per-row actions menu (teleported so it overlays instead of being clipped) -->
@@ -179,6 +180,9 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 /* teleported per-row menu — fixed to viewport so it isn't clipped by the scroll area */
 .row-menu { position: fixed; z-index: 61; }
 .row-backdrop { position: fixed; inset: 0; z-index: 59; }
+.manage-link { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border: none; border-top: 1px solid var(--border); background: transparent; color: var(--primary-700); font-weight: 600; font-size: 13px; }
+.manage-link:hover { background: var(--primary-softer); }
+.manage-link .ml-arrow { margin-left: auto; color: var(--primary); }
 .archive-link { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border: none; border-top: 1px solid var(--border); background: transparent; color: var(--muted); font-weight: 500; font-size: 13px; }
 .archive-link:hover { background: var(--surface-2); color: var(--ink); }
 .none { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }
