@@ -103,7 +103,8 @@ const sampleFor = (libTile) => {
   return shortcut(libTile.title, ['ID', 'Subject', 'Status'], [['REC-1', 'Sample record', 'Open'], ['REC-2', 'Another record', 'In Progress']], `${libTile.title} — from ${libTile.module}.`)
 }
 export function addTilesToDashboard(d, libTiles) {
-  libTiles.forEach((lt) => d.tiles.push(sampleFor(lt)))
+  // carry the library item's provenance (predefined / user / shared) onto the placed tile
+  libTiles.forEach((lt) => d.tiles.push({ ...sampleFor(lt), prov: lt.prov || 'user' }))
   d.updated = new Date().toISOString()
   toast(`Added ${libTiles.length} ${libTiles.length === 1 ? 'tile' : 'tiles'} to “${d.name}”`, 'success')
 }

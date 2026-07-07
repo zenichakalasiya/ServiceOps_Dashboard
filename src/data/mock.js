@@ -121,6 +121,8 @@ export function seed() {
     id: uid('d'), enabled: true, archived: false, default: i === 0, groups: [],
     history: demoHistory(), schedules: demoSchedules(),
     mine: d.owner === 'Aarav Mehta', viewedAt: i < 3 ? days(i) : null, ...d,
+    // tag each tile's provenance so the dashboard can show a predefined / user / shared icon
+    tiles: d.tiles.map((t) => ({ ...t, prov: t.prov || (d.predefined ? 'predefined' : d.sharedWithMe ? 'shared' : 'user') })),
     // Technician Access Level + Technician Group Access Level (from .185 Manage list)
     techAccess: d.access === 'public' ? ['All technicians']
       : d.access === 'private' ? [d.owner]

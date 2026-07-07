@@ -57,6 +57,17 @@ const compact = computed(() => cardW.value < 340)
 const tiny = computed(() => cardW.value < 258)
 function refresh() { loading.value = true; setTimeout(() => { loading.value = false }, 750) }
 
+// provenance: predefined tiles can't be edited or deleted (only "other" actions)
+const prov = computed(() => props.tile.prov || 'user')
+const PROV = {
+  predefined: { icon: 'verified', label: 'Predefined widget' },
+  user: { icon: 'user', label: 'User-defined widget' },
+  shared: { icon: 'share', label: 'Shared with me' },
+}
+const provMeta = computed(() => PROV[prov.value] || PROV.user)
+const canEdit = computed(() => prov.value !== 'predefined')
+const canDelete = computed(() => prov.value !== 'predefined')
+
 // Empty-widget states: unconfigured vs error vs no-data vs ok (distinct copy each)
 const tileState = computed(() => {
   if (props.tile.state === 'error') return 'error'
@@ -87,6 +98,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <div class="left">
         <span class="draghandle" title="Drag to move" @mousedown="emit('armdrag', tile)"><Icon name="drag" :size="16" /></span>
         <span v-if="tile.pinned" class="pinbadge" title="Pinned"><Icon name="pin" :size="12" /></span>
+        <span class="prov" :class="'prov-' + prov" :title="provMeta.label"><Icon :name="provMeta.icon" :size="13" /></span>
         <span class="title ellip">{{ tile.title }}</span>
         <span class="info" @mouseenter="infoHover = true" @mouseleave="infoHover = false">
           <Icon name="info" :size="14" />
@@ -97,7 +109,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
         <button v-if="!compact" class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
-        <button v-if="!tiny" class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
+        <button v-if="!tiny && canEdit" class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
         <div class="mwrap">
           <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
         </div>
@@ -110,7 +122,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
       <transition name="pop">
         <div v-if="menu" class="menu tile-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
           <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
-          <button v-if="tiny" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
+          <button v-if="tiny && canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="menu = false; emit('pin', tile)"><Icon name="pin" :size="15" /> {{ tile.pinned ? 'Unpin' : 'Pin to top' }}</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
@@ -122,8 +134,10 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
               <button v-for="f in EXPORTS" :key="f" class="menu-item" @click="download(f)">{{ f }}</button>
             </div></transition>
           </div>
-          <div class="menu-sep" />
-          <button class="menu-item danger" @click="menu = false; emit('remove', tile)"><Icon name="trash" :size="15" /> Delete card</button>
+          <template v-if="canDelete">
+            <div class="menu-sep" />
+            <button class="menu-item danger" @click="menu = false; emit('remove', tile)"><Icon name="trash" :size="15" /> Delete card</button>
+          </template>
         </div>
       </transition>
     </teleport>
@@ -141,7 +155,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
         <b>{{ WS[tileState].title }}</b>
         <span class="ws-sub">{{ WS[tileState].sub }}</span>
         <button v-if="tileState === 'error'" class="btn btn-sm" @click="retry"><Icon name="refresh" :size="14" /> Retry</button>
-        <button v-else-if="tileState === 'unconfigured'" class="btn btn-sm btn-primary" @click="emit('edit', tile)"><Icon name="edit" :size="14" /> Configure</button>
+        <button v-else-if="tileState === 'unconfigured' && canEdit" class="btn btn-sm btn-primary" @click="emit('edit', tile)"><Icon name="edit" :size="14" /> Configure</button>
       </div>
 
       <template v-else-if="tile.type === 'kpi'">
@@ -206,6 +220,11 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 .draghandle:active { cursor: grabbing; }
 .tile:hover .draghandle { opacity: 1; }
 .pinbadge { display: inline-grid; place-items: center; color: var(--primary); flex: none; transform: rotate(35deg); }
+/* provenance marker before the title: predefined / user-defined / shared */
+.prov { display: inline-grid; place-items: center; flex: none; margin-right: 1px; }
+.prov.prov-predefined { color: var(--primary); }
+.prov.prov-user { color: var(--green); }
+.prov.prov-shared { color: var(--blue); }
 .title { font-weight: 600; font-size: var(--tile-title, 13.5px); }
 .info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
 .info:hover { color: var(--primary); }

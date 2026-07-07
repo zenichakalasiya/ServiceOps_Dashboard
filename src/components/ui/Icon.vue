@@ -27,6 +27,7 @@ const MAP = {
   bulb: 'lightbulb', 'user-check': 'how_to_reg', clipboard: 'checklist', team: 'groups',
   menu: 'menu', keyboard: 'keyboard', history: 'history', 'predefined-monitor': 'desktop_windows',
   ungroup: 'layers_clear', 'default-home': 'home_pin', 'new-group': 'create_new_folder',
+  verified: 'verified',
 }
 const FILLED = new Set(['star-fill'])
 
