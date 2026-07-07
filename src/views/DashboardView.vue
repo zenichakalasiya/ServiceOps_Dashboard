@@ -92,24 +92,40 @@ function onNewGroup() {
   toast('Empty group added — use its “Add widget” button to fill it', 'success')
 }
 
-// ---- New group by MARQUEE drag: rubber-band a rectangle over placed widgets ----
-const groupSelect = ref(false)
-const groupPicks = ref(new Set())
+// ---- New group by direct MARQUEE drag (no CTA needed to start) ----
+// Press-drag anywhere on the board (past a small threshold) to rubber-band a box over
+// the placed widgets; on release a "Create group" CTA appears bottom-right to confirm.
+const selecting = ref(false)          // marquee drag in progress
+const groupPicks = ref(new Set())     // currently-boxed tile ids
+const showGroupCta = ref(false)       // post-release confirm CTA
 const marquee = ref({ active: false, l: 0, t: 0, w: 0, h: 0 })  // viewport coords (fixed overlay)
-let mqStart = null
-function startGroupSelect() { groupSelect.value = true; groupPicks.value = new Set() }
-function cancelGroupSelect() { groupSelect.value = false; groupPicks.value = new Set(); marquee.value = { active: false, l: 0, t: 0, w: 0, h: 0 } }
-function mqDown(e) {
-  if (!groupSelect.value || e.button !== 0) return
-  if (e.target.closest && e.target.closest('.gs-bar')) return   // don't start a drag on the banner
-  mqStart = { x: e.clientX, y: e.clientY }
-  marquee.value = { active: true, l: e.clientX, t: e.clientY, w: 0, h: 0 }
+let mqPending = null, mqStart = null
+function newGroupHint() { toast('Drag a box across the widgets you want to group', 'info') }
+function boardMouseDown(e) {
+  if (e.button !== 0) return
+  if (e.target.closest('button, a, input, textarea, select, .draghandle, .resize, .grp-head')) return
+  mqPending = { x: e.clientX, y: e.clientY }
+  window.addEventListener('mousemove', mqPendingMove)
+  window.addEventListener('mouseup', mqPendingUp)
+}
+function mqPendingMove(e) {
+  if (!mqPending) return
+  if (Math.abs(e.clientX - mqPending.x) < 5 && Math.abs(e.clientY - mqPending.y) < 5) return
+  mqStart = mqPending; mqPending = null
+  window.removeEventListener('mousemove', mqPendingMove)
+  window.removeEventListener('mouseup', mqPendingUp)
+  selecting.value = true; showGroupCta.value = false; groupPicks.value = new Set()
+  marquee.value = { active: true, l: mqStart.x, t: mqStart.y, w: 0, h: 0 }
   window.addEventListener('mousemove', mqMove)
   window.addEventListener('mouseup', mqUp)
-  e.preventDefault()
+  mqMove(e)
+}
+function mqPendingUp() {
+  window.removeEventListener('mousemove', mqPendingMove)
+  window.removeEventListener('mouseup', mqPendingUp)
+  mqPending = null
 }
 function mqMove(e) {
-  if (!marquee.value.active) return
   const l = Math.min(mqStart.x, e.clientX), t = Math.min(mqStart.y, e.clientY)
   const w = Math.abs(e.clientX - mqStart.x), h = Math.abs(e.clientY - mqStart.y)
   marquee.value = { active: true, l, t, w, h }
@@ -124,10 +140,14 @@ function mqMove(e) {
 function mqUp() {
   window.removeEventListener('mousemove', mqMove)
   window.removeEventListener('mouseup', mqUp)
+  selecting.value = false
   marquee.value = { ...marquee.value, active: false }
+  if (groupPicks.value.size) showGroupCta.value = true
+  else clearPicks()
 }
+function clearPicks() { groupPicks.value = new Set(); showGroupCta.value = false }
 function createGroupFromPicks() {
-  if (!groupPicks.value.size) { cancelGroupSelect(); return }
+  if (!groupPicks.value.size) { clearPicks(); return }
   if (!d.value.groups) d.value.groups = []
   const g = { id: uid('g'), name: `New group ${d.value.groups.length + 1}`, collapsed: false }
   d.value.groups.push(g)
@@ -135,7 +155,7 @@ function createGroupFromPicks() {
   d.value.tiles.forEach((t) => { if (groupPicks.value.has(t.id)) t.group = g.id })
   d.value.updated = new Date().toISOString(); dirty.value = true
   toast(`Grouped ${n} widget${n > 1 ? 's' : ''} — the rest stay on the dashboard`, 'success')
-  cancelGroupSelect()
+  clearPicks()
 }
 function addWidgetToGroup(gid) { addToGroup.value = gid; showAdd.value = true }
 function ungroup(g) {
@@ -318,26 +338,16 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <button class="btn btn-primary big-cta" @click="showAdd = true"><Icon name="plus" :size="17" /> Add Widget</button>
       </div>
 
-      <!-- tiles (ungrouped + collapsible groups) -->
-      <div v-else class="board-groups" ref="gridEl" :class="{ selecting: groupSelect }" @mousedown="mqDown">
+      <!-- tiles (ungrouped + collapsible groups) — drag a box anywhere to marquee-select -->
+      <div v-else class="board-groups" ref="gridEl" :class="{ selecting }" @mousedown="boardMouseDown">
         <div class="bg-toolbar">
-          <button v-if="!groupSelect" class="add-group" @click="startGroupSelect()"><Icon name="plus" :size="15" /> New group</button>
+          <button class="add-group" @click="newGroupHint"><Icon name="plus" :size="15" /> New group</button>
         </div>
-        <!-- marquee-select banner -->
-        <transition name="fade">
-          <div v-if="groupSelect" class="gs-bar">
-            <Icon name="new-group" :size="16" /> <b>Drag a box</b> across the widgets to include in the new group — the rest stay on the dashboard.
-            <span class="gs-count">{{ groupPicks.size }} selected</span>
-            <div class="grow" />
-            <button class="btn btn-sm" @click="cancelGroupSelect">Cancel</button>
-            <button class="btn btn-sm btn-primary" :disabled="!groupPicks.size" @click="createGroupFromPicks"><Icon name="check" :size="14" /> Create group</button>
-          </div>
-        </transition>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
           @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
           <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
-            :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupSelect && groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !groupSelect"
+            :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
             @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)">
             <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
             <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
@@ -375,6 +385,17 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
     <!-- rubber-band selection rectangle (fixed to viewport) -->
     <teleport to="body">
       <div v-if="marquee.active" class="marquee" :style="{ left: marquee.l + 'px', top: marquee.t + 'px', width: marquee.w + 'px', height: marquee.h + 'px' }" />
+    </teleport>
+
+    <!-- post-release confirm CTA (bottom-right) → convert the selected widgets into a group -->
+    <teleport to="body">
+      <transition name="fabpop">
+        <div v-if="showGroupCta && groupPicks.size" class="group-cta">
+          <span class="gc-count"><Icon name="new-group" :size="16" /> {{ groupPicks.size }} widget{{ groupPicks.size > 1 ? 's' : '' }} selected</span>
+          <button class="btn btn-sm" @click="clearPicks">Cancel</button>
+          <button class="btn btn-sm btn-primary" @click="createGroupFromPicks"><Icon name="check" :size="14" /> Create group</button>
+        </div>
+      </transition>
     </teleport>
 
     <!-- Floating Add FAB (bottom-right) → slide-up: Create Dashboard / Create Widget -->
@@ -487,12 +508,13 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-empty p { margin: 0; }
 .bg-toolbar { display: flex; justify-content: flex-end; }
 /* marquee (rubber-band) group selection */
-.gs-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; margin-bottom: 12px; background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 10px; color: var(--primary-700); font-size: 13px; }
-.gs-count { font-weight: 600; background: #fff; border: 1px solid var(--primary-soft); border-radius: 999px; padding: 1px 10px; font-size: 12px; }
 .board-groups.selecting { cursor: crosshair; user-select: none; }
 .board-groups.selecting :deep(.tile), .board-groups.selecting .resize { pointer-events: none; }
-.cell.pick-on { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: 0 0 0 4px var(--primary-soft); border-radius: var(--r-lg); }
+.cell.pick-on { outline: 2px dashed var(--primary); outline-offset: 2px; box-shadow: 0 0 0 4px var(--primary-soft); border-radius: var(--r-lg); }
 .marquee { position: fixed; z-index: 300; border: 1.5px dashed var(--primary); background: rgba(61,139,208,.12); border-radius: 4px; pointer-events: none; }
+/* bottom-right confirm CTA */
+.group-cta { position: fixed; right: 26px; bottom: 96px; z-index: 60; display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--sh-lg); }
+.gc-count { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; color: var(--primary-700); }
 .add-group { display: inline-flex; align-items: center; gap: 7px; border: none; background: transparent; border-radius: 9px; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--primary-700); }
 .add-group:hover { background: var(--primary-softer); }
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 64px 20px; text-align: center; }
