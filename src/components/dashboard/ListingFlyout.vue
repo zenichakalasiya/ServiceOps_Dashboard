@@ -64,7 +64,8 @@ const shareTarget = ref(null)
 function openMenu(d, e) {
   if (menuId.value === d.id) { menuId.value = null; return }
   const r = e.currentTarget.getBoundingClientRect()
-  menuPos.value = { top: r.bottom + 6, left: Math.max(8, r.right - 190) }
+  // open to the RIGHT of the ⋯ button (into the main area), clamped to the viewport
+  menuPos.value = { top: r.bottom + 6, left: Math.min(r.right + 6, window.innerWidth - 210) }
   menuId.value = d.id
 }
 function menuAct(fn) { menuId.value = null; fn() }

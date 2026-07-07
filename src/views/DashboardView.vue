@@ -195,6 +195,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
               <Icon name="info" :size="15" />
               <transition name="fade"><span v-if="descHover" class="tt dinfo-tt">{{ d.description }}</span></transition>
             </span>
+            <span v-if="d.default" class="def-badge" title="Default landing dashboard"><Icon name="default-home" :size="16" /></span>
             <!-- Only Restricted dashboards show an access indicator; click it for the technician fields -->
             <div v-if="d.access === 'restricted'" class="acc-wrap">
               <button class="restrict-ic" @click.stop="restrictOpen = !restrictOpen" title="Restricted access"><Icon name="users" :size="15" /></button>
@@ -351,6 +352,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .dinfo { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
 .dinfo:hover { color: var(--primary); }
 .dinfo-tt { top: 26px; left: -8px; width: 260px; }
+.def-badge { display: inline-grid; place-items: center; color: var(--primary); }
 /* restricted → click the icon to see technician + group access */
 .restrict-ic { display: inline-grid; place-items: center; width: 28px; height: 26px; border: 1px solid var(--border-strong); background: var(--surface); border-radius: 7px; color: var(--amber); cursor: pointer; }
 .restrict-ic:hover { background: var(--amber-soft); border-color: transparent; }
