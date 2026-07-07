@@ -12,7 +12,16 @@ const src = store.ui.cloneTarget || store.ui.editTarget
 const isClone = computed(() => !!store.ui.cloneTarget)
 const isEdit = computed(() => !!store.ui.editTarget)
 
-const name = ref(store.ui.cloneTarget ? `Copy of ${src.name}` : src ? src.name : '')
+// Clone naming: "{base} - copy N" — strip any existing "- copy N" suffix to find the
+// base, then pick the lowest N not already used (so a 2nd copy becomes "- copy 2").
+function cloneName(srcName) {
+  const base = srcName.replace(/\s*-\s*copy\s*\d+$/i, '').trim()
+  const taken = new Set(store.dashboards.map((d) => d.name.toLowerCase()))
+  let n = 1
+  while (taken.has(`${base} - copy ${n}`.toLowerCase())) n++
+  return `${base} - copy ${n}`
+}
+const name = ref(store.ui.cloneTarget ? cloneName(src.name) : src ? src.name : '')
 const access = ref(src?.access || 'public')
 const category = ref(src?.category || '')
 const description = ref(src?.description || '')
