@@ -89,10 +89,6 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <button class="t2" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
     </div>
 
-    <button class="all-dash-btn" @click="emit('close'); router.push('/dashboards')">
-      <Icon name="list" :size="15" /> All dashboards <Icon name="chevron-right" :size="14" class="ad-arrow" />
-    </button>
-
     <div class="fsearch"><Icon name="search" :size="15" class="muted" /><input v-model="store.ui.listingQuery" placeholder="Search dashboards…" /></div>
 
     <div class="glist">
@@ -183,10 +179,6 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 /* teleported per-row menu — fixed to viewport so it isn't clipped by the scroll area */
 .row-menu { position: fixed; z-index: 61; }
 .row-backdrop { position: fixed; inset: 0; z-index: 59; }
-/* prominent entry to the full listing, right under the tabs */
-.all-dash-btn { display: flex; align-items: center; gap: 8px; margin: 0 12px 8px; padding: 0 12px; height: 36px; border: 1px solid var(--primary-soft); background: var(--primary-softer); color: var(--primary-700); font-weight: 600; font-size: 13px; border-radius: 9px; }
-.all-dash-btn:hover { background: var(--primary-soft); border-color: var(--primary); }
-.all-dash-btn .ad-arrow { margin-left: auto; color: var(--primary); }
 .archive-link { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border: none; border-top: 1px solid var(--border); background: transparent; color: var(--muted); font-weight: 500; font-size: 13px; }
 .archive-link:hover { background: var(--surface-2); color: var(--ink); }
 .none { padding: 24px 12px; text-align: center; color: var(--muted); font-size: 13px; }

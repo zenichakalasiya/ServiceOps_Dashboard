@@ -91,29 +91,6 @@ function onNewGroup() {
   showAdd.value = false; addToGroup.value = null
   toast('Empty group added — use its “Add widget” button to fill it', 'success')
 }
-
-// ---- New group by SELECTION: pick widgets (click or drag over), the rest stay ungrouped ----
-const groupSelect = ref(false)
-const groupPicks = ref(new Set())
-const painting = ref(false)
-function startGroupSelect() { groupSelect.value = true; groupPicks.value = new Set() }
-function cancelGroupSelect() { groupSelect.value = false; painting.value = false; groupPicks.value = new Set() }
-function addPick(t) { if (!groupPicks.value.has(t.id)) { const s = new Set(groupPicks.value); s.add(t.id); groupPicks.value = s } }
-function togglePick(t) { const s = new Set(groupPicks.value); s.has(t.id) ? s.delete(t.id) : s.add(t.id); groupPicks.value = s }
-function paintStart(t) { painting.value = true; addPick(t); window.addEventListener('mouseup', paintEnd, { once: true }) }
-function paintOver(t) { if (painting.value) addPick(t) }
-function paintEnd() { painting.value = false }
-function createGroupFromPicks() {
-  if (!groupPicks.value.size) { cancelGroupSelect(); return }
-  if (!d.value.groups) d.value.groups = []
-  const g = { id: uid('g'), name: `New group ${d.value.groups.length + 1}`, collapsed: false }
-  d.value.groups.push(g)
-  const n = groupPicks.value.size
-  d.value.tiles.forEach((t) => { if (groupPicks.value.has(t.id)) t.group = g.id })
-  d.value.updated = new Date().toISOString(); dirty.value = true
-  toast(`Grouped ${n} widget${n > 1 ? 's' : ''} — the rest stay on the dashboard`, 'success')
-  cancelGroupSelect()
-}
 function addWidgetToGroup(gid) { addToGroup.value = gid; showAdd.value = true }
 function ungroup(g) {
   d.value.tiles.forEach((t) => { if (t.group === g.id) t.group = null })
@@ -297,32 +274,15 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
       <!-- tiles (ungrouped + collapsible groups) -->
       <div v-else class="board-groups" ref="gridEl">
-        <div class="bg-toolbar">
-          <button v-if="!groupSelect" class="add-group" @click="startGroupSelect()"><Icon name="new-group" :size="15" /> New group</button>
-        </div>
-        <!-- selection banner: pick widgets for the new group; the rest stay ungrouped -->
-        <transition name="fade">
-          <div v-if="groupSelect" class="gs-bar">
-            <Icon name="new-group" :size="16" /> <b>Pick the widgets</b> for the new group — click or drag across them. The rest stay on the dashboard.
-            <span class="gs-count">{{ groupPicks.size }} selected</span>
-            <div class="grow" />
-            <button class="btn btn-sm" @click="cancelGroupSelect">Cancel</button>
-            <button class="btn btn-sm btn-primary" :disabled="!groupPicks.size" @click="createGroupFromPicks"><Icon name="check" :size="14" /> Create group</button>
-          </div>
-        </transition>
+        <div class="bg-toolbar"><button class="add-group" @click="addGroup()"><Icon name="plus" :size="15" /> New group</button></div>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
           @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
           <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
-            :class="{ flash: highlightId === t.id, dragging: dragId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !groupSelect"
+            :class="{ flash: highlightId === t.id, dragging: dragId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
             @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)">
             <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
             <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
-            <!-- selection overlay (New group by selection) -->
-            <div v-if="groupSelect" class="pick-overlay" :class="{ on: groupPicks.has(t.id) }"
-              @mousedown.prevent="paintStart(t)" @mouseenter="paintOver(t)" @click.stop="togglePick(t)">
-              <span class="pick-badge"><Icon :name="groupPicks.has(t.id) ? 'check' : 'plus'" :size="18" /></span>
-            </div>
           </div>
         </div>
 
@@ -462,16 +422,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-add:hover { background: var(--primary-soft); border-color: transparent; }
 .grp-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
 .grp-empty p { margin: 0; }
-.bg-toolbar { display: flex; justify-content: flex-end; min-height: 30px; }
-/* new-group-by-selection banner */
-.gs-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; margin-bottom: 12px; background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 10px; color: var(--primary-700); font-size: 13px; }
-.gs-count { font-weight: 600; background: #fff; border: 1px solid var(--primary-soft); border-radius: 999px; padding: 1px 10px; font-size: 12px; }
-/* per-tile selection overlay */
-.pick-overlay { position: absolute; inset: 0; z-index: 22; border-radius: var(--r-lg); border: 2px dashed var(--border-strong); background: rgba(255,255,255,.25); cursor: pointer; padding: 10px; display: flex; justify-content: flex-end; align-items: flex-start; transition: border-color .12s, background .12s; }
-.pick-overlay:hover { border-color: var(--primary); background: var(--primary-softer); }
-.pick-overlay.on { border: 2px solid var(--primary); background: var(--primary-soft); }
-.pick-badge { width: 28px; height: 28px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border-strong); display: grid; place-items: center; color: var(--muted); box-shadow: var(--sh-sm); }
-.pick-overlay.on .pick-badge { background: var(--primary); color: #fff; border-color: var(--primary); }
+.bg-toolbar { display: flex; justify-content: flex-end; }
 .add-group { display: inline-flex; align-items: center; gap: 7px; border: none; background: transparent; border-radius: 9px; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--primary-700); }
 .add-group:hover { background: var(--primary-softer); }
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 64px 20px; text-align: center; }
