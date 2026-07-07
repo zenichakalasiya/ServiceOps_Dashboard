@@ -123,11 +123,17 @@ function canDelete() { return tab.value === 'user' }
 function hasActions(l) { return canDuplicate(l) || canEdit(l) || canDelete(l) }
 
 const TYPE_LABEL = { kpi: 'KPI', chart: 'Widget', shortcut: 'Shortcut' }
-// short description shown in a left tooltip on hover of each library row
+// short description shown in a left-pointing tooltip on hover of each library row
 function libDesc(l) {
   const kind = l.type === 'kpi' ? 'A headline KPI number' : l.type === 'shortcut' ? 'A record list / table' : 'A chart widget'
   return `${kind} from the ${l.module} module.`
 }
+const tip = ref({ show: false, text: '', top: 0, right: 0 })
+function showTip(l, e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  tip.value = { show: true, text: libDesc(l), top: r.top + r.height / 2, right: window.innerWidth - r.left + 12 }
+}
+function hideTip() { tip.value.show = false }
 const TAB_LABEL = { predefined: 'Predefined', user: 'User Defined', shared: 'Shared with me' }
 const emptyMsg = computed(() => {
   const plural = fType.value ? (fType.value === 'kpi' ? 'KPIs' : TYPE_LABEL[fType.value] + 's') : 'items'
@@ -200,7 +206,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
         <!-- REUSE TABS: listing with actions -->
         <template v-else>
           <div v-if="list.length" class="lst">
-            <div v-for="l in list" :key="l.id" class="lrow" :class="{ sel: isSel(l) }" :title="libDesc(l)">
+            <div v-for="l in list" :key="l.id" class="lrow" :class="{ sel: isSel(l) }" @mouseenter="showTip(l, $event)" @mouseleave="hideTip">
               <input type="checkbox" class="lcb" :checked="isSel(l)" @change="toggleSel(l)" />
               <div class="lt-main">
                 <div class="lt-name-row"><span class="lt-name ellip">{{ l.title }}</span></div>
@@ -234,6 +240,13 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
     <WidgetBuilderModal v-if="builder" :d="d" :type="builder" @close="builder = null" @created="onCreated" @savedToLibrary="onSavedToLibrary" />
     <!-- Centered builder — duplicate/edit a library tile (Update returns a copy to the listing) -->
     <WidgetBuilderModal v-if="libBuilder" :d="d" :type="libBuilder.type" :libItem="libBuilder.item" @close="libBuilder = null" @librarySaved="onLibrarySaved" />
+
+    <!-- Row description tooltip — opens to the left of the hovered row, arrow points right -->
+    <teleport to="body">
+      <transition name="fade">
+        <div v-if="tip.show" class="lib-tip" :style="{ top: tip.top + 'px', right: tip.right + 'px' }">{{ tip.text }}<span class="lib-tip-arrow" /></div>
+      </transition>
+    </teleport>
 
     <!-- Delete confirmation -->
     <teleport to="body">
@@ -292,6 +305,9 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .lt-main { flex: 1; min-width: 0; }
 .lt-name-row { display: flex; align-items: center; gap: 7px; } .lt-name { font-weight: 500; font-size: 13.5px; }
 .lt-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+/* left-pointing description tooltip (teleported, fixed to viewport) */
+.lib-tip { position: fixed; z-index: 200; transform: translateY(-50%); width: 232px; background: #20223a; color: #fff; font-size: 11.5px; line-height: 1.45; padding: 8px 11px; border-radius: 8px; box-shadow: var(--sh-pop); pointer-events: none; text-align: left; }
+.lib-tip-arrow { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 6px solid transparent; border-left-color: #20223a; }
 /* hover actions (Duplicate / Edit / Delete) — revealed on row hover */
 .lt-acts { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
 .lrow:hover .lt-acts { opacity: 1; }
