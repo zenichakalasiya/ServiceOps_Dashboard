@@ -100,10 +100,28 @@ const groupPicks = ref(new Set())     // currently-boxed tile ids
 const showGroupCta = ref(false)       // post-release confirm CTA
 const marquee = ref({ active: false, l: 0, t: 0, w: 0, h: 0 })  // viewport coords (fixed overlay)
 let mqPending = null, mqStart = null
-function newGroupHint() { toast('Drag a box across the widgets you want to group', 'info') }
+// container-first: a labeled "Add group" makes an empty, collapsible group you fill later
+function insertEmptyGroup(i) {
+  if (!d.value.groups) d.value.groups = []
+  const g = { id: uid('g'), name: `New group ${d.value.groups.length + 1}`, collapsed: false }
+  d.value.groups.splice(i, 0, g)
+  d.value.updated = new Date().toISOString(); dirty.value = true
+  editingGroup.value = g.id            // drop straight into rename
+  return g.id
+}
+function addEmptyGroup() { insertEmptyGroup((d.value.groups || []).length); toast('Empty group added — drag widgets in, or use its “Add widget” button', 'success') }
+function togglePick(id) {
+  const s = new Set(groupPicks.value); s.has(id) ? s.delete(id) : s.add(id); groupPicks.value = s
+  showGroupCta.value = groupPicks.value.size > 0
+}
 function boardMouseDown(e) {
   if (e.button !== 0) return
   if (e.target.closest('button, a, input, textarea, select, .draghandle, .resize, .grp-head')) return
+  // Shift / Ctrl / ⌘ + click on an ungrouped tile toggles it into the selection
+  const cell = e.target.closest('.cell[data-tile]')
+  if ((e.shiftKey || e.ctrlKey || e.metaKey) && cell && !cell.closest('.group')) {
+    togglePick(cell.getAttribute('data-tile')); e.preventDefault(); return
+  }
   mqPending = { x: e.clientX, y: e.clientY }
   window.addEventListener('mousemove', mqPendingMove)
   window.addEventListener('mouseup', mqPendingUp)
@@ -152,9 +170,18 @@ function createGroupFromPicks() {
   const g = { id: uid('g'), name: `New group ${d.value.groups.length + 1}`, collapsed: false }
   d.value.groups.push(g)
   const n = groupPicks.value.size
-  d.value.tiles.forEach((t) => { if (groupPicks.value.has(t.id)) t.group = g.id })
+  // remember each tile's previous group so the action can be undone cleanly
+  const prev = d.value.tiles.filter((t) => groupPicks.value.has(t.id)).map((t) => ({ id: t.id, group: t.group ?? null }))
+  prev.forEach((p) => { const t = d.value.tiles.find((x) => x.id === p.id); if (t) t.group = g.id })
   d.value.updated = new Date().toISOString(); dirty.value = true
-  toast(`Grouped ${n} widget${n > 1 ? 's' : ''} — the rest stay on the dashboard`, 'success')
+  toast(`Grouped ${n} widget${n > 1 ? 's' : ''} — the rest stay on the dashboard`, 'success', {
+    label: 'Undo',
+    fn: () => {
+      prev.forEach((p) => { const t = d.value.tiles.find((x) => x.id === p.id); if (t) t.group = p.group })
+      d.value.groups = d.value.groups.filter((x) => x.id !== g.id)
+      dirty.value = true
+    },
+  })
   clearPicks()
 }
 function addWidgetToGroup(gid) { addToGroup.value = gid; showAdd.value = true }
@@ -327,7 +354,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       </div>
 
       <!-- empty state → template gallery (P2·9, P3·tour, ClickUp pattern) -->
-      <div v-else-if="!d.tiles.length" class="empty">
+      <div v-else-if="!d.tiles.length && !(d.groups && d.groups.length)" class="empty">
         <div class="empty-ill">
           <span class="ei ei-chart"><Icon name="chart-bar" :size="26" /></span>
           <span class="ei ei-kpi"><Icon name="kpi" :size="22" /></span>
@@ -335,13 +362,17 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         </div>
         <h3>Your dashboard is empty</h3>
         <p>Add a <b>Widget</b>, <b>KPI</b> or <b>Shortcut</b> to start visualizing your data.</p>
-        <button class="btn btn-primary big-cta" @click="showAdd = true"><Icon name="plus" :size="17" /> Add Widget</button>
+        <div class="empty-cta">
+          <button class="btn btn-primary big-cta" @click="showAdd = true"><Icon name="plus" :size="17" /> Add Widget</button>
+          <button class="btn big-cta ghost" @click="addEmptyGroup"><Icon name="new-group" :size="16" /> or create a group</button>
+        </div>
       </div>
 
       <!-- tiles (ungrouped + collapsible groups) — drag a box anywhere to marquee-select -->
       <div v-else class="board-groups" ref="gridEl" :class="{ selecting }" @mousedown="boardMouseDown">
         <div class="bg-toolbar">
-          <button class="add-group" @click="newGroupHint"><Icon name="plus" :size="15" /> New group</button>
+          <span v-if="tilesIn(null).length" class="bg-hint">Tip: drag a box (or Shift-click) across widgets to group them</span>
+          <button class="add-group" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> Add group</button>
         </div>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
@@ -354,8 +385,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           </div>
         </div>
 
-        <!-- groups -->
-        <section v-for="g in (d.groups || [])" :key="g.id" class="group" :class="{ 'drop-into': dropGroup === g.id }"
+        <!-- groups (each preceded by a hover-reveal "+ New group here" inserter) -->
+        <template v-for="(g, gi) in (d.groups || [])" :key="g.id">
+        <div class="grp-insert" @click.stop="insertEmptyGroup(gi)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
+        <section class="group" :class="{ 'drop-into': dropGroup === g.id }"
           @dragover.prevent="dropGroup = g.id" @drop="onDropGroup(g.id)">
           <header class="grp-head">
             <button class="grp-toggle" @click="g.collapsed = !g.collapsed"><Icon :name="g.collapsed ? 'chevron-right' : 'chevron-down'" :size="16" /></button>
@@ -379,6 +412,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             </div>
           </div>
         </section>
+        </template>
+        <div v-if="(d.groups || []).length" class="grp-insert" @click.stop="insertEmptyGroup((d.groups || []).length)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
       </div>
     </div>
 
@@ -506,7 +541,16 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-add:hover { background: var(--primary-soft); border-color: transparent; }
 .grp-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
 .grp-empty p { margin: 0; }
-.bg-toolbar { display: flex; justify-content: flex-end; }
+.bg-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.bg-hint { margin-right: auto; font-size: 12px; color: var(--muted-2); }
+/* hover-reveal "+ New group here" between group sections */
+.grp-insert { display: flex; align-items: center; gap: 10px; height: 14px; margin: 2px 0; cursor: pointer; opacity: 0; transition: opacity .14s; }
+.grp-insert:hover { opacity: 1; }
+.gi-line { flex: 1; height: 1px; background: var(--primary-soft); }
+.gi-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--primary-700); background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 999px; padding: 2px 10px; }
+.empty-cta { display: flex; gap: 10px; align-items: center; }
+.big-cta.ghost { background: transparent; color: var(--primary-700); border: 1px solid var(--border-strong); }
+.big-cta.ghost:hover { background: var(--primary-softer); border-color: var(--primary); }
 /* marquee (rubber-band) group selection */
 .board-groups.selecting { cursor: crosshair; user-select: none; }
 .board-groups.selecting :deep(.tile), .board-groups.selecting .resize { pointer-events: none; }

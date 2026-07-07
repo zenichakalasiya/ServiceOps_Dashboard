@@ -30,11 +30,12 @@ export const folderName = (id) => store.folders.find((f) => f.id === id)?.name |
 
 // ---------- toasts ----------
 let tId = 0
-export function toast(message, kind = 'info') {
+export function toast(message, kind = 'info', action = null) {
   const id = ++tId
-  store.toasts.push({ id, message, kind })
-  setTimeout(() => { store.toasts = store.toasts.filter((t) => t.id !== id) }, 3200)
+  store.toasts.push({ id, message, kind, action })   // action: { label, fn }
+  setTimeout(() => { store.toasts = store.toasts.filter((t) => t.id !== id) }, action ? 6000 : 3200)
 }
+export function dismissToast(id) { store.toasts = store.toasts.filter((t) => t.id !== id) }
 
 // ---------- dashboard actions ----------
 export function toggleFavorite(d) {
