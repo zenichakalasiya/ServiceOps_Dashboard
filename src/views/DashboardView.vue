@@ -92,6 +92,22 @@ function onNewGroup() {
   toast('Empty group added — use its “Add widget” button to fill it', 'success')
 }
 
+// ---- Grouping-style DEMO switcher: compare the 5 designs live ----
+const GSTYLES = [
+  { id: 1, n: '①', label: 'Select', desc: 'Marquee-drag or Shift-click widgets, then Create group' },
+  { id: 2, n: '②', label: 'Container', desc: 'Add an empty group from the toolbar, drag widgets in' },
+  { id: 3, n: '③', label: 'Inline', desc: 'Hover between groups for a "+ New group here" inserter' },
+  { id: 4, n: '④', label: 'Add menu', desc: 'Create an Empty Group from the + (FAB) menu' },
+  { id: 5, n: '⑤', label: 'Hybrid', desc: 'All of the above combined (recommended)' },
+]
+const gs = computed(() => store.ui.groupStyle)
+const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
+const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 3 || gs.value === 5)
+const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here"
+const gShowFabGroup = computed(() => gs.value === 4 || gs.value === 5)    // Empty Group in the FAB menu
+const gShowTip = computed(() => gs.value === 1 || gs.value === 5)         // "drag a box" hint
+const gShowEmptyGroupCta = computed(() => gs.value !== 1)                 // empty-state "or create a group"
+
 // ---- New group by direct MARQUEE drag (no CTA needed to start) ----
 // Press-drag anywhere on the board (past a small threshold) to rubber-band a box over
 // the placed widgets; on release a "Create group" CTA appears bottom-right to confirm.
@@ -115,6 +131,7 @@ function togglePick(id) {
   showGroupCta.value = groupPicks.value.size > 0
 }
 function boardMouseDown(e) {
+  if (!gUseMarquee.value) return   // select-to-group only in styles ① and ⑤
   if (e.button !== 0) return
   if (e.target.closest('button, a, input, textarea, select, .draghandle, .resize, .grp-head')) return
   // Shift / Ctrl / ⌘ + click on an ungrouped tile toggles it into the selection
@@ -348,6 +365,17 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
     <!-- Body -->
     <div class="bbody">
+      <!-- DEMO: switch between the 5 grouping designs to compare them live -->
+      <div v-if="!loadingBoard" class="gstyle-bar">
+        <span class="gsb-label"><Icon name="template" :size="14" /> Grouping demo</span>
+        <div class="gsb-seg">
+          <button v-for="s in GSTYLES" :key="s.id" class="gsb-b" :class="{ on: gs === s.id }" :title="s.desc" @click="store.ui.groupStyle = s.id">
+            <span class="gsb-n">{{ s.n }}</span> {{ s.label }}
+          </button>
+        </div>
+        <span class="gsb-desc">{{ GSTYLES.find(s => s.id === gs)?.desc }}</span>
+      </div>
+
       <!-- loading skeleton (P2·9) -->
       <div v-if="loadingBoard" class="grid">
         <div v-for="n in 6" :key="n" class="card sk" :class="n <= 4 ? 'span-3' : 'span-6'"><div class="skeleton" style="height:100%" /></div>
@@ -364,15 +392,15 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <p>Add a <b>Widget</b>, <b>KPI</b> or <b>Shortcut</b> to start visualizing your data.</p>
         <div class="empty-cta">
           <button class="btn btn-primary big-cta" @click="showAdd = true"><Icon name="plus" :size="17" /> Add Widget</button>
-          <button class="btn big-cta ghost" @click="addEmptyGroup"><Icon name="new-group" :size="16" /> or create a group</button>
+          <button v-if="gShowEmptyGroupCta" class="btn big-cta ghost" @click="addEmptyGroup"><Icon name="new-group" :size="16" /> or create a group</button>
         </div>
       </div>
 
       <!-- tiles (ungrouped + collapsible groups) — drag a box anywhere to marquee-select -->
       <div v-else class="board-groups" ref="gridEl" :class="{ selecting }" @mousedown="boardMouseDown">
         <div class="bg-toolbar">
-          <span v-if="tilesIn(null).length" class="bg-hint">Tip: drag a box (or Shift-click) across widgets to group them</span>
-          <button class="add-group" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> Add group</button>
+          <span v-if="gShowTip && tilesIn(null).length" class="bg-hint">Tip: drag a box (or Shift-click) across widgets to group them</span>
+          <button v-if="gShowAddGroupBtn" class="add-group" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> Add group</button>
         </div>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
@@ -387,7 +415,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
         <!-- groups (each preceded by a hover-reveal "+ New group here" inserter) -->
         <template v-for="(g, gi) in (d.groups || [])" :key="g.id">
-        <div class="grp-insert" @click.stop="insertEmptyGroup(gi)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
+        <div v-if="gShowInserters" class="grp-insert" @click.stop="insertEmptyGroup(gi)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
         <section class="group" :class="{ 'drop-into': dropGroup === g.id }"
           @dragover.prevent="dropGroup = g.id" @drop="onDropGroup(g.id)">
           <header class="grp-head">
@@ -413,7 +441,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           </div>
         </section>
         </template>
-        <div v-if="(d.groups || []).length" class="grp-insert" @click.stop="insertEmptyGroup((d.groups || []).length)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
+        <div v-if="gShowInserters && (d.groups || []).length" class="grp-insert" @click.stop="insertEmptyGroup((d.groups || []).length)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
       </div>
     </div>
 
@@ -443,6 +471,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           </button>
           <button class="fab-opt" @click="fabMenu = false; addToGroup = null; showAdd = true">
             <span class="fo-ic wid"><Icon name="chart-bar" :size="18" /></span> Create Widget
+          </button>
+          <button v-if="gShowFabGroup" class="fab-opt" @click="fabMenu = false; addEmptyGroup()">
+            <span class="fo-ic grp"><Icon name="new-group" :size="18" /></span> Empty Group
           </button>
         </div>
       </transition>
@@ -541,6 +572,16 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-add:hover { background: var(--primary-soft); border-color: transparent; }
 .grp-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
 .grp-empty p { margin: 0; }
+/* grouping-style demo switcher */
+.gstyle-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 14px; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 10px; }
+.gsb-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.gsb-seg { display: inline-flex; gap: 3px; background: var(--surface-2); padding: 3px; border-radius: 9px; border: 1px solid var(--border); }
+.gsb-b { border: none; background: transparent; padding: 5px 11px; border-radius: 7px; font-size: 12.5px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.gsb-b:hover { color: var(--ink); }
+.gsb-b.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); font-weight: 600; }
+.gsb-n { font-size: 13px; }
+.gsb-desc { font-size: 12px; color: var(--muted-2); margin-left: auto; }
+@media (max-width: 720px) { .gsb-desc { display: none; } }
 .bg-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .bg-hint { margin-right: auto; font-size: 12px; color: var(--muted-2); }
 /* hover-reveal "+ New group here" between group sections */
@@ -586,6 +627,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .fo-ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none; }
 .fo-ic.dash { background: var(--primary); }
 .fo-ic.wid { background: var(--green); }
+.fo-ic.grp { background: var(--amber); }
 .fabpop-enter-active { transition: opacity .2s ease, transform .22s cubic-bezier(.2,.8,.2,1); }
 .fabpop-leave-active { transition: opacity .14s ease, transform .14s ease; }
 .fabpop-enter-from, .fabpop-leave-to { opacity: 0; transform: translateY(16px); }
