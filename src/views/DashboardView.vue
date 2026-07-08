@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../components/ui/Icon.vue'
 import WidgetCard from '../components/dashboard/WidgetCard.vue'
@@ -104,7 +104,41 @@ const gs = computed(() => store.ui.groupStyle)
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
 const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
 const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here" between groups
-const gShowTopPill = computed(() => gs.value === 3)                       // inline: compact first-group pill above widgets
+const gShowRowInserters = computed(() => gs.value === 3)                  // inline: hover inserters between ungrouped widget ROWS
+
+// Detect the vertical gaps between ungrouped widget rows so an inline "+ New group here"
+// inserter can appear on hover in each gap (no permanent CTA, zero upfront space).
+const ugGridEl = ref(null)
+const rowGaps = ref([])
+function computeRowGaps() {
+  rowGaps.value = []
+  if (gs.value !== 3) return
+  const grid = ugGridEl.value
+  if (!grid) return
+  const cells = [...grid.children].filter((c) => c.classList?.contains('cell'))
+  if (!cells.length) return
+  const rows = []
+  cells.forEach((c) => {
+    const top = c.offsetTop
+    const row = rows.find((r) => Math.abs(r.top - top) < 8)
+    if (row) row.bottom = Math.max(row.bottom, top + c.offsetHeight)
+    else rows.push({ top, bottom: top + c.offsetHeight })
+  })
+  rows.sort((a, b) => a.top - b.top)
+  const gaps = []
+  for (let i = 0; i < rows.length - 1; i++) gaps.push(Math.round((rows[i].bottom + rows[i + 1].top) / 2))
+  // guarantee a first-group entry point (bottom gap) when no groups exist yet
+  if (!(d.value?.groups || []).length) gaps.push(Math.round(rows[rows.length - 1].bottom + 6))
+  rowGaps.value = gaps
+}
+let ugRO
+onMounted(() => {
+  nextTick(computeRowGaps)
+  ugRO = new ResizeObserver(() => computeRowGaps())
+})
+watch([gs, () => d.value?.tiles?.length, () => (d.value?.groups || []).length], () => nextTick(computeRowGaps))
+watch(ugGridEl, (el) => { ugRO?.disconnect(); if (el) ugRO?.observe(el); nextTick(computeRowGaps) })
+onBeforeUnmount(() => ugRO?.disconnect())
 const gShowFabGroup = computed(() => gs.value === 4 || gs.value === 5)    // Empty Group in the FAB menu
 const gShowTip = computed(() => gs.value === 1 || gs.value === 5)         // "drag a box" hint
 const gShowEmptyGroupCta = computed(() => gs.value !== 1)                 // empty-state "or create a group"
@@ -403,21 +437,23 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <span v-if="gShowTip && tilesIn(null).length" class="bg-hint">Tip: drag a box (or Shift-click) across widgets to group them</span>
           <button v-if="gShowAddGroupBtn" class="add-group" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> Add group</button>
         </div>
-        <!-- inline style: compact first-group pill above the widgets (the between-group
-             inserters only appear once a group exists, so this seeds the first one) -->
-        <div v-if="gShowTopPill" class="top-pill-row">
-          <button class="new-group-pill" @click="addEmptyGroup"><Icon name="new-group" :size="14" /> New group</button>
-          <span v-if="!(d.groups || []).length" class="tpr-hint">Create a group, then drag widgets into it</span>
-        </div>
-        <!-- ungrouped -->
-        <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
-          @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
-          <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
-            :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
-            @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)">
-            <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
-            <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
+        <!-- ungrouped (inline style overlays a hover "+ New group here" inserter in each row gap) -->
+        <div v-if="tilesIn(null).length" class="ug-wrap">
+          <div class="grid" ref="ugGridEl" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
+            @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
+            <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
+              :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
+              @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)">
+              <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
+            </div>
           </div>
+          <!-- inline: hover a row gap to reveal a "+ New group here" inserter -->
+          <template v-if="gShowRowInserters">
+            <div v-for="(y, i) in rowGaps" :key="'rg' + i" class="row-insert" :style="{ top: y + 'px' }" @click.stop="addEmptyGroup">
+              <span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" />
+            </div>
+          </template>
         </div>
 
         <!-- groups (each preceded by a hover-reveal "+ New group here" inserter) -->
@@ -590,11 +626,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .gsb-desc { font-size: 12px; color: var(--muted-2); margin-left: auto; }
 @media (max-width: 720px) { .gsb-desc { display: none; } }
 .bg-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
-/* inline (③): compact, always-visible first-group pill (replaces the space-heavy button) */
-.top-pill-row { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
-.new-group-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; border: 1px dashed var(--primary-soft); background: var(--primary-softer); color: var(--primary-700); border-radius: 999px; font-weight: 600; font-size: 12.5px; }
-.new-group-pill:hover { background: var(--primary-soft); border-color: var(--primary); border-style: solid; }
-.tpr-hint { font-size: 12px; color: var(--muted-2); }
+/* inline (③): hover-reveal "+ New group here" inserter in each ungrouped row gap */
+.ug-wrap { position: relative; }
+.row-insert { position: absolute; left: 0; right: 0; height: 16px; transform: translateY(-50%); display: flex; align-items: center; gap: 10px; cursor: pointer; opacity: 0; transition: opacity .14s; z-index: 8; }
+.row-insert:hover { opacity: 1; }
 .bg-hint { margin-right: auto; font-size: 12px; color: var(--muted-2); }
 /* hover-reveal "+ New group here" between group sections */
 .grp-insert { display: flex; align-items: center; gap: 10px; height: 14px; margin: 2px 0; cursor: pointer; opacity: 0; transition: opacity .14s; }
