@@ -16,6 +16,10 @@ const tip = ref(null)
 function showTip(e, it) { tip.value = { label: it.label, value: it.value, pct: it.pct, c: it.c, x: e.clientX, y: e.clientY } }
 function hideTip() { tip.value = null }
 
+// --- legend hover: highlight only the hovered segment, dim the rest ---
+// donut legend indexes slices (labels); bar/line legend indexes series.
+const legendHover = ref(null)
+
 // bars (single or grouped)
 const bars = computed(() => {
   const n = labels.value.length, m = series.value.length
@@ -26,7 +30,7 @@ const bars = computed(() => {
     const h = (v / maxV.value) * (H - PAD * 2)
     const x = PAD + i * gw + (gw - bw * m) / 2 + j * bw
     const label = m > 1 ? `${labels.value[i] ?? ''} · ${series.value[j].name}` : (labels.value[i] ?? '')
-    out.push({ x, y: H - PAD - h, w: bw - 3, h, c: PAL[j % PAL.length], label, value: v, pct: pctOf(v) })
+    out.push({ x, y: H - PAD - h, w: bw - 3, h, c: PAL[j % PAL.length], label, value: v, pct: pctOf(v), si: j })
   }
   return out
 })
@@ -40,7 +44,7 @@ const hbars = computed(() => {
     const w = (v / maxV.value) * (W - PAD * 2)
     const y = PAD + i * gh + (gh - bh * m) / 2 + j * bh
     const label = m > 1 ? `${labels.value[i] ?? ''} · ${series.value[j].name}` : (labels.value[i] ?? '')
-    out.push({ x: PAD, y, w, h: bh - 2, c: PAL[j % PAL.length], label, value: v, pct: pctOf(v) })
+    out.push({ x: PAD, y, w, h: bh - 2, c: PAL[j % PAL.length], label, value: v, pct: pctOf(v), si: j })
   }
   return out
 })
@@ -78,11 +82,11 @@ const arcs = computed(() => {
   <div class="chart" :style="{ height: height + 'px' }">
     <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">
       <template v-if="kind === 'bar'">
-        <rect v-for="(b, i) in bars" :key="i" class="seg" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
+        <rect v-for="(b, i) in bars" :key="i" class="seg" :class="{ dim: legendHover !== null && legendHover !== b.si }" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
           @mousemove="showTip($event, b)" @mouseleave="hideTip" />
       </template>
       <template v-else-if="kind === 'hbar'">
-        <rect v-for="(b, i) in hbars" :key="i" class="seg" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
+        <rect v-for="(b, i) in hbars" :key="i" class="seg" :class="{ dim: legendHover !== null && legendHover !== b.si }" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
           @mousemove="showTip($event, b)" @mouseleave="hideTip" />
       </template>
       <template v-else-if="kind === 'line'">
@@ -94,7 +98,7 @@ const arcs = computed(() => {
         </g>
       </template>
       <template v-else>
-        <path v-for="(a, i) in arcs" :key="i" class="seg" :d="a.d" :fill="a.c"
+        <path v-for="(a, i) in arcs" :key="i" class="seg" :class="{ dim: legendHover !== null && legendHover !== i }" :d="a.d" :fill="a.c"
           @mousemove="showTip($event, a)" @mouseleave="hideTip" />
       </template>
     </svg>
@@ -109,10 +113,10 @@ const arcs = computed(() => {
     <!-- legend -->
     <div v-if="legend" class="legend">
       <template v-if="kind === 'donut'">
-        <span v-for="(l, i) in labels" :key="i" class="lg"><i :style="{ background: PAL[i % PAL.length] }" />{{ l }} <b>{{ arcs[i]?.pct }}%</b></span>
+        <span v-for="(l, i) in labels" :key="i" class="lg" :class="{ faded: legendHover !== null && legendHover !== i }" @mouseenter="legendHover = i" @mouseleave="legendHover = null"><i :style="{ background: PAL[i % PAL.length] }" />{{ l }} <b>{{ arcs[i]?.pct }}%</b></span>
       </template>
       <template v-else>
-        <span v-for="(s, i) in series" :key="i" class="lg"><i :style="{ background: PAL[i % PAL.length] }" />{{ s.name }}</span>
+        <span v-for="(s, i) in series" :key="i" class="lg" :class="{ faded: legendHover !== null && legendHover !== i }" @mouseenter="legendHover = i" @mouseleave="legendHover = null"><i :style="{ background: PAL[i % PAL.length] }" />{{ s.name }}</span>
       </template>
     </div>
   </div>
@@ -122,12 +126,15 @@ const arcs = computed(() => {
 .chart { display: flex; flex-direction: column; }
 .chart svg { flex: 1; min-height: 0; }
 .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; padding: 6px 4px 0; }
-.lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+.lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); cursor: pointer; transition: opacity .12s; }
+.lg.faded { opacity: .4; }
 .lg i { width: 9px; height: 9px; border-radius: 3px; }
 .lg b { color: var(--ink-2); }
 /* hover affordance — signals the segment is clickable (drills to its records) */
 .seg { cursor: pointer; transition: opacity .12s; }
 .seg:hover { opacity: .82; }
+/* legend hover → dim every segment except the hovered one */
+.seg.dim { opacity: .18; }
 .hit { cursor: pointer; }
 .dot { pointer-events: none; }
 /* floating data tooltip (teleported to body) */

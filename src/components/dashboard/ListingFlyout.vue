@@ -178,11 +178,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 <style scoped>
 .flyout { width: 296px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; }
 .fhead { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; }
-.ftitle { font-weight: 700; font-size: 15px; }
+.ftitle { font-weight: 600; font-size: 15px; }
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
 /* filled pill add-button — "+ Dashboard" */
-.addbtn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px 0 9px; border: none; background: var(--primary); color: #fff; border-radius: 999px; font-weight: 600; font-size: 12.5px; white-space: nowrap; box-shadow: 0 2px 6px rgba(61,139,208,.35); transition: background .15s, transform .1s; }
+.addbtn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px 0 9px; border: none; background: var(--primary); color: #fff; border-radius: 4px; font-weight: 600; font-size: 12.5px; white-space: nowrap; box-shadow: 0 2px 6px rgba(61,139,208,.35); transition: background .15s, transform .1s; }
 .addbtn:hover { background: var(--primary-600); transform: translateY(-1px); }
 .addbtn:active { transform: translateY(0); }
 .row { display: flex; align-items: center; } .gap-6 { gap: 6px; }
