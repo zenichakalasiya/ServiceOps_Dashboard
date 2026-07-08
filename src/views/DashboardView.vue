@@ -734,7 +734,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .udr { display: inline-flex; gap: 2px; }
 .udr-b { position: relative; width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); border-radius: 8px; display: grid; place-items: center; }
 .udr-b:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
-.udr-b:disabled { color: var(--muted-2); opacity: .5; cursor: not-allowed; }
+.udr-b:disabled { color: var(--muted); opacity: .85; cursor: not-allowed; }
 .udr-tip { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #20223a; color: #fff; font-size: 11.5px; white-space: nowrap; padding: 5px 9px; border-radius: 7px; display: none; align-items: center; gap: 6px; z-index: 60; box-shadow: var(--sh-pop); }
 .udr-b:hover .udr-tip { display: inline-flex; }
 .udr-tip kbd { font-family: inherit; font-size: 10.5px; background: rgba(255,255,255,.16); border-radius: 4px; padding: 1px 5px; }
