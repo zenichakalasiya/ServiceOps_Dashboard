@@ -240,7 +240,8 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 /* provenance + description shown in the info-icon tooltip */
 .tt-prov { display: block; font-weight: 600; color: #fff; }
 .tt-desc { display: block; font-weight: 400; margin-top: 4px; color: rgba(255,255,255,.78); }
-.info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
+.info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; opacity: 0; transition: opacity .14s; }
+.tile:hover .info { opacity: 1; }
 .info:hover { color: var(--primary); }
 .info-tt { position: fixed; z-index: 200; width: 240px; }
 .right { display: flex; align-items: center; gap: 1px; opacity: 0; transition: opacity .14s; }

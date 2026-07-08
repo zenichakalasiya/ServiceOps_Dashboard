@@ -82,7 +82,8 @@ function submit(openAdd = false) {
   }
   if (isClone.value) opts.tiles = src.tiles.map((t) => ({ ...JSON.parse(JSON.stringify(t)), id: uid('t') }))
   const d = createDashboard(opts)
-  if (openAdd) store.ui.pendingAddWidget = true   // open Add-Widget once the board loads
+  // a brand-new (non-clone) board lands empty → auto-open the Add-Widget drawer
+  if (!isClone.value) store.ui.pendingAddWidget = true
   close()
   router.push(`/dashboard/${d.id}`)
 }

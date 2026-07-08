@@ -340,15 +340,24 @@ function onWidgetCreated(id) {
   })
 }
 
-onMounted(() => {
+// Loading + reveal + (for a brand-new empty board) auto-open Add-Widget.
+// Runs on mount AND on every dashboard switch — the route component is reused across
+// param changes, so onMounted alone wouldn't fire for a freshly-created board.
+function loadBoard() {
+  loadingBoard.value = true
   recordView(d.value)
   setTimeout(() => {
     loadingBoard.value = false
     revealing.value = true                              // widgets fade/slide in with staggered data
     setTimeout(() => (revealing.value = false), 1100)
+    if (store.ui.pendingAddWidget) {                    // new empty board → slide Add-Widget in smoothly
+      store.ui.pendingAddWidget = false; addToGroup.value = null
+      setTimeout(() => (showAdd.value = true), 260)
+    }
   }, 600)
-  if (store.ui.pendingAddWidget) { store.ui.pendingAddWidget = false; addToGroup.value = null; showAdd.value = true }
-})
+}
+onMounted(loadBoard)
+watch(() => route.params.id, loadBoard)
 
 function onRemove(t) { removeTile(d.value, t); dirty.value = true }
 // Open the builder pre-filled with this tile, in edit mode (with live preview).
@@ -391,11 +400,15 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <div class="titles">
           <div class="t-row">
             <h1>{{ d.name }}</h1>
-            <span v-if="d.description" class="dinfo" @mouseenter="descHover = true" @mouseleave="descHover = false">
+            <span v-if="d.description || d.default" class="dinfo" @mouseenter="descHover = true" @mouseleave="descHover = false">
               <Icon name="info" :size="15" />
-              <transition name="fade"><span v-if="descHover" class="tt dinfo-tt">{{ d.description }}</span></transition>
+              <transition name="fade">
+                <span v-if="descHover" class="tt dinfo-tt">
+                  <span v-if="d.default" class="def-tag"><Icon name="default-home" :size="12" /> Default dashboard</span>
+                  <span v-if="d.description" class="dinfo-desc">{{ d.description }}</span>
+                </span>
+              </transition>
             </span>
-            <span v-if="d.default" class="def-badge" title="Default landing dashboard"><Icon name="default-home" :size="16" /></span>
             <!-- Only Restricted dashboards show an access indicator; click it for the technician fields -->
             <div v-if="d.access === 'restricted'" class="acc-wrap">
               <button class="restrict-ic" @click.stop="restrictOpen = !restrictOpen" title="Restricted access"><Icon name="users" :size="15" /></button>
@@ -646,7 +659,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .dinfo { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
 .dinfo:hover { color: var(--primary); }
 .dinfo-tt { top: 26px; left: -8px; width: 260px; }
-.def-badge { display: inline-grid; place-items: center; color: var(--primary); }
+.def-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #cfc6ff; background: rgba(255,255,255,.1); border-radius: 5px; padding: 2px 7px; margin-bottom: 6px; }
+.dinfo-desc { display: block; }
 /* restricted → click the icon to see technician + group access */
 .restrict-ic { display: inline-grid; place-items: center; width: 28px; height: 26px; border: 1px solid var(--border-strong); background: var(--surface); border-radius: 7px; color: var(--amber); cursor: pointer; }
 .restrict-ic:hover { background: var(--amber-soft); border-color: transparent; }
