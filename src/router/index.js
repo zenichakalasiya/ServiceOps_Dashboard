@@ -10,9 +10,9 @@ const routes = [
   { path: '/', redirect: () => defaultBoard() },
   { path: '/archive', name: 'archive', component: () => import('../views/ArchivePage.vue') },
   { path: '/dashboard/:id', name: 'dashboard', component: () => import('../views/DashboardView.vue'), props: true },
-  // legacy paths redirect to the default board (listing is the left flyout)
-  { path: '/dashboards', redirect: () => defaultBoard() },
-  { path: '/all', redirect: () => defaultBoard() },
+  // full management listing (opened from the left drawer's entry points)
+  { path: '/dashboards', name: 'manage', component: () => import('../views/ManageDashboards.vue') },
+  { path: '/all', redirect: '/dashboards' },
 ]
 
 export default createRouter({ history: createWebHashHistory(), routes })
