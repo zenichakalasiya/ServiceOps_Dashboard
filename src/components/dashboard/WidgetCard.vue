@@ -72,7 +72,9 @@ const PROV = {
   shared: { label: 'Shared with me' },
 }
 const provMeta = computed(() => PROV[prov.value] || PROV.user)
-const canEdit = computed(() => prov.value !== 'predefined')
+// Predefined widgets are editable (limited to Highlights + chart type in the builder)
+// but can't be deleted from the dashboard.
+const canEdit = computed(() => true)
 const canDelete = computed(() => prov.value !== 'predefined')
 
 // Empty-widget states: unconfigured vs error vs no-data vs ok (distinct copy each)
@@ -139,7 +141,6 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
           <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
           <button v-if="tiny && canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
-          <button class="menu-item" @click="menu = false; emit('pin', tile)"><Icon name="pin" :size="15" /> {{ tile.pinned ? 'Unpin' : 'Pin to top' }}</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
           <button v-if="tile.type === 'chart'" class="menu-item" @click="showLegend = !showLegend"><Icon name="list" :size="15" /> {{ showLegend ? 'Hide legend' : 'Show legend' }}</button>
           <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->

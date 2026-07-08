@@ -27,9 +27,11 @@ const TYPES = [
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
 ]
 const curType = ref(TYPES.find((t) => t.id === props.type.id) || props.type)
-// Editing / duplicating a tile locks the type — the tabs stay visible for context
-// but are disabled so the chart type can't be switched.
-const typeLocked = computed(() => editing.value || libMode.value || props.duplicate)
+// Editing a predefined widget is restricted: only the chart type + Highlights can change.
+const predefinedEdit = computed(() => editing.value && ex?.prov === 'predefined')
+// Editing / duplicating a tile locks the type — except a predefined edit, where the
+// chart type is one of the two things you're allowed to change.
+const typeLocked = computed(() => (editing.value && !predefinedEdit.value) || libMode.value || props.duplicate)
 const isChart = computed(() => curType.value.type === 'chart')
 const isKpi = computed(() => curType.value.type === 'kpi')
 const isShortcut = computed(() => curType.value.type === 'shortcut')
@@ -115,14 +117,15 @@ function save(place) {
     emit('librarySaved', { title: cfg.name, module: cfg.module, type: curType.value.type, sharedAccess: cfg.sharedAccess, place })
     return
   }
-  // --- edit an existing board tile in place ---
+  // --- edit an existing board tile in place (type may change for a predefined edit) ---
   if (props.existing) {
     const t = props.existing
     t.title = cfg.name || t.title
     t.info = cfg.description
-    if (isChart.value) t.chart = pv.chart
-    if (isShortcut.value) { t.columns = pv.columns; t.rows = pv.rows; t.sql = cfg.sqlQuery }
-    if (isKpi.value) { t.value = pv.value; t.unit = pv.unit }
+    t.type = curType.value.type
+    if (isChart.value) { t.chart = pv.chart; t.columns = undefined; t.rows = undefined; t.value = undefined }
+    else if (isShortcut.value) { t.columns = pv.columns; t.rows = pv.rows; t.sql = cfg.sqlQuery; t.chart = undefined }
+    else if (isKpi.value) { t.value = pv.value; t.unit = pv.unit; t.chart = undefined; t.columns = undefined; t.rows = undefined }
     if (!isShortcut.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
     t.sharedAccess = cfg.sharedAccess
     props.d.updated = new Date().toISOString()
@@ -179,6 +182,11 @@ function save(place) {
           <!-- RIGHT: scrollable config (ServiceOps fields) -->
           <aside class="config">
             <div class="cfg-scroll">
+              <!-- predefined widget: only the chart type (above) + Highlights (below) can change -->
+              <div v-if="predefinedEdit" class="sec pe-note">
+                <Icon name="verified" :size="15" /> <span>This is a <b>predefined</b> widget — you can change its <b>chart type</b> (tabs above) and <b>Highlights</b> below.</span>
+              </div>
+              <template v-if="!predefinedEdit">
               <!-- Basic Details -->
               <div class="sec">
                 <div class="sec-h">{{ isShortcut ? 'Basic Shortcut Details' : 'Basic Widget Details' }}</div>
@@ -257,9 +265,10 @@ function save(place) {
                 <p class="hint">Add conditions to filter records. If none are set, all records are counted.</p>
                 <button class="add-line"><Icon name="plus" :size="14" /> Add Condition</button>
               </div>
+              </template>
 
-              <!-- Highlights -->
-              <div v-if="manualMode" class="sec">
+              <!-- Highlights (also the only editable section for a predefined widget) -->
+              <div v-if="manualMode || predefinedEdit" class="sec">
                 <div class="sec-h">Highlights</div>
                 <p class="hint">Color the value when it crosses a threshold.</p>
                 <button class="add-line"><Icon name="plus" :size="14" /> Add Highlights</button>
@@ -318,6 +327,8 @@ function save(place) {
 .config { width: 480px; flex: none; display: flex; flex-direction: column; min-height: 0; }
 .cfg-scroll { flex: 1; overflow: auto; padding: 18px 20px; }
 .sec { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.pe-note { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--primary-700); background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 9px; padding: 10px 12px; }
+.pe-note :deep(.ico) { flex: none; margin-top: 1px; }
 .sec:last-child { border-bottom: none; margin-bottom: 0; }
 .sec-h { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
