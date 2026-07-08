@@ -96,9 +96,13 @@ function onNewGroup() {
 const GSTYLES = [
   { id: 1, n: '①', label: 'Select', desc: 'Marquee-drag or Shift-click widgets, then Create group' },
   { id: 2, n: '②', label: 'Container', desc: 'Add an empty group from the toolbar, drag widgets in' },
-  { id: 3, n: '③', label: 'Inline', desc: 'Hover between groups for a "+ New group here" inserter' },
+  { id: 3, n: '③', label: 'Inline', desc: 'Hover a row gap for a "+ New group here" inserter' },
   { id: 4, n: '④', label: 'Add menu', desc: 'Create an Empty Group from the + (FAB) menu' },
   { id: 5, n: '⑤', label: 'Hybrid', desc: 'All of the above combined (recommended)' },
+  { id: 6, n: '⑥', label: 'Right-click', desc: 'B — Right-click a widget → New group / Add to group ▸' },
+  { id: 7, n: '⑦', label: 'Hover icon', desc: 'E — A group chip on each widget → New group / Add to group ▸' },
+  { id: 8, n: '⑧', label: 'Sections', desc: 'F — Typed section headings; drag widgets under them' },
+  { id: 9, n: '⑨', label: 'Auto-group', desc: 'G — Group automatically by Type or Source' },
 ]
 const gs = computed(() => store.ui.groupStyle)
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
@@ -141,7 +145,44 @@ watch(ugGridEl, (el) => { ugRO?.disconnect(); if (el) ugRO?.observe(el); nextTic
 onBeforeUnmount(() => ugRO?.disconnect())
 const gShowFabGroup = computed(() => gs.value === 4 || gs.value === 5)    // Empty Group in the FAB menu
 const gShowTip = computed(() => gs.value === 1 || gs.value === 5)         // "drag a box" hint
-const gShowEmptyGroupCta = computed(() => gs.value !== 1)                 // empty-state "or create a group"
+const gShowEmptyGroupCta = computed(() => [2, 3, 5, 8].includes(gs.value)) // empty-state "or create a group"
+const gRightClick = computed(() => gs.value === 6)   // B — right-click context menu
+const gHoverIcon = computed(() => gs.value === 7)    // E — per-widget hover chip
+const gSections = computed(() => gs.value === 8)     // F — section headings
+const gAutoBy = computed(() => gs.value === 9)       // G — auto-group by attribute
+
+// ---- B & E: a per-tile group menu (New group / Add to group ▸ / Remove) ----
+const tileMenu = ref({ open: false, tile: null, top: 0, left: 0 })
+function openTileMenu(t, e) {
+  e.preventDefault(); e.stopPropagation()
+  tileMenu.value = { open: true, tile: t, top: Math.min(e.clientY, window.innerHeight - 240), left: Math.min(e.clientX, window.innerWidth - 220) }
+}
+function closeTileMenu() { tileMenu.value = { ...tileMenu.value, open: false } }
+function onCellContext(t, e) { if (gRightClick.value) openTileMenu(t, e) }
+function tileNewGroup(t) {
+  if (!d.value.groups) d.value.groups = []
+  const g = { id: uid('g'), name: `New group ${d.value.groups.length + 1}`, collapsed: false }
+  d.value.groups.push(g); t.group = g.id
+  editingGroup.value = g.id
+  d.value.updated = new Date().toISOString(); dirty.value = true; closeTileMenu()
+  toast(`Grouped “${t.title}”`, 'success')
+}
+function tileToGroup(t, gid) { t.group = gid; d.value.updated = new Date().toISOString(); dirty.value = true; closeTileMenu(); toast(`Moved “${t.title}”`, 'success') }
+function tileUngroup(t) { t.group = null; d.value.updated = new Date().toISOString(); dirty.value = true; closeTileMenu() }
+
+// ---- G: auto-group by attribute (read-only derived view) ----
+const AUTO_ATTRS = {
+  type: (t) => ({ kpi: 'KPIs', chart: 'Widgets', shortcut: 'Shortcuts' }[t.type] || 'Other'),
+  source: (t) => ({ predefined: 'Predefined', user: 'User-defined', shared: 'Shared with me' }[t.prov || 'user']),
+}
+const autoBy = ref('none')
+const AUTO_OPTS = [{ value: 'none', label: 'None' }, { value: 'type', label: 'Type' }, { value: 'source', label: 'Source' }]
+const derivedGroups = computed(() => {
+  if (!gAutoBy.value || autoBy.value === 'none') return null
+  const fn = AUTO_ATTRS[autoBy.value], map = new Map()
+  d.value.tiles.forEach((t) => { const k = fn(t); if (!map.has(k)) map.set(k, []); map.get(k).push(t) })
+  return [...map.entries()].map(([name, tiles]) => ({ name, tiles }))
+})
 
 // ---- New group by direct MARQUEE drag (no CTA needed to start) ----
 // Press-drag anywhere on the board (past a small threshold) to rubber-band a box over
@@ -433,19 +474,42 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
       <!-- tiles (ungrouped + collapsible groups) — drag a box anywhere to marquee-select -->
       <div v-else class="board-groups" ref="gridEl" :class="{ selecting }" @mousedown="boardMouseDown">
-        <div v-if="gShowTip || gShowAddGroupBtn" class="bg-toolbar">
+        <div v-if="gShowTip || gShowAddGroupBtn || gRightClick || gHoverIcon || gAutoBy" class="bg-toolbar">
           <span v-if="gShowTip && tilesIn(null).length" class="bg-hint">Tip: drag a box (or Shift-click) across widgets to group them</span>
+          <span v-if="gRightClick" class="bg-hint">Right-click any widget → New group / Add to group</span>
+          <span v-if="gHoverIcon" class="bg-hint">Hover a widget and click its ⊞ chip → New group / Add to group</span>
+          <template v-if="gAutoBy">
+            <span class="bg-hint">Auto-group by</span>
+            <div class="auto-seg">
+              <button v-for="o in AUTO_OPTS" :key="o.value" class="auto-b" :class="{ on: autoBy === o.value }" @click="autoBy = o.value">{{ o.label }}</button>
+            </div>
+          </template>
           <button v-if="gShowAddGroupBtn" class="add-group" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> Add group</button>
         </div>
+
+        <!-- G: auto-grouped, read-only derived sections -->
+        <template v-if="gAutoBy && derivedGroups">
+          <section v-for="grp in derivedGroups" :key="grp.name" class="group as-section">
+            <header class="grp-head"><Icon name="template" :size="15" class="sec-ic" /><b class="grp-name">{{ grp.name }}</b><span class="grp-count">{{ grp.tiles.length }}</span></header>
+            <div class="grid" :style="gridStyle">
+              <div v-for="t in grp.tiles" :key="t.id" :data-tile="t.id" class="cell" :style="cellStyle(t)">
+                <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              </div>
+            </div>
+          </section>
+        </template>
+
+        <template v-else>
         <!-- ungrouped (inline style overlays a hover "+ New group here" inserter in each row gap) -->
         <div v-if="tilesIn(null).length" class="ug-wrap">
           <div class="grid" ref="ugGridEl" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
             @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
             <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
               :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
-              @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)">
+              @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
               <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
+              <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
           </div>
           <!-- inline: hover a row gap to reveal a "+ New group here" inserter -->
@@ -459,7 +523,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <!-- groups (each preceded by a hover-reveal "+ New group here" inserter) -->
         <template v-for="(g, gi) in (d.groups || [])" :key="g.id">
         <div v-if="gShowInserters" class="grp-insert" @click.stop="insertEmptyGroup(gi)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
-        <section class="group" :class="{ 'drop-into': dropGroup === g.id }"
+        <section class="group" :class="{ 'drop-into': dropGroup === g.id, 'as-section': gSections }"
           @dragover.prevent="dropGroup = g.id" @drop="onDropGroup(g.id)">
           <header class="grp-head">
             <button class="grp-toggle" @click="g.collapsed = !g.collapsed"><Icon :name="g.collapsed ? 'chevron-right' : 'chevron-down'" :size="16" /></button>
@@ -473,9 +537,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <div v-if="!g.collapsed" class="grid" :style="gridStyle">
             <div v-for="t in tilesIn(g.id)" :key="t.id" :data-tile="t.id" class="cell"
               :class="{ flash: highlightId === t.id, dragging: dragId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
-              @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)">
+              @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
               <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
+              <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
             <div v-if="!tilesIn(g.id).length" class="grp-empty">
               <p>No widgets yet — drag one here, or</p>
@@ -485,8 +550,30 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         </section>
         </template>
         <div v-if="gShowInserters && (d.groups || []).length" class="grp-insert" @click.stop="insertEmptyGroup((d.groups || []).length)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
+        <!-- F: a slim full-width "+ New section" bar (sections are typed headings) -->
+        <button v-if="gSections" class="new-section-bar" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> New section</button>
+        </template>
       </div>
     </div>
+
+    <!-- per-tile group menu (B: right-click · E: hover chip) -->
+    <teleport to="body">
+      <div v-if="tileMenu.open" class="backdrop" @click="closeTileMenu" />
+      <transition name="pop">
+        <div v-if="tileMenu.open" class="menu tile-grp-menu" :style="{ top: tileMenu.top + 'px', left: tileMenu.left + 'px' }" @click.stop>
+          <button class="menu-item" @click="tileNewGroup(tileMenu.tile)"><Icon name="new-group" :size="15" /> New group with this</button>
+          <template v-if="(d.groups || []).length">
+            <div class="menu-sep" />
+            <div class="menu-label">Add to group</div>
+            <button v-for="g in d.groups" :key="g.id" class="menu-item" @click="tileToGroup(tileMenu.tile, g.id)"><Icon name="folder" :size="15" /> {{ g.name }}</button>
+          </template>
+          <template v-if="tileMenu.tile && tileMenu.tile.group">
+            <div class="menu-sep" />
+            <button class="menu-item danger" @click="tileUngroup(tileMenu.tile)"><Icon name="ungroup" :size="15" /> Remove from group</button>
+          </template>
+        </div>
+      </transition>
+    </teleport>
 
     <!-- rubber-band selection rectangle (fixed to viewport) -->
     <teleport to="body">
@@ -626,6 +713,24 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .gsb-desc { font-size: 12px; color: var(--muted-2); margin-left: auto; }
 @media (max-width: 720px) { .gsb-desc { display: none; } }
 .bg-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+/* ⑨ auto-group: segmented "Group by" control */
+.auto-seg { display: inline-flex; gap: 3px; background: var(--surface-2); padding: 3px; border-radius: 8px; border: 1px solid var(--border); }
+.auto-b { border: none; background: transparent; padding: 4px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.auto-b.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); font-weight: 600; }
+/* ⑧ sections / ⑨ auto: render groups as borderless headings instead of boxed containers */
+.group.as-section { border: none; background: transparent; padding: 0; box-shadow: none; margin-bottom: 6px; }
+.group.as-section > .grp-head { border-bottom: 1.5px solid var(--border); border-radius: 0; padding: 4px 2px 8px; background: transparent; }
+.group.as-section .sec-ic { color: var(--primary); }
+.group.as-section > .grid { padding: 12px 0 4px; }
+.new-section-bar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; padding: 9px; border: 1px dashed var(--border-strong); background: transparent; border-radius: 9px; color: var(--primary-700); font-weight: 600; font-size: 12.5px; }
+.new-section-bar:hover { background: var(--primary-softer); border-color: var(--primary); }
+/* ⑦ per-widget group chip (hover-reveal, bottom-left, out of the header actions' way) */
+.cell-grp-chip { position: absolute; left: 10px; bottom: 8px; z-index: 7; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border: 1px solid var(--primary-soft); background: var(--surface); color: var(--primary-700); border-radius: 999px; font-size: 11.5px; font-weight: 600; box-shadow: var(--sh-sm); opacity: 0; transition: opacity .14s; }
+.cell:hover .cell-grp-chip { opacity: 1; }
+.cell-grp-chip:hover { background: var(--primary-softer); border-color: var(--primary); }
+/* ⑥/⑦ tile group menu */
+.tile-grp-menu { position: fixed; z-index: 140; min-width: 200px; max-height: 320px; overflow: auto; }
+.menu-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted-2); font-weight: 600; padding: 4px 10px 2px; }
 /* inline (③): hover-reveal "+ New group here" inserter in each ungrouped row gap */
 .ug-wrap { position: relative; }
 .row-insert { position: absolute; left: 0; right: 0; height: 16px; transform: translateY(-50%); display: flex; align-items: center; gap: 10px; cursor: pointer; opacity: 0; transition: opacity .14s; z-index: 8; }
