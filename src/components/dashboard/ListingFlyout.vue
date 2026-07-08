@@ -64,7 +64,8 @@ const LSTYLES = [
   { id: 4, n: '④', desc: '④ List ⇄ Table view toggle in the header' },
   { id: 5, n: '⑤', desc: '⑤ "See all N →" at each section end + list bottom' },
 ]
-const ls = computed(() => store.ui.listStyle)
+const showListDemo = false   // hidden for now — no manage-dashboard entry points shown
+const ls = computed(() => (showListDemo ? store.ui.listStyle : 0))
 const isCat = (name) => name !== 'My Favourite' && name !== 'Recently used'
 function openFull(query) { emit('close'); router.push(query ? { path: '/dashboards', query } : '/dashboards') }
 
@@ -104,8 +105,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       </div>
     </div>
 
-    <!-- DEMO switcher: pick which "open full list" entry point to preview -->
-    <div class="lstyle-bar">
+    <!-- DEMO switcher: pick which "open full list" entry point to preview (hidden for now) -->
+    <div v-if="showListDemo" class="lstyle-bar">
       <span class="ls-label">Open-full demo</span>
       <div class="ls-seg">
         <button v-for="s in LSTYLES" :key="s.id" class="ls-b" :class="{ on: ls === s.id }" :title="s.desc" @click="store.ui.listStyle = s.id">{{ s.n }}</button>
