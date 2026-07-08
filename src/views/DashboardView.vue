@@ -102,8 +102,9 @@ const GSTYLES = [
 ]
 const gs = computed(() => store.ui.groupStyle)
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
-const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 3 || gs.value === 5)
-const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here"
+const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
+const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here" between groups
+const gShowTopPill = computed(() => gs.value === 3)                       // inline: compact first-group pill above widgets
 const gShowFabGroup = computed(() => gs.value === 4 || gs.value === 5)    // Empty Group in the FAB menu
 const gShowTip = computed(() => gs.value === 1 || gs.value === 5)         // "drag a box" hint
 const gShowEmptyGroupCta = computed(() => gs.value !== 1)                 // empty-state "or create a group"
@@ -398,9 +399,15 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
       <!-- tiles (ungrouped + collapsible groups) — drag a box anywhere to marquee-select -->
       <div v-else class="board-groups" ref="gridEl" :class="{ selecting }" @mousedown="boardMouseDown">
-        <div class="bg-toolbar">
+        <div v-if="gShowTip || gShowAddGroupBtn" class="bg-toolbar">
           <span v-if="gShowTip && tilesIn(null).length" class="bg-hint">Tip: drag a box (or Shift-click) across widgets to group them</span>
           <button v-if="gShowAddGroupBtn" class="add-group" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> Add group</button>
+        </div>
+        <!-- inline style: compact first-group pill above the widgets (the between-group
+             inserters only appear once a group exists, so this seeds the first one) -->
+        <div v-if="gShowTopPill" class="top-pill-row">
+          <button class="new-group-pill" @click="addEmptyGroup"><Icon name="new-group" :size="14" /> New group</button>
+          <span v-if="!(d.groups || []).length" class="tpr-hint">Create a group, then drag widgets into it</span>
         </div>
         <!-- ungrouped -->
         <div v-if="tilesIn(null).length" class="grid" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
@@ -583,6 +590,11 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .gsb-desc { font-size: 12px; color: var(--muted-2); margin-left: auto; }
 @media (max-width: 720px) { .gsb-desc { display: none; } }
 .bg-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+/* inline (③): compact, always-visible first-group pill (replaces the space-heavy button) */
+.top-pill-row { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+.new-group-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; border: 1px dashed var(--primary-soft); background: var(--primary-softer); color: var(--primary-700); border-radius: 999px; font-weight: 600; font-size: 12.5px; }
+.new-group-pill:hover { background: var(--primary-soft); border-color: var(--primary); border-style: solid; }
+.tpr-hint { font-size: 12px; color: var(--muted-2); }
 .bg-hint { margin-right: auto; font-size: 12px; color: var(--muted-2); }
 /* hover-reveal "+ New group here" between group sections */
 .grp-insert { display: flex; align-items: center; gap: 10px; height: 14px; margin: 2px 0; cursor: pointer; opacity: 0; transition: opacity .14s; }
