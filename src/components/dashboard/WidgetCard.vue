@@ -99,6 +99,7 @@ function retry() { loading.value = true; setTimeout(() => { props.tile.state = u
 
 function download(fmt) { menu.value = false; exportOpen.value = false; toast(`Exporting “${props.tile.title}” as ${fmt}`) }
 function duplicate() { menu.value = false; emit('duplicate', props.tile) }
+function shareWidget() { navigator.clipboard?.writeText(`${location.origin}${location.pathname}${location.hash}#tile=${props.tile.id}`).catch(() => {}); toast(`Share link for “${props.tile.title}” copied`) }
 </script>
 
 <template>
@@ -153,6 +154,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
           <button v-if="tiny && canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
+          <button class="menu-item" @click="menu = false; shareWidget()"><Icon name="share" :size="15" /> Share widget</button>
           <button v-if="tile.type === 'chart'" class="menu-item" @click="showLegend = !showLegend"><Icon name="list" :size="15" /> {{ showLegend ? 'Hide legend' : 'Show legend' }}</button>
           <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->
           <div class="menu-item sub" @mouseenter="exportOpen = true" @mouseleave="exportOpen = false">
@@ -228,7 +230,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
         <div class="present">
           <div class="phead"><b>{{ tile.title }}</b><button class="btn btn-icon" @click="present = false"><Icon name="x" :size="18" /></button></div>
           <div class="pbody">
-            <MiniChart v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="420" />
+            <MiniChart v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="620" />
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
             <div v-else class="stbl big"><table><thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in tile.rows" :key="i"><td v-for="(c,j) in r" :key="j"><span v-if="pillClass(c)" :class="pillClass(c)">{{ c }}</span><template v-else>{{ c }}</template></td></tr></tbody></table></div>
           </div>
@@ -316,9 +318,11 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .pill-p3 { background: var(--blue-soft); color: var(--blue); }
 .pill-p4 { background: var(--surface-2); color: var(--muted); }
 .viewall { display: inline-flex; align-items: center; gap: 3px; margin-top: 6px; color: var(--primary-700); font-weight: 600; font-size: 12px; cursor: pointer; }
-.present { background: #fff; border-radius: var(--r-xl); width: min(880px, 92vw); box-shadow: var(--sh-lg); overflow: hidden; }
-.phead { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); font-size: 15px; }
-.pbody { padding: 24px; }
-.kpi.big .kpinum { font-size: 88px; } .stbl.big table { font-size: 14px; }
+.present { background: #fff; border-radius: var(--r-xl); width: min(1200px, 95vw); max-height: 90vh; display: flex; flex-direction: column; box-shadow: var(--sh-lg); overflow: hidden; }
+.phead { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px; border-bottom: 1px solid var(--border); font-size: 16px; flex: none; }
+.pbody { padding: 32px 40px; flex: 1; min-height: 62vh; display: grid; place-items: center; overflow: auto; }
+.pbody > * { width: 100%; }
+.kpi.big { padding: 0; } .kpi.big .kpinum { font-size: 150px; } .kpi.big .kpinum .unit { font-size: 48px; }
+.stbl.big { align-self: start; } .stbl.big table { font-size: 15px; }
 .ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
