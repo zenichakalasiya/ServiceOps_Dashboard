@@ -3,8 +3,9 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import Icon from '../ui/Icon.vue'
 import MiniChart from './MiniChart.vue'
 import { toast } from '../../store/index.js'
-const props = defineProps({ tile: Object, edit: Boolean })
-const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin'])
+const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
+const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin', 'select'])
+function onCardClick() { if (props.tile.sel) emit('select', props.tile) }
 
 // classify a table cell into a soft status/priority pill
 function pillClass(v) {
@@ -101,7 +102,17 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 </script>
 
 <template>
-  <div ref="cardEl" class="tile card" :class="{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen }">
+  <div ref="cardEl" class="tile card" :class="{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen, selectable: tile.sel, 'is-selected': tile.sel && selected }" @click="onCardClick">
+    <!-- selectable tiles: floating action toolbar shown only when selected -->
+    <div v-if="tile.sel && selected" class="sel-bar" @click.stop>
+      <span class="sb-size">{{ tile.w || 3 }} × {{ tile.h || 1 }}</span>
+      <span class="sb-sep" />
+      <button class="sb-b" title="Drag to move" @mousedown.stop="emit('armdrag', tile)"><Icon name="drag" :size="16" /></button>
+      <button class="sb-b" title="Full screen" @click.stop="present = true"><Icon name="maximize-tile" :size="16" /></button>
+      <button class="sb-b" title="Duplicate" @click.stop="emit('duplicate', tile)"><Icon name="copy" :size="16" /></button>
+      <button v-if="canEdit" class="sb-b" title="Edit" @click.stop="emit('edit', tile)"><Icon name="edit" :size="16" /></button>
+      <button ref="menuBtn" class="sb-b" title="More" @click.stop="toggleMenu"><Icon name="dots-v" :size="16" /></button>
+    </div>
     <!-- Standardized header: title + info (left) · refresh · fullscreen · edit · ⋯ (right) -->
     <header class="thead">
       <div class="left">
@@ -112,7 +123,7 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
           <Icon name="info" :size="14" />
         </span>
       </div>
-      <div class="right">
+      <div v-if="!tile.sel" class="right">
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
         <button v-if="!compact" class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
@@ -229,6 +240,14 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 
 <style scoped>
 .tile { display: flex; flex-direction: column; overflow: hidden; min-height: 130px; }
+/* selectable tiles: click to select → blue ring + floating action toolbar */
+.tile.selectable { cursor: pointer; }
+.tile.is-selected { outline: 2px solid var(--primary); outline-offset: -1px; box-shadow: 0 0 0 4px var(--primary-soft); border-radius: var(--r-lg); overflow: visible; }
+.sel-bar { position: absolute; top: -42px; left: 0; display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--sh-pop); z-index: 30; }
+.sb-size { font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 0 6px; }
+.sb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+.sb-b { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
+.sb-b:hover { background: var(--surface-2); color: var(--ink); }
 .thead { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 2px 12px; gap: 8px; }
 .left { display: flex; align-items: center; gap: 6px; min-width: 0; }
 /* 6-dot drag handle — appears on hover, before the title */

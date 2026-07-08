@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import ShareDialog from './ShareDialog.vue'
-import { store, live, archived, recents, toggleFavorite, archiveDashboard, restoreDashboard, markDefault, recordView } from '../../store/index.js'
+import { store, live, recents, toggleFavorite, archiveDashboard, markDefault, recordView } from '../../store/index.js'
 import { ACCESS } from '../../data/mock.js'
 const route = useRoute()
 const router = useRouter()
@@ -58,7 +58,6 @@ function del(d) { archiveDashboard(d) }
 
 function openFull() { emit('close'); router.push('/dashboards') }
 function newDashboard() { store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true }
-function restore(d) { restoreDashboard(d) }
 
 // ---- per-row actions menu (Edit · Clone · Mark as default · Share · Archive) ----
 const menuId = ref(null)
@@ -90,28 +89,12 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <button class="t2" :class="{ on: tab === 'all' }" @click="tab = 'all'">All</button>
       <button class="t2" :class="{ on: tab === 'mine' }" @click="tab = 'mine'">Created by me</button>
       <button class="t2" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
-      <button class="t2" :class="{ on: tab === 'archive' }" @click="tab = 'archive'">Archive</button>
     </div>
 
     <div class="fsearch"><Icon name="search" :size="15" class="muted" /><input v-model="store.ui.listingQuery" placeholder="Search dashboards…" /></div>
 
     <div class="glist">
-      <!-- Archive tab: soft-deleted dashboards (restore) -->
-      <template v-if="tab === 'archive'">
-        <div v-if="archived.length" class="items">
-          <div v-for="d in archived" :key="d.id" class="item">
-            <Icon name="archive" :size="13" class="lk arch" />
-            <span class="iname ellip">{{ d.name }}</span>
-            <span class="hov">
-              <button class="hb" title="Restore" @click.stop="restore(d)"><Icon name="restore" :size="14" /></button>
-            </span>
-          </div>
-        </div>
-        <div v-else class="none">Nothing archived.</div>
-      </template>
-      <!-- normal tabs: grouped listing -->
-      <template v-else>
-        <section v-for="grp in groups" :key="grp.name" class="grp">
+      <section v-for="grp in groups" :key="grp.name" class="grp">
           <button class="grp-head" @click="toggleGroup(grp.name)">
             <Icon :name="open.has(grp.name) ? 'chevron-down' : 'chevron-right'" :size="14" />
             <span class="gname">{{ grp.name }}</span>
@@ -129,14 +112,16 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
             </div>
           </div>
         </section>
-        <div v-if="!groups.length" class="none">No dashboards match.</div>
-      </template>
+      <div v-if="!groups.length" class="none">No dashboards match.</div>
     </div>
 
-    <!-- footer: New dashboard CTA + Manage all dashboards -->
+    <!-- footer: New dashboard CTA · Manage all dashboards + Archive icon -->
     <div class="ffoot">
       <button class="new-dash-btn" @click="newDashboard"><Icon name="plus" :size="15" /> New dashboard</button>
-      <button class="manage-link" @click="openFull()"><Icon name="rows" :size="15" /> Manage all dashboards <Icon name="chevron-right" :size="14" class="ml-arrow" /></button>
+      <div class="ffoot-row">
+        <button class="manage-link" @click="openFull()"><Icon name="rows" :size="15" /> Manage all dashboards <Icon name="chevron-right" :size="14" class="ml-arrow" /></button>
+        <button class="arch-ic" title="Archive" @click="emit('close'); router.push('/archive')"><Icon name="archive" :size="16" /></button>
+      </div>
     </div>
 
     <!-- per-row actions menu (teleported so it overlays instead of being clipped) -->
@@ -165,13 +150,16 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
 .row { display: flex; align-items: center; } .gap-6 { gap: 6px; }
-/* footer: outlined New dashboard CTA + Manage all dashboards */
-.ffoot { border-top: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+/* footer: outlined New dashboard CTA · Manage all dashboards + Archive icon */
+.ffoot { border-top: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
 .new-dash-btn { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; height: 38px; border: 1px solid var(--primary); background: transparent; color: var(--primary-700); font-weight: 600; font-size: 13px; border-radius: 8px; }
 .new-dash-btn:hover { background: var(--primary-softer); }
-.manage-link { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: none; background: transparent; color: var(--ink-2); font-weight: 600; font-size: 13px; border-radius: 8px; }
+.ffoot-row { display: flex; align-items: center; gap: 6px; }
+.manage-link { flex: 1; display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: none; background: transparent; color: var(--ink-2); font-weight: 600; font-size: 13px; border-radius: 8px; }
 .manage-link:hover { background: var(--surface-2); color: var(--ink); }
 .manage-link .ml-arrow { margin-left: auto; color: var(--muted); }
+.arch-ic { flex: none; width: 36px; height: 36px; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
+.arch-ic:hover { background: var(--surface-2); color: var(--ink); }
 /* inline underline tabs (matches the Add-Widget side popup) */
 .tabs2 { display: flex; gap: 0; padding: 0 12px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .t2 { border: none; background: transparent; padding: 9px 2px; margin-right: 14px; color: var(--muted); font-weight: 500; font-size: 12.5px; border-bottom: 2px solid transparent; }

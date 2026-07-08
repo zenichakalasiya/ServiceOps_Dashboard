@@ -345,6 +345,7 @@ function onWidgetCreated(id) {
 // param changes, so onMounted alone wouldn't fire for a freshly-created board.
 function loadBoard() {
   loadingBoard.value = true
+  selTileId.value = null
   recordView(d.value)
   setTimeout(() => {
     loadingBoard.value = false
@@ -358,6 +359,52 @@ function loadBoard() {
 }
 onMounted(loadBoard)
 watch(() => route.params.id, loadBoard)
+
+// ---- Undo / Redo (dashboard tiles + groups history) ----
+const undoStack = ref([])
+const redoStack = ref([])
+let applyingHistory = false, lastBoardId = null
+const boardSnap = () => JSON.stringify({ tiles: d.value?.tiles || [], groups: d.value?.groups || [] })
+watch(boardSnap, (val, oldVal) => {
+  if (applyingHistory) return
+  // immediate:true → first call (setup) and any dashboard switch just (re)binds this board's history
+  if (d.value?.id !== lastBoardId) { lastBoardId = d.value?.id; undoStack.value = []; redoStack.value = []; return }
+  undoStack.value.push(oldVal)
+  if (undoStack.value.length > 60) undoStack.value.shift()
+  redoStack.value = []
+}, { immediate: true })
+const canUndo = computed(() => undoStack.value.length > 0)
+const canRedo = computed(() => redoStack.value.length > 0)
+function applySnap(json) {
+  const s = JSON.parse(json)
+  applyingHistory = true
+  d.value.tiles = s.tiles; d.value.groups = s.groups
+  d.value.updated = new Date().toISOString(); dirty.value = true
+  nextTick(() => { applyingHistory = false })
+}
+function undo() { if (!canUndo.value) return; redoStack.value.push(boardSnap()); applySnap(undoStack.value.pop()); toast('Undo') }
+function redo() { if (!canRedo.value) return; undoStack.value.push(boardSnap()); applySnap(redoStack.value.pop()); toast('Redo') }
+function onKey(e) {
+  const t = e.target
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  if (e.ctrlKey && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); undo() }
+  else if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo() }
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+// ---- selectable tiles: click to select → floating action toolbar; click-away deselects ----
+const selTileId = ref(null)
+function onSelectTile(t) { selTileId.value = t.id }
+function onDocDown(e) {
+  if (e.target.closest('.cell.selected') || e.target.closest('.sel-bar') || e.target.closest('.tile-menu')) return
+  selTileId.value = null
+}
+watch(selTileId, (id) => {
+  if (id) setTimeout(() => document.addEventListener('mousedown', onDocDown), 0)
+  else document.removeEventListener('mousedown', onDocDown)
+})
+onBeforeUnmount(() => document.removeEventListener('mousedown', onDocDown))
 
 function onRemove(t) { removeTile(d.value, t); dirty.value = true }
 // Open the builder pre-filled with this tile, in edit mode (with live preview).
@@ -432,6 +479,11 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         </div>
       </div>
       <div class="bh-right">
+        <div class="udr">
+          <button class="udr-b" :disabled="!canUndo" @click="undo"><Icon name="undo" :size="17" /><span class="udr-tip">Undo <kbd>Ctrl + Z</kbd></span></button>
+          <button class="udr-b" :disabled="!canRedo" @click="redo"><Icon name="redo" :size="17" /><span class="udr-tip">Redo <kbd>Ctrl + Y</kbd></span></button>
+        </div>
+        <span class="vsep" />
         <TimeFilter />
         <AutoRefresh />
         <span class="vsep" />
@@ -524,9 +576,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <div class="grid" ref="ugGridEl" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
             @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
             <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
-              :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
+              :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id), selected: selTileId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
-              <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              <WidgetCard :tile="t" :edit="edit" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
@@ -555,9 +607,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           </header>
           <div v-if="!g.collapsed" class="grid" :style="gridStyle">
             <div v-for="t in tilesIn(g.id)" :key="t.id" :data-tile="t.id" class="cell"
-              :class="{ flash: highlightId === t.id, dragging: dragId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
+              :class="{ flash: highlightId === t.id, dragging: dragId === t.id, selected: selTileId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
-              <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              <WidgetCard :tile="t" :edit="edit" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
@@ -678,6 +730,14 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .titles { min-width: 0; }
 .t-row h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }
 .vsep { width: 1px; height: 24px; background: var(--border); margin: 0 2px; }
+/* undo / redo with instant hover tooltip */
+.udr { display: inline-flex; gap: 2px; }
+.udr-b { position: relative; width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); border-radius: 8px; display: grid; place-items: center; }
+.udr-b:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.udr-b:disabled { color: var(--muted-2); opacity: .5; cursor: not-allowed; }
+.udr-tip { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #20223a; color: #fff; font-size: 11.5px; white-space: nowrap; padding: 5px 9px; border-radius: 7px; display: none; align-items: center; gap: 6px; z-index: 60; box-shadow: var(--sh-pop); }
+.udr-b:hover .udr-tip { display: inline-flex; }
+.udr-tip kbd { font-family: inherit; font-size: 10.5px; background: rgba(255,255,255,.16); border-radius: 4px; padding: 1px 5px; }
 .btn.ico-only { width: 38px; padding: 0; justify-content: center; }
 .btn.ico-only.on { background: var(--primary-soft); color: var(--primary-700); border-color: transparent; }
 .pop-wrap { position: relative; }
@@ -703,8 +763,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 /* bottom-right resize grip (two diagonal lines), revealed on hover */
 .resize { position: absolute; right: 3px; bottom: 3px; width: 17px; height: 17px; z-index: 6; cursor: nwse-resize; opacity: 0; transition: opacity .14s; border-radius: 0 0 6px 0;
   background: linear-gradient(135deg, transparent 0 42%, var(--muted) 42% 52%, transparent 52% 66%, var(--muted) 66% 76%, transparent 76%); }
-.cell:hover .resize { opacity: .9; }
+.cell:hover .resize, .cell.selected .resize { opacity: .9; }
 .resize:hover { opacity: 1; }
+.cell.selected { overflow: visible; }
 /* staggered widget reveal after the loading skeleton */
 .revealing .cell { animation: cellReveal .5s cubic-bezier(.2,.8,.2,1) backwards; }
 .revealing .cell:nth-child(2) { animation-delay: .05s; }
