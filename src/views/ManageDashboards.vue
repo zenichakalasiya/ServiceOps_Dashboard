@@ -5,7 +5,7 @@ import Icon from '../components/ui/Icon.vue'
 import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
 import HistoryDialog from '../components/dashboard/HistoryDialog.vue'
 import { store, manageable, archived, archiveDashboard, restoreDashboard, deleteForever, recordView,
-  togglePublished, moveDashboardsToCategory, archiveMany, markDefault } from '../store/index.js'
+  togglePublished, moveDashboardsToCategory, archiveMany, markDefault, toggleFavorite } from '../store/index.js'
 import { ACCESS } from '../data/mock.js'
 const route = useRoute()
 const router = useRouter()
@@ -154,7 +154,9 @@ function onDrop(target) {
             <td class="nm">
               <Icon v-if="!isArchive" name="drag" :size="15" class="drag" />
               <b class="nm-t ellip" @click="open(d)">{{ d.name }}</b>
-              <span v-if="d.default" class="def-pill"><Icon name="default-home" :size="11" /> Default</span>
+              <!-- favourite + default are independent → shown together when both apply -->
+              <button v-if="!isArchive" class="nm-ic fav" :class="{ on: d.favorite }" :title="d.favorite ? 'Favourite' : 'Add to favourites'" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="14" /></button>
+              <Icon v-if="d.default" name="default-home" :size="15" class="nm-ic def" title="Default dashboard" />
             </td>
             <td v-if="col('category')"><span v-if="d.category" class="cat-pill">{{ d.category }}</span><span v-else class="muted">—</span></td>
             <td v-if="col('tech')" class="techcell">
@@ -243,7 +245,13 @@ function onDrop(target) {
 .nm { display: flex; align-items: center; gap: 8px; min-width: 220px; }
 .drag { color: var(--muted-2); cursor: grab; flex: none; }
 .nm-t { cursor: pointer; } .nm-t:hover { color: var(--primary-700); }
-.def-pill { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--primary-700); background: var(--primary-soft); border-radius: 4px; padding: 1px 6px; flex: none; }
+/* favourite (star) + default (home) indicators, side by side */
+.nm-ic { flex: none; display: inline-grid; place-items: center; }
+.nm-ic.def { color: var(--primary); }
+.nm-ic.fav { border: none; background: transparent; color: var(--muted-2); border-radius: 5px; opacity: 0; transition: opacity .12s; padding: 2px; }
+.nm:hover .nm-ic.fav, .nm-ic.fav.on { opacity: 1; }
+.nm-ic.fav.on { color: #f5a623; }
+.nm-ic.fav:hover { background: var(--surface); }
 .cat-pill { font-size: 12px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; }
 /* minimal technician pills (task 7): 6px radius, subtle color, 1 + N */
 .techcell { position: relative; white-space: nowrap; }
