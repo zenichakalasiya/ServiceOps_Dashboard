@@ -101,7 +101,7 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
         </div>
         <!-- ① header open-full icon -->
         <button v-if="ls === 1" class="ic" title="Open full list" @click="openFull()"><Icon name="maximize-tile" :size="16" /></button>
-        <button class="addbtn" title="Create dashboard" @click="store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true"><Icon name="plus" :size="15" /></button>
+        <button class="addbtn" title="Create dashboard" @click="store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true"><Icon name="plus" :size="15" /> Dashboard</button>
       </div>
     </div>
 
@@ -181,8 +181,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .ftitle { font-weight: 700; font-size: 15px; }
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
-/* small filled circular add — same treatment as the widget Add (FAB) button */
-.addbtn { width: 26px; height: 26px; border: none; background: var(--primary); color: #fff; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 2px 6px rgba(61,139,208,.35); transition: background .15s, transform .1s; }
+/* filled pill add-button — "+ Dashboard" */
+.addbtn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px 0 9px; border: none; background: var(--primary); color: #fff; border-radius: 999px; font-weight: 600; font-size: 12.5px; white-space: nowrap; box-shadow: 0 2px 6px rgba(61,139,208,.35); transition: background .15s, transform .1s; }
 .addbtn:hover { background: var(--primary-600); transform: translateY(-1px); }
 .addbtn:active { transform: translateY(0); }
 .row { display: flex; align-items: center; } .gap-6 { gap: 6px; }
