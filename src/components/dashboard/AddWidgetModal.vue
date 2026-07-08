@@ -185,21 +185,22 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
       <div class="aw-body">
         <!-- CHART TYPE: category card grid → opens centered builder -->
         <template v-if="tab === 'chart'">
-          <section class="cat">
-            <div class="cat-h">Layout</div>
-            <div class="cards">
-              <button class="tc tc-group" @click="emit('newgroup')">
-                <div class="tc-ico"><Icon name="new-group" :size="40" /></div>
-                <span class="tc-label">Empty Group</span>
-              </button>
-            </div>
-          </section>
           <section v-for="g in filteredGroups" :key="g.cat" class="cat">
             <div class="cat-h">{{ g.cat }}</div>
             <div class="cards">
               <button v-for="t in g.types" :key="t.id" class="tc" @click="builder = t">
                 <div class="tc-ico" :class="{ rot90: t.id === 'bar' }"><Icon :name="t.icon" :size="40" /></div>
                 <span class="tc-label">{{ t.label }}</span>
+              </button>
+            </div>
+          </section>
+          <!-- Empty Group is the last option (charts come first) -->
+          <section class="cat">
+            <div class="cat-h">Layout</div>
+            <div class="cards">
+              <button class="tc tc-group" @click="emit('newgroup')">
+                <div class="tc-ico"><Icon name="new-group" :size="40" /></div>
+                <span class="tc-label">Empty Group</span>
               </button>
             </div>
           </section>

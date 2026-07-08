@@ -104,6 +104,7 @@ const GSTYLES = [
   { id: 8, n: '⑧', label: 'Sections', desc: 'F — Typed section headings; drag widgets under them' },
   { id: 9, n: '⑨', label: 'Auto-group', desc: 'G — Group automatically by Type or Source' },
 ]
+const showGroupDemo = false   // demo switcher hidden; default grouping is ① Select
 const gs = computed(() => store.ui.groupStyle)
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
 const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
@@ -242,7 +243,7 @@ function mqMove(e) {
   marquee.value = { active: true, l, t, w, h }
   const box = { left: l, top: t, right: l + w, bottom: t + h }
   const s = new Set()
-  gridEl.value?.querySelectorAll(':scope > .grid [data-tile]').forEach((el) => {
+  gridEl.value?.querySelectorAll('.ug-wrap [data-tile]').forEach((el) => {
     const r = el.getBoundingClientRect()
     if (!(r.right < box.left || r.left > box.right || r.bottom < box.top || r.top > box.bottom)) s.add(el.getAttribute('data-tile'))
   })
@@ -441,8 +442,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
     <!-- Body -->
     <div class="bbody">
-      <!-- DEMO: switch between the 5 grouping designs to compare them live -->
-      <div v-if="!loadingBoard" class="gstyle-bar">
+      <!-- DEMO: switch between the 5 grouping designs to compare them live (hidden — default is ① Select) -->
+      <div v-if="showGroupDemo && !loadingBoard" class="gstyle-bar">
         <span class="gsb-label"><Icon name="template" :size="14" /> Grouping demo</span>
         <div class="gsb-seg">
           <button v-for="s in GSTYLES" :key="s.id" class="gsb-b" :class="{ on: gs === s.id }" :title="s.desc" @click="store.ui.groupStyle = s.id">
@@ -663,7 +664,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .pop-wrap { position: relative; }
 .editbar { display: flex; align-items: center; gap: 9px; padding: 9px 24px; background: var(--primary-softer); border-bottom: 1px solid var(--primary-soft); color: var(--primary-700); font-size: 13px; }
 .unsaved { color: var(--amber); font-weight: 600; font-size: 12px; }
-.bbody { flex: 1; padding: 18px 24px 28px; }
+.bbody { flex: 1; padding: 16px 24px 28px; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; align-items: start; }
 .cell { position: relative; border-radius: var(--r-lg); display: flex; flex-direction: column; }
 /* minimal highlight on a just-added widget */
