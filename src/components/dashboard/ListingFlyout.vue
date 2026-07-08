@@ -144,7 +144,7 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 </template>
 
 <style scoped>
-.flyout { width: 264px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; }
+.flyout { width: 300px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; }
 .fhead { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; }
 .ftitle { font-weight: 600; font-size: 15px; }
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
@@ -162,7 +162,7 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .arch-ic:hover { background: var(--surface-2); color: var(--ink); }
 /* inline underline tabs (matches the Add-Widget side popup) */
 .tabs2 { display: flex; gap: 0; padding: 0 12px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
-.t2 { border: none; background: transparent; padding: 9px 2px; margin-right: 13px; color: var(--muted); font-weight: 500; font-size: 12.5px; border-bottom: 2px solid transparent; }
+.t2 { border: none; background: transparent; padding: 9px 2px; margin-right: 14px; color: var(--muted); font-weight: 500; font-size: 12.5px; border-bottom: 2px solid transparent; white-space: nowrap; flex: none; }
 .t2:last-child { margin-right: 0; }
 .t2:hover { color: var(--ink); }
 .t2.on { color: var(--primary-700); border-bottom-color: var(--primary); }

@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import WidgetBuilderModal from './WidgetBuilderModal.vue'
-import { store, addTilesToDashboard, deleteLibTile, restoreLibTile, removeLibTileForever, toast } from '../../store/index.js'
+import { store, addTilesToDashboard, deleteLibTile, restoreLibTile, removeLibTileForever, libUsage, removeTileFromDashboard, toast } from '../../store/index.js'
 import { uid } from '../../data/mock.js'
 const props = defineProps({ d: Object, group: { type: String, default: null } })
 const emit = defineEmits(['close', 'created', 'newgroup'])
@@ -33,7 +33,9 @@ const filteredGroups = computed(() => GROUPS.map((g) => ({
 
 // ---- Reuse tabs: listing with actions ----
 const provMap = { predefined: 'predefined', user: 'user', shared: 'shared' }
-const moduleOptions = computed(() => [{ value: '', label: 'All modules' }, ...store.modules.map((m) => ({ value: m, label: m }))])
+// widget count per module (task 4) — how many library tiles each module has
+const moduleCount = (m) => store.library.filter((l) => l.module === m && !l.trashed).length
+const moduleOptions = computed(() => [{ value: '', label: `All modules (${store.library.filter((l) => !l.trashed).length})` }, ...store.modules.map((m) => ({ value: m, label: `${m} (${moduleCount(m)})` }))])
 const isTrash = computed(() => tab.value === 'trash')
 const trashCount = computed(() => store.library.filter((l) => l.trashed).length)
 const list = computed(() => {
@@ -134,6 +136,10 @@ function canDelete() { return tab.value === 'user' }
 function hasActions(l) { return canDuplicate(l) || canEdit(l) || canDelete(l) }
 
 const TYPE_LABEL = { kpi: 'KPI', chart: 'Widget', shortcut: 'Shortcut' }
+// task 5: which dashboards use this widget/KPI/shortcut → count + removable list
+const usageOpen = ref(null)
+function usageOf(l) { return libUsage(l) }
+function removeFromDash(l, dash) { removeTileFromDashboard(dash, l); if (!usageOf(l).length) usageOpen.value = null }
 // short description shown in a left-pointing tooltip on hover of each library row
 function libDesc(l) {
   const kind = l.type === 'kpi' ? 'A headline KPI number' : l.type === 'shortcut' ? 'A record list / table' : 'A chart widget'
@@ -226,7 +232,15 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
               <span v-else class="trash-ic"><Icon name="trash" :size="15" /></span>
               <div class="lt-main">
                 <div class="lt-name-row"><span class="lt-name ellip">{{ l.title }}</span><span v-if="isPlaced(l)" class="placed-tag"><Icon name="check" :size="11" /> On dashboard</span></div>
-                <div class="lt-meta">{{ TYPE_LABEL[l.type] }} · {{ l.module }}</div>
+                <div class="lt-meta">
+                  {{ TYPE_LABEL[l.type] }} · {{ l.module }}
+                  <button v-if="!isTrash && usageOf(l).length" class="usage-btn" @click.stop="usageOpen = usageOpen === l.id ? null : l.id">· in {{ usageOf(l).length }} dashboard{{ usageOf(l).length > 1 ? 's' : '' }}</button>
+                  <div v-if="usageOpen === l.id" class="usage-back" @click.stop="usageOpen = null" />
+                  <div v-if="usageOpen === l.id" class="usage-pop" @click.stop>
+                    <div class="up-h">Placed on</div>
+                    <div v-for="dash in usageOf(l)" :key="dash.id" class="up-row"><span class="ellip">{{ dash.name }}</span><button class="up-rm" title="Remove from this dashboard" @click="removeFromDash(l, dash)"><Icon name="trash" :size="13" /></button></div>
+                  </div>
+                </div>
               </div>
               <!-- Trash: Restore + Delete forever · other tabs: Duplicate / Edit / Delete -->
               <div v-if="isTrash" class="lt-acts always">
@@ -328,7 +342,16 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .lcb { width: 16px; height: 16px; accent-color: var(--primary); flex: none; cursor: pointer; margin: 0; }
 .lt-main { flex: 1; min-width: 0; }
 .lt-name-row { display: flex; align-items: center; gap: 7px; } .lt-name { font-weight: 500; font-size: 13.5px; }
-.lt-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.lt-meta { position: relative; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.usage-btn { border: none; background: transparent; color: var(--primary-700); font-size: 11.5px; font-weight: 600; padding: 0 2px; cursor: pointer; }
+.usage-btn:hover { text-decoration: underline; }
+.usage-back { position: fixed; inset: 0; z-index: 8; }
+.usage-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 9; min-width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--sh-pop); padding: 8px; }
+.up-h { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted-2); font-weight: 700; padding: 2px 6px 6px; }
+.up-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; color: var(--ink-2); }
+.up-row:hover { background: var(--surface-2); }
+.up-rm { width: 26px; height: 26px; border: none; background: transparent; color: var(--muted); border-radius: 6px; display: grid; place-items: center; flex: none; }
+.up-rm:hover { color: var(--red); background: var(--red-soft); }
 /* left-pointing description tooltip (teleported, fixed to viewport) */
 .lib-tip { position: fixed; z-index: 200; transform: translateY(-50%); width: 232px; background: #20223a; color: #fff; font-size: 11.5px; line-height: 1.45; padding: 8px 11px; border-radius: 8px; box-shadow: var(--sh-pop); pointer-events: none; text-align: left; }
 .lib-tip-arrow { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 6px solid transparent; border-left-color: #20223a; }

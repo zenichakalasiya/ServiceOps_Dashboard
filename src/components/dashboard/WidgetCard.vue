@@ -100,6 +100,10 @@ function retry() { loading.value = true; setTimeout(() => { props.tile.state = u
 function download(fmt) { menu.value = false; exportOpen.value = false; toast(`Exporting “${props.tile.title}” as ${fmt}`) }
 function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 function shareWidget() { navigator.clipboard?.writeText(`${location.origin}${location.pathname}${location.hash}#tile=${props.tile.id}`).catch(() => {}); toast(`Share link for “${props.tile.title}” copied`) }
+// task 12: record IDs in a shortcut table are explorable → jump to their module record
+const ID_MODULE = { INC: 'Requests', REC: 'Records', CNT: 'Contracts', PRB: 'Problems', CHG: 'Changes', AST: 'Assets' }
+function isId(v) { return /^[A-Z]{2,4}-\d/.test(String(v).trim()) }
+function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its module'; toast(`Opening ${id} in ${m}`) }
 </script>
 
 <template>
@@ -214,7 +218,7 @@ function shareWidget() { navigator.clipboard?.writeText(`${location.origin}${loc
             <table>
               <thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead>
               <tbody>
-                <tr v-for="(r, i) in filteredRows" :key="i"><td v-for="(cell, j) in r" :key="j"><span v-if="pillClass(cell)" :class="pillClass(cell)">{{ cell }}</span><template v-else>{{ cell }}</template></td></tr>
+                <tr v-for="(r, i) in filteredRows" :key="i"><td v-for="(cell, j) in r" :key="j"><span v-if="pillClass(cell)" :class="pillClass(cell)">{{ cell }}</span><button v-else-if="isId(cell)" class="id-link" @click.stop="exploreId(cell)">{{ cell }}</button><template v-else>{{ cell }}</template></td></tr>
                 <tr v-if="!filteredRows.length"><td :colspan="tile.columns.length" class="nodata">{{ tableSearch ? 'No records match your search' : 'No records in this range' }}</td></tr>
               </tbody>
             </table>
@@ -232,7 +236,7 @@ function shareWidget() { navigator.clipboard?.writeText(`${location.origin}${loc
           <div class="pbody">
             <MiniChart v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="620" />
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
-            <div v-else class="stbl big"><table><thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in tile.rows" :key="i"><td v-for="(c,j) in r" :key="j"><span v-if="pillClass(c)" :class="pillClass(c)">{{ c }}</span><template v-else>{{ c }}</template></td></tr></tbody></table></div>
+            <div v-else class="stbl big"><table><thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in tile.rows" :key="i"><td v-for="(c,j) in r" :key="j"><span v-if="pillClass(c)" :class="pillClass(c)">{{ c }}</span><button v-else-if="isId(c)" class="id-link" @click.stop="exploreId(c)">{{ c }}</button><template v-else>{{ c }}</template></td></tr></tbody></table></div>
           </div>
         </div>
       </div>
@@ -318,6 +322,9 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .pill-p3 { background: var(--blue-soft); color: var(--blue); }
 .pill-p4 { background: var(--surface-2); color: var(--muted); }
 .viewall { display: inline-flex; align-items: center; gap: 3px; margin-top: 6px; color: var(--primary-700); font-weight: 600; font-size: 12px; cursor: pointer; }
+/* explorable record ID (task 12) */
+.id-link { border: none; background: transparent; color: var(--primary-700); font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
+.id-link:hover { text-decoration: underline; }
 .present { background: #fff; border-radius: var(--r-xl); width: min(1200px, 95vw); max-height: 90vh; display: flex; flex-direction: column; box-shadow: var(--sh-lg); overflow: hidden; }
 .phead { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px; border-bottom: 1px solid var(--border); font-size: 16px; flex: none; }
 .pbody { padding: 32px 40px; flex: 1; min-height: 62vh; display: grid; place-items: center; overflow: auto; }

@@ -19,7 +19,10 @@ export const store = reactive({
 })
 
 // ---------- getters ----------
-export const live = computed(() => store.dashboards.filter((d) => !d.archived))
+// live = shown in the sidebar/nav → excludes archived AND unpublished (enabled === false)
+export const live = computed(() => store.dashboards.filter((d) => !d.archived && d.enabled !== false))
+// manageable = everything in the Manage page → excludes only archived (unpublished still listed)
+export const manageable = computed(() => store.dashboards.filter((d) => !d.archived))
 export const archived = computed(() => store.dashboards.filter((d) => d.archived))
 export const favorites = computed(() => live.value.filter((d) => d.favorite))
 export const recents = computed(() =>
@@ -54,6 +57,31 @@ export function archiveDashboard(d) {
 export function restoreDashboard(d) {
   d.archived = false
   toast(`Restored “${d.name}”`, 'success')
+}
+// Enable/disable toggle = Published / Unpublished. Unpublished dashboards drop out of
+// the sidebar (live) and shared technicians lose access until republished.
+export function togglePublished(d) {
+  d.enabled = d.enabled === false
+  if (d.enabled) toast(`Published “${d.name}” — it's visible again`, 'success')
+  else toast(`Unpublished “${d.name}” — hidden from listings; shared people can no longer access it`, 'warn')
+}
+export function moveDashboardsToCategory(list, category) {
+  list.forEach((d) => (d.category = category))
+  toast(`Moved ${list.length} dashboard${list.length > 1 ? 's' : ''} to “${category || 'Uncategorized'}”`, 'success')
+}
+export function archiveMany(list) {
+  list.forEach((d) => (d.archived = true))
+  toast(`Archived ${list.length} dashboard${list.length > 1 ? 's' : ''}`, 'warn')
+}
+// which live dashboards contain a widget/KPI/shortcut like this library item (title+type)
+export function libUsage(lt) {
+  return live.value.filter((d) => (d.tiles || []).some((t) => t.title === lt.title && t.type === lt.type))
+}
+// remove a placed tile matching this library item from a specific dashboard
+export function removeTileFromDashboard(dash, lt) {
+  const before = dash.tiles.length
+  dash.tiles = dash.tiles.filter((t) => !(t.title === lt.title && t.type === lt.type))
+  if (dash.tiles.length < before) { dash.updated = new Date().toISOString(); toast(`Removed “${lt.title}” from “${dash.name}”`, 'warn') }
 }
 export function deleteForever(d) {
   store.dashboards = store.dashboards.filter((x) => x.id !== d.id)

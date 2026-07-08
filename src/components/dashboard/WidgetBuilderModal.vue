@@ -72,6 +72,18 @@ function initCfg() {
 const cfg = reactive(initCfg())
 function reset() { Object.assign(cfg, initCfg()) }
 
+// task 11: warn if a widget with this name already lives on a DIFFERENT dashboard
+const dupBoards = computed(() => {
+  const n = cfg.name?.trim().toLowerCase()
+  if (!n || editing.value) return []
+  const names = new Set()
+  store.dashboards.forEach((dash) => {
+    if (dash.id === props.d?.id || dash.archived) return
+    if ((dash.tiles || []).some((t) => (t.title || '').toLowerCase() === n)) names.add(dash.name)
+  })
+  return [...names]
+})
+
 const previewTile = computed(() => {
   const title = cfg.name || `New ${curType.value.label}`
   if (isKpi.value) {
@@ -194,6 +206,7 @@ function save(place) {
                   <div class="fld"><label>Name <i>*</i></label><input class="input" v-model="cfg.name" placeholder="Name" /></div>
                   <div class="fld"><label>Module <i>*</i></label><Dropdown v-model="cfg.module" :options="store.modules" /></div>
                 </div>
+                <p v-if="dupBoards.length" class="dup-warn"><Icon name="alert" :size="13" /> A widget named “{{ cfg.name }}” already exists on {{ dupBoards.slice(0, 2).join(', ') }}<span v-if="dupBoards.length > 2"> +{{ dupBoards.length - 2 }} more</span>.</p>
                 <div class="grid2">
                   <div class="fld"><label>Technician Access Level <i>*</i></label><Dropdown v-model="cfg.techAccess" :options="store.owners" :multiple="true" placeholder="Select technicians" /></div>
                   <div class="fld"><label>Technician Group Access Level <i>*</i></label><Dropdown v-model="cfg.groupAccess" :options="GROUP_OPTS" placeholder="Select" /></div>
@@ -329,6 +342,7 @@ function save(place) {
 .sec { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
 .pe-note { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--primary-700); background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 9px; padding: 10px 12px; }
 .pe-note :deep(.ico) { flex: none; margin-top: 1px; }
+.dup-warn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber); background: var(--amber-soft); border-radius: 7px; padding: 7px 10px; margin: 4px 0 0; }
 .sec:last-child { border-bottom: none; margin-bottom: 0; }
 .sec-h { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
