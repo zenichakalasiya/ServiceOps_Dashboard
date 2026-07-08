@@ -124,9 +124,12 @@ export function duplicateLibTile(lt) {
   store.library.splice(i + 1, 0, copy)
   toast(`Duplicated “${lt.title}”`)
 }
-export function deleteLibTile(lt) {
+// soft-delete → Trash tab (reversible)
+export function deleteLibTile(lt) { lt.trashed = true; toast(`Moved “${lt.title}” to Trash`, 'warn') }
+export function restoreLibTile(lt) { lt.trashed = false; toast(`Restored “${lt.title}”`, 'success') }
+export function removeLibTileForever(lt) {
   store.library = store.library.filter((x) => x.id !== lt.id)
-  toast(`Deleted “${lt.title}”`)
+  toast(`Permanently deleted “${lt.title}”`, 'danger')
 }
 
 export const MAX_BULK_ADD = 8 // bulk-add guardrail

@@ -3,13 +3,13 @@ import { ref, computed, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import WidgetBuilderModal from './WidgetBuilderModal.vue'
-import { store, addTilesToDashboard, deleteLibTile, toast } from '../../store/index.js'
+import { store, addTilesToDashboard, deleteLibTile, restoreLibTile, removeLibTileForever, toast } from '../../store/index.js'
 import { uid } from '../../data/mock.js'
 const props = defineProps({ d: Object, group: { type: String, default: null } })
 const emit = defineEmits(['close', 'created', 'newgroup'])
 function tagGroup(id) { if (props.group && id != null) { const t = props.d.tiles.find((x) => x.id === id); if (t) t.group = props.group } }
 
-const tab = ref('chart')              // chart | predefined | user | shared
+const tab = ref('chart')              // chart | predefined | user | shared | trash
 const fModule = ref('')
 const fType = ref('')                 // '' | kpi | chart | shortcut
 const search = ref('')
@@ -34,8 +34,12 @@ const filteredGroups = computed(() => GROUPS.map((g) => ({
 // ---- Reuse tabs: listing with actions ----
 const provMap = { predefined: 'predefined', user: 'user', shared: 'shared' }
 const moduleOptions = computed(() => [{ value: '', label: 'All modules' }, ...store.modules.map((m) => ({ value: m, label: m }))])
+const isTrash = computed(() => tab.value === 'trash')
+const trashCount = computed(() => store.library.filter((l) => l.trashed).length)
 const list = computed(() => {
-  let arr = store.library.filter((l) => l.prov === provMap[tab.value])
+  let arr = isTrash.value
+    ? store.library.filter((l) => l.trashed)
+    : store.library.filter((l) => l.prov === provMap[tab.value] && !l.trashed)
   if (fType.value) arr = arr.filter((l) => l.type === fType.value)
   if (fModule.value) arr = arr.filter((l) => l.module === fModule.value)
   if (search.value.trim()) arr = arr.filter((l) => l.title.toLowerCase().includes(search.value.trim().toLowerCase()))
@@ -43,7 +47,9 @@ const list = computed(() => {
 })
 // per-type counts for the current tab (before the type filter is applied)
 const typeCounts = computed(() => {
-  const base = store.library.filter((l) => l.prov === provMap[tab.value] && (!fModule.value || l.module === fModule.value))
+  const base = isTrash.value
+    ? store.library.filter((l) => l.trashed && (!fModule.value || l.module === fModule.value))
+    : store.library.filter((l) => l.prov === provMap[tab.value] && !l.trashed && (!fModule.value || l.module === fModule.value))
   return { '': base.length, kpi: base.filter((l) => l.type === 'kpi').length, chart: base.filter((l) => l.type === 'chart').length, shortcut: base.filter((l) => l.type === 'shortcut').length }
 })
 // ---- multi-select: add is ONLY via checkbox + footer (no per-row quick add) ----
@@ -108,10 +114,12 @@ function onSavedToLibrary({ title, module, type, sharedAccess }) {
   toast(`Saved “${item.title}” to User Defined`, 'success')
 }
 
-// ---- Delete → centered confirm ----
+// ---- Delete = soft-delete to Trash · Trash tab: Restore + Delete forever (confirm) ----
 const delTarget = ref(null)
-function delLib(l) { delTarget.value = l }
-function confirmDel() { deleteLibTile(delTarget.value); delTarget.value = null }
+function delLib(l) { deleteLibTile(l) }          // → Trash (reversible)
+function restore(l) { restoreLibTile(l) }
+function delForever(l) { delTarget.value = l }    // opens the confirm modal
+function confirmDel() { removeLibTileForever(delTarget.value); delTarget.value = null }
 
 // ---- per-tab action rules (same for Widget / KPI / Shortcut) ----
 // Predefined: Duplicate only · User Defined: Duplicate·Edit·Delete
@@ -137,15 +145,17 @@ function showTip(l, e) {
   tip.value = { show: true, text: libDesc(l), top: r.top + r.height / 2, right: window.innerWidth - r.left + 12 }
 }
 function hideTip() { tip.value.show = false }
-const TAB_LABEL = { predefined: 'Predefined', user: 'User Defined', shared: 'Shared with me' }
+const TAB_LABEL = { predefined: 'Ready-made', user: 'Created by me', shared: 'Shared with me', trash: 'Trash' }
 const emptyMsg = computed(() => {
   const plural = fType.value ? (fType.value === 'kpi' ? 'KPIs' : TYPE_LABEL[fType.value] + 's') : 'items'
+  if (isTrash.value) return `Trash is empty.`
   return `No ${plural} in ${TAB_LABEL[tab.value] || 'this tab'} yet.`
 })
 const emptyHelp = computed(() => {
+  if (tab.value === 'trash') return 'Deleted widgets, KPIs and Shortcuts land here — restore them, or delete forever.'
   if (tab.value === 'shared') return 'Widgets, KPIs and Shortcuts shared with you will appear here.'
-  if (tab.value === 'user') return 'Create one from the Chart type tab, then it appears here.'
-  return 'Predefined tiles curated by your admin will appear here.'
+  if (tab.value === 'user') return 'Create one from the Create Widget tab, then it appears here.'
+  return 'Ready-made tiles curated by your admin will appear here.'
 })
 watch([tab], () => { search.value = ''; fModule.value = ''; fType.value = ''; selected.value = new Set() })
 watch(fType, (v) => { if (v === 'shortcut') fModule.value = '' })   // Shortcut listing has no module filter
@@ -164,9 +174,10 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
       <!-- top tabs -->
       <div class="aw-tabs">
         <button class="awt" :class="{ on: tab === 'chart' }" @click="tab = 'chart'">Create Widget</button>
-        <button class="awt" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Predefined</button>
-        <button class="awt" :class="{ on: tab === 'user' }" @click="tab = 'user'">User Defined</button>
+        <button class="awt" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Ready-made</button>
+        <button class="awt" :class="{ on: tab === 'user' }" @click="tab = 'user'">Created by me</button>
         <button class="awt" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
+        <button class="awt" :class="{ on: tab === 'trash' }" @click="tab = 'trash'"><Icon name="trash" :size="13" /> Trash <span v-if="trashCount" class="awt-count">{{ trashCount }}</span></button>
       </div>
 
       <!-- module filter + search (reuse tabs only — the Create Widget tab has no search) -->
@@ -211,13 +222,18 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
         <template v-else>
           <div v-if="list.length" class="lst">
             <div v-for="l in list" :key="l.id" class="lrow" :class="{ sel: isSel(l), placed: isPlaced(l) }" @mouseenter="showTip(l, $event)" @mouseleave="hideTip">
-              <input type="checkbox" class="lcb" :checked="isSel(l) || isPlaced(l)" :disabled="isPlaced(l)" @change="toggleSel(l)" />
+              <input v-if="!isTrash" type="checkbox" class="lcb" :checked="isSel(l) || isPlaced(l)" :disabled="isPlaced(l)" @change="toggleSel(l)" />
+              <span v-else class="trash-ic"><Icon name="trash" :size="15" /></span>
               <div class="lt-main">
                 <div class="lt-name-row"><span class="lt-name ellip">{{ l.title }}</span><span v-if="isPlaced(l)" class="placed-tag"><Icon name="check" :size="11" /> On dashboard</span></div>
                 <div class="lt-meta">{{ TYPE_LABEL[l.type] }} · {{ l.module }}</div>
               </div>
-              <!-- actions per tab/type (see canDuplicate / canEdit / canDelete) -->
-              <div v-if="hasActions(l) && !isPlaced(l)" class="lt-acts">
+              <!-- Trash: Restore + Delete forever · other tabs: Duplicate / Edit / Delete -->
+              <div v-if="isTrash" class="lt-acts always">
+                <button class="la" title="Restore" @click="restore(l)"><Icon name="restore" :size="15" /></button>
+                <button class="la del" title="Delete forever" @click="delForever(l)"><Icon name="trash" :size="15" /></button>
+              </div>
+              <div v-else-if="hasActions(l) && !isPlaced(l)" class="lt-acts">
                 <button v-if="canDuplicate(l)" class="la" title="Duplicate" @click="openLibBuilder(l)"><Icon name="copy" :size="15" /></button>
                 <button v-if="canEdit(l)" class="la" title="Edit" @click="openLibBuilder(l)"><Icon name="edit" :size="15" /></button>
                 <button v-if="canDelete(l)" class="la del" title="Delete" @click="delLib(l)"><Icon name="trash" :size="15" /></button>
@@ -257,11 +273,11 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
       <div v-if="delTarget" class="cf-overlay" @click.self="delTarget = null">
         <div class="cf">
           <div class="cf-ico"><Icon name="trash" :size="22" /></div>
-          <h4>Delete “{{ delTarget.title }}”?</h4>
-          <p>This removes it from the library. This action can’t be undone.</p>
+          <h4>Delete “{{ delTarget.title }}” forever?</h4>
+          <p>This permanently removes it from the library. This action can’t be undone.</p>
           <div class="cf-btns">
             <button class="btn" @click="delTarget = null">Cancel</button>
-            <button class="btn cf-del" @click="confirmDel"><Icon name="trash" :size="15" /> Delete</button>
+            <button class="btn cf-del" @click="confirmDel"><Icon name="trash" :size="15" /> Delete forever</button>
           </div>
         </div>
       </div>
@@ -278,9 +294,10 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .ic { width: 34px; height: 34px; border: none; background: transparent; color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
 .aw-tabs { display: flex; gap: 4px; padding: 0 22px; border-bottom: 1px solid var(--border); }
-.awt { border: none; background: transparent; padding: 10px 4px; margin-right: 14px; font-weight: 500; font-size: 13.5px; color: var(--muted); border-bottom: 2px solid transparent; }
+.awt { display: inline-flex; align-items: center; gap: 5px; border: none; background: transparent; padding: 10px 4px; margin-right: 14px; font-weight: 500; font-size: 13.5px; color: var(--muted); border-bottom: 2px solid transparent; }
 .awt:hover { color: var(--ink); }
 .awt.on { color: var(--primary-700); border-bottom-color: var(--primary); }
+.awt-count { font-size: 10.5px; font-weight: 700; background: var(--red-soft); color: var(--red); border-radius: 999px; padding: 0 6px; }
 .aw-filters { display: flex; gap: 9px; padding: 14px 22px 6px; }
 .srch { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 9px; padding: 0 11px; height: 38px; flex: 1; }
 .srch input { border: none; outline: none; background: transparent; width: 100%; font-size: 13.5px; }
@@ -318,6 +335,8 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 /* hover actions (Duplicate / Edit / Delete) — revealed on row hover */
 .lt-acts { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
 .lrow:hover .lt-acts { opacity: 1; }
+.lt-acts.always { opacity: 1; }
+.trash-ic { width: 16px; display: inline-grid; place-items: center; color: var(--muted-2); flex: none; }
 .la { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
 .la:hover { background: var(--surface); color: var(--ink); }
 .la.del:hover { color: var(--red); background: var(--red-soft); }
