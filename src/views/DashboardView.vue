@@ -32,6 +32,7 @@ const restrictOpen = ref(false)
 const descHover = ref(false)
 const presenting = ref(false)
 const loadingBoard = ref(true)
+const revealing = ref(false)   // brief window after load → staggered widget reveal animation
 const highlightId = ref(null)
 const editTile = ref(null)   // tile currently open in the builder (edit mode)
 const dupTile = ref(null)    // tile being duplicated (builder opens pre-filled, saves a copy)
@@ -341,7 +342,11 @@ function onWidgetCreated(id) {
 
 onMounted(() => {
   recordView(d.value)
-  setTimeout(() => (loadingBoard.value = false), 550)
+  setTimeout(() => {
+    loadingBoard.value = false
+    revealing.value = true                              // widgets fade/slide in with staggered data
+    setTimeout(() => (revealing.value = false), 1100)
+  }, 600)
   if (store.ui.pendingAddWidget) { store.ui.pendingAddWidget = false; addToGroup.value = null; showAdd.value = true }
 })
 
@@ -474,7 +479,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       </div>
 
       <!-- tiles (ungrouped + collapsible groups) — drag a box anywhere to marquee-select -->
-      <div v-else class="board-groups" ref="gridEl" :class="{ selecting }" @mousedown="boardMouseDown">
+      <div v-else class="board-groups" ref="gridEl" :class="{ selecting, revealing }" @mousedown="boardMouseDown">
         <div v-if="gShowTip || gShowAddGroupBtn || gRightClick || gHoverIcon || gAutoBy" class="bg-toolbar">
           <span v-if="gShowTip && tilesIn(null).length" class="bg-hint">Tip: drag a box (or Shift-click) across widgets to group them</span>
           <span v-if="gRightClick" class="bg-hint">Right-click any widget → New group / Add to group</span>
@@ -681,10 +686,21 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 /* drag-reorder states */
 .cell.dragging { opacity: .4; }
 .cell.dropzone { outline: 2px dashed var(--primary); outline-offset: 2px; border-radius: var(--r-lg); }
-/* bottom-right resize grip (diagonal lines), on hover */
-.resize { position: absolute; right: 4px; bottom: 4px; width: 15px; height: 15px; z-index: 6; cursor: nwse-resize; opacity: 0; transition: opacity .14s;
-  background: linear-gradient(135deg, transparent 0 54%, var(--muted-2) 54% 61%, transparent 61% 73%, var(--muted-2) 73% 80%, transparent 80%); }
-.cell:hover .resize { opacity: 1; }
+/* bottom-right resize grip (two diagonal lines), revealed on hover */
+.resize { position: absolute; right: 3px; bottom: 3px; width: 17px; height: 17px; z-index: 6; cursor: nwse-resize; opacity: 0; transition: opacity .14s; border-radius: 0 0 6px 0;
+  background: linear-gradient(135deg, transparent 0 42%, var(--muted) 42% 52%, transparent 52% 66%, var(--muted) 66% 76%, transparent 76%); }
+.cell:hover .resize { opacity: .9; }
+.resize:hover { opacity: 1; }
+/* staggered widget reveal after the loading skeleton */
+.revealing .cell { animation: cellReveal .5s cubic-bezier(.2,.8,.2,1) backwards; }
+.revealing .cell:nth-child(2) { animation-delay: .05s; }
+.revealing .cell:nth-child(3) { animation-delay: .1s; }
+.revealing .cell:nth-child(4) { animation-delay: .15s; }
+.revealing .cell:nth-child(5) { animation-delay: .2s; }
+.revealing .cell:nth-child(6) { animation-delay: .25s; }
+.revealing .cell:nth-child(7) { animation-delay: .3s; }
+.revealing .cell:nth-child(n+8) { animation-delay: .35s; }
+@keyframes cellReveal { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
 /* widget groups (collapsible rows) */
 .board-groups { display: flex; flex-direction: column; gap: 16px; }
 .group { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); padding: 6px 12px 14px; transition: box-shadow .15s, border-color .15s; }
