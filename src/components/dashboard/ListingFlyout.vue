@@ -64,7 +64,7 @@ const LSTYLES = [
   { id: 4, n: '④', desc: '④ List ⇄ Table view toggle in the header' },
   { id: 5, n: '⑤', desc: '⑤ "See all N →" at each section end + list bottom' },
 ]
-const showListDemo = false   // hidden for now — no manage-dashboard entry points shown
+const showListDemo = true    // visible — shows the 5 manage-dashboard entry-point options
 const ls = computed(() => (showListDemo ? store.ui.listStyle : 0))
 const isCat = (name) => name !== 'My Favourite' && name !== 'Recently used'
 function openFull(query) { emit('close'); router.push(query ? { path: '/dashboards', query } : '/dashboards') }

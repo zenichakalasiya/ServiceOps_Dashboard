@@ -104,7 +104,7 @@ const GSTYLES = [
   { id: 8, n: '⑧', label: 'Sections', desc: 'F — Typed section headings; drag widgets under them' },
   { id: 9, n: '⑨', label: 'Auto-group', desc: 'G — Group automatically by Type or Source' },
 ]
-const showGroupDemo = false   // demo switcher hidden; default grouping is ① Select
+const showGroupDemo = true    // demo switcher visible; default grouping is ① Select
 const gs = computed(() => store.ui.groupStyle)
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
 const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
