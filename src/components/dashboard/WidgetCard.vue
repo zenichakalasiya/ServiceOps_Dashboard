@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import Icon from '../ui/Icon.vue'
-import MiniChart from './MiniChart.vue'
+import ChartTile from './ChartTile.vue'
+import DataTable from './DataTable.vue'
 import { toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin', 'select'])
@@ -36,12 +37,7 @@ const searchOpen = ref(false)
 const tableSearch = ref('')
 const searchInput = ref(null)
 watch(searchOpen, (v) => { if (v) nextTick(() => searchInput.value?.focus()) })
-const filteredRows = computed(() => {
-  const rows = props.tile.rows || []
-  const q = tableSearch.value.trim().toLowerCase()
-  if (!q) return rows
-  return rows.filter((r) => r.some((cell) => String(cell).toLowerCase().includes(q)))
-})
+// row filtering + sorting now live in DataTable (TanStack); we only own the query
 const present = ref(false)
 const infoHover = ref(false)
 const infoEl = ref(null)
@@ -198,7 +194,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       </template>
 
       <template v-else-if="tile.type === 'chart'">
-        <MiniChart v-if="tile.chart" :chart="tile.chart" :legend="showLegend" :height="tile.h > 1 ? 170 : 120" />
+        <ChartTile v-if="tile.chart" :chart="tile.chart" :legend="showLegend" :height="tile.h > 2 ? 360 : tile.h > 1 ? 170 : 120" />
       </template>
 
       <template v-else>
@@ -213,15 +209,15 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
               </div>
             </div>
           </transition>
-          <!-- scrollable table container (sticky header) -->
+          <!-- scrollable table container (sticky header); click a header to sort -->
           <div class="stbl-scroll">
-            <table>
-              <thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead>
-              <tbody>
-                <tr v-for="(r, i) in filteredRows" :key="i"><td v-for="(cell, j) in r" :key="j"><span v-if="pillClass(cell)" :class="pillClass(cell)">{{ cell }}</span><button v-else-if="isId(cell)" class="id-link" @click.stop="exploreId(cell)">{{ cell }}</button><template v-else>{{ cell }}</template></td></tr>
-                <tr v-if="!filteredRows.length"><td :colspan="tile.columns.length" class="nodata">{{ tableSearch ? 'No records match your search' : 'No records in this range' }}</td></tr>
-              </tbody>
-            </table>
+            <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch">
+              <template #cell="{ value }">
+                <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
+                <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
+                <template v-else>{{ value }}</template>
+              </template>
+            </DataTable>
           </div>
           <a class="viewall">View all <Icon name="chevron-right" :size="13" /></a>
         </div>
@@ -234,9 +230,17 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         <div class="present">
           <div class="phead"><b>{{ tile.title }}</b><button class="btn btn-icon" @click="present = false"><Icon name="x" :size="18" /></button></div>
           <div class="pbody">
-            <MiniChart v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="620" />
+            <ChartTile v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="620" />
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
-            <div v-else class="stbl big"><table><thead><tr><th v-for="c in tile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in tile.rows" :key="i"><td v-for="(c,j) in r" :key="j"><span v-if="pillClass(c)" :class="pillClass(c)">{{ c }}</span><button v-else-if="isId(c)" class="id-link" @click.stop="exploreId(c)">{{ c }}</button><template v-else>{{ c }}</template></td></tr></tbody></table></div>
+            <div v-else class="stbl big">
+              <DataTable :columns="tile.columns" :rows="tile.rows || []">
+                <template #cell="{ value }">
+                  <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
+                  <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
+                  <template v-else>{{ value }}</template>
+                </template>
+              </DataTable>
+            </div>
           </div>
         </div>
       </div>
@@ -306,11 +310,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .sx { border: none; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 0; }
 .sx:hover { color: var(--ink); }
 .stbl-scroll { flex: 1; overflow: auto; min-height: 0; max-height: 200px; }
-.stbl-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
-td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
-.nodata { text-align: center; color: var(--muted-2); padding: 18px; }
+/* table/th/td/.nodata chrome lives in DataTable.vue — scoped CSS cannot reach
+   a child component's internals. Only the root <table> is styleable from here. */
+table { font-size: 12.5px; }
 /* soft status / priority pills in shortcut tables */
 .pill { display: inline-flex; align-items: center; height: 20px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .2px; white-space: nowrap; }
 .pill-blue { background: var(--blue-soft); color: var(--blue); }

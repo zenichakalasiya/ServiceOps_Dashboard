@@ -10,7 +10,10 @@
     "preview": "vite preview --port 5180"
   },
   "dependencies": {
+    "@tanstack/vue-table": "^8.21.3",
+    "echarts": "^6.1.0",
     "vue": "^3.5.13",
+    "vue-echarts": "^8.0.1",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {

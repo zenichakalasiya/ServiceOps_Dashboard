@@ -13,6 +13,28 @@ const grouped = (labels, a, b) => ({ kind: 'bar', labels, series: [{ name: 'Crea
 const line = (labels, vals) => ({ kind: 'line', labels, series: [{ name: 'Volume', values: vals }] })
 const donut = (labels, vals) => ({ kind: 'donut', labels, series: [{ name: 'By priority', values: vals }] })
 
+// A deliberately high-cardinality field: 63 technicians with a long tail.
+// This is the shape that breaks legends (L105 / L166) — the legend demo needs it.
+const FIRST = ['Aarav', 'Meera', 'Rohan', 'Priya', 'Vikram', 'Ananya', 'Karan', 'Divya', 'Arjun', 'Nisha',
+  'Siddharth', 'Kavya', 'Rahul', 'Ishita', 'Manav', 'Sneha', 'Aditya', 'Pooja', 'Nikhil', 'Riya',
+  'Varun', 'Tanvi', 'Harsh', 'Lakshmi']
+const LAST = ['Sharma', 'Iyer', 'Patel', 'Nair', 'Reddy', 'Bose', 'Gupta', 'Menon', 'Rao', 'Shah', 'Verma']
+function technicianLoad(n = 63) {
+  const labels = [], values = []
+  for (let i = 0; i < n; i++) {
+    labels.push(`${FIRST[i % FIRST.length]} ${LAST[(i * 7 + 3) % LAST.length]}`)
+    // Zipf-ish decay + a deterministic wobble, so a few carry most of the load.
+    values.push(Math.max(1, Math.round(240 / (i + 1.6) + ((i * 37) % 11))))
+  }
+  // dedupe collisions from the name generator so keys stay unique
+  const seen = new Map()
+  const uniq = labels.map((l) => {
+    const c = (seen.get(l) || 0) + 1; seen.set(l, c)
+    return c > 1 ? `${l} (${c})` : l
+  })
+  return { kind: 'donut', labels: uniq, series: [{ name: 'Tickets', values }] }
+}
+
 // ---- tile factories ----
 export const kpi = (title, value, unit, delta, status, info) =>
   ({ id: uid('t'), type: 'kpi', title, info, value, unit, delta, status, w: 3, h: 1 })
@@ -33,6 +55,7 @@ function helpdeskTiles() {
     chart('Created vs Resolved', grouped(WK, [42, 51, 38, 60, 55, 22, 18], [39, 48, 41, 57, 50, 25, 20]), 'Daily created vs resolved request volume.'),
     chart('Tickets by Priority', donut(['P1', 'P2', 'P3', 'P4'], [18, 64, 120, 46]), 'Open requests split by priority.'),
     chart('Backlog Trend', line(MON, [180, 210, 198, 240, 232, 248]), 'Open backlog at month end.'),
+    { ...chart('Tickets by Technician', technicianLoad(63), 'Open requests grouped by assigned technician — 63 distinct values.'), w: 12, h: 3, highCard: true },
     shortcut('My Open P1 Requests',
       ['ID', 'Subject', 'Priority', 'Status', 'Due'],
       [['INC-2041', 'VPN down for finance team', 'P1', 'In Progress', 'Today 4:00 PM'],

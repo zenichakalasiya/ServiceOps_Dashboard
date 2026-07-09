@@ -107,6 +107,19 @@ const GSTYLES = [
 ]
 const showGroupDemo = true    // demo switcher visible; default grouping is ① Select
 const gs = computed(() => store.ui.groupStyle)
+
+// ---- Legend-strategy DEMO switcher: compare the 5 answers to a 63-category chart.
+// Only charts above the high-cardinality threshold react; the rest render normally.
+// See docs/legend-and-topn-design.md
+const LSTYLES = [
+  { id: 1, n: '①', label: 'Re-encode', desc: 'Ranked bar — names on the axis, so no legend and no colour are needed. Drag the rail to reach any rank.' },
+  { id: 2, n: '②', label: 'Top-N + Other', desc: 'Bound the set, roll the tail into an explicit “Other”, and state the truncation on the tile. Percentages still use the full total.' },
+  { id: 3, n: '③', label: 'Series manager', desc: 'The legend becomes a searchable panel: click to isolate, Ctrl-click to toggle, or bulk-hide 50 series in two clicks.' },
+  { id: 4, n: '④', label: 'Overflow chip', desc: 'Show 8 swatches inline, collapse the rest into “+N more”. The cheapest option that still doesn’t lie.' },
+  { id: 5, n: '⑤', label: 'Cardinality gate', desc: 'Refuse to render an unreadable chart. Make the author choose before it reaches a dashboard.' },
+]
+const showLegendDemo = true
+const ls = computed(() => store.ui.legendStyle)
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
 const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
 const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here" between groups
@@ -523,6 +536,17 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <span class="gsb-desc">{{ GSTYLES.find(s => s.id === gs)?.desc }}</span>
       </div>
 
+      <!-- DEMO: the 5 ways to handle a high-cardinality legend. Affects "Tickets by Technician" (63 values). -->
+      <div v-if="showLegendDemo && !loadingBoard" class="gstyle-bar legend-bar">
+        <span class="gsb-label"><Icon name="chart-pie" :size="14" /> Legend demo <em>63-category chart</em></span>
+        <div class="gsb-seg">
+          <button v-for="s in LSTYLES" :key="s.id" class="gsb-b" :class="{ on: ls === s.id }" :title="s.desc" @click="store.ui.legendStyle = s.id">
+            <span class="gsb-n">{{ s.n }}</span> {{ s.label }}
+          </button>
+        </div>
+        <span class="gsb-desc">{{ LSTYLES.find(s => s.id === ls)?.desc }}</span>
+      </div>
+
       <!-- loading skeleton (P2·9) -->
       <div v-if="loadingBoard" class="grid">
         <div v-for="n in 6" :key="n" class="card sk" :class="n <= 4 ? 'span-3' : 'span-6'"><div class="skeleton" style="height:100%" /></div>
@@ -796,6 +820,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-empty p { margin: 0; }
 /* grouping-style demo switcher */
 .gstyle-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 14px; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 10px; }
+.legend-bar .gsb-label em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 11px; margin-left: 4px; }
 .gsb-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .gsb-seg { display: inline-flex; gap: 3px; background: var(--surface-2); padding: 3px; border-radius: 9px; border: 1px solid var(--border); }
 .gsb-b { border: none; background: transparent; padding: 5px 11px; border-radius: 7px; font-size: 12.5px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }

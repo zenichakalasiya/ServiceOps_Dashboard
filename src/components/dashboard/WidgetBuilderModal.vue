@@ -2,7 +2,7 @@
 import { reactive, computed, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
-import MiniChart from './MiniChart.vue'
+import ChartTile from './ChartTile.vue'
 import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut } from '../../data/mock.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
@@ -184,7 +184,7 @@ function save(place) {
             <div class="pv-card">
               <div class="pv-canvas">
                 <div v-if="isKpi" class="pv-kpi">{{ previewTile.value }}<span v-if="previewTile.unit" class="u">{{ previewTile.unit }}</span><span class="d">▲ {{ previewTile.delta?.pct }}%</span></div>
-                <MiniChart v-else-if="isChart" :chart="previewTile.chart" :height="320" />
+                <ChartTile v-else-if="isChart" :chart="previewTile.chart" :height="320" />
                 <table v-else class="pv-tbl"><thead><tr><th v-for="c in previewTile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in previewTile.rows" :key="i"><td v-for="(c,j) in r" :key="j">{{ c }}</td></tr></tbody></table>
               </div>
             </div>

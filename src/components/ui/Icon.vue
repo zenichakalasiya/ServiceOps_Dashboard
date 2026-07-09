@@ -28,6 +28,7 @@ const MAP = {
   menu: 'menu', keyboard: 'keyboard', history: 'history', 'predefined-monitor': 'desktop_windows',
   ungroup: 'layers_clear', 'default-home': 'home', 'new-group': 'create_new_folder',
   verified: 'verified', undo: 'undo', redo: 'redo',
+  'sort-asc': 'arrow_upward', 'sort-desc': 'arrow_downward',
 }
 const FILLED = new Set(['star-fill'])
 
