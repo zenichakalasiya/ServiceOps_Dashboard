@@ -11,6 +11,7 @@ const days = (n) => { const d = new Date(2026, 5, 27); d.setDate(d.getDate() - n
 const bars = (labels, vals) => ({ kind: 'bar', labels, series: [{ name: 'Tickets', values: vals }] })
 const grouped = (labels, a, b) => ({ kind: 'bar', labels, series: [{ name: 'Created', values: a }, { name: 'Resolved', values: b }] })
 const line = (labels, vals) => ({ kind: 'line', labels, series: [{ name: 'Volume', values: vals }] })
+const area = (labels, vals) => ({ kind: 'area', labels, series: [{ name: 'Volume', values: vals }] })
 const donut = (labels, vals) => ({ kind: 'donut', labels, series: [{ name: 'By priority', values: vals }] })
 
 // A deliberately high-cardinality field: 63 technicians with a long tail.
@@ -64,7 +65,7 @@ function helpdeskTiles() {
     kpi('SLA Compliance', 94.2, '%', { dir: 'down', pct: 1.1 }, 'warn', 'Percent of requests resolved within SLA this window.'),
     chart('Created vs Resolved', grouped(WK, [42, 51, 38, 60, 55, 22, 18], [39, 48, 41, 57, 50, 25, 20]), 'Daily created vs resolved request volume.'),
     chart('Tickets by Priority', donut(['P1', 'P2', 'P3', 'P4'], [18, 64, 120, 46]), 'Open requests split by priority.'),
-    chart('Backlog Trend', line(MON, [180, 210, 198, 240, 232, 248]), 'Open backlog at month end.'),
+    chart('Backlog Trend', area(MON, [180, 210, 198, 240, 232, 248]), 'Open backlog at month end.'),
     // `wide` keeps Rearrange from shrinking it — the series-manager panel needs the width
     { ...chart('Tickets by Technician', technicianLoad(63), 'Open requests grouped by assigned technician — 63 distinct values.'), w: 12, h: 3, highCard: true, wide: true },
     shortcut('My Open P1 Requests',

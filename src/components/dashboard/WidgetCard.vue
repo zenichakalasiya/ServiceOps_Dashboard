@@ -4,6 +4,7 @@ import Icon from '../ui/Icon.vue'
 import ChartTile from './ChartTile.vue'
 import DataTable from './DataTable.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
+import { CHART_TYPES, whyDisabled } from '../../data/chartTypes.js'
 import { toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin', 'select'])
@@ -33,6 +34,18 @@ function toggleMenu() {
 }
 const exportOpen = ref(false)
 const showLegend = ref(true)
+
+/* Switch the chart type in place, from the tile, without reopening the builder.
+ * The dashboard's {tiles, groups} snapshot watcher picks it up, so Ctrl+Z reverts. */
+const typeOpen = ref(false)
+const disabledFor = (ct) => whyDisabled(ct, props.tile.chart)
+function setKind(ct) {
+  if (disabledFor(ct)) return
+  if (props.tile.chart.kind === ct.id) { menu.value = false; return }
+  props.tile.chart.kind = ct.id
+  menu.value = false; typeOpen.value = false
+  toast(`“${props.tile.title}” → ${ct.label}`)
+}
 const EXPORTS = ['PDF', 'PNG', 'JPEG', 'SVG', 'CSV']
 const searchOpen = ref(false)
 const tableSearch = ref('')
@@ -148,7 +161,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 
     <!-- ⋯ menu: teleported so it overlays the card instead of being clipped by overflow -->
     <teleport to="body">
-      <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false" />
+      <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false; typeOpen = false" />
       <transition name="pop">
         <div v-if="menu" class="menu tile-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
           <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
@@ -156,9 +169,24 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
           <button class="menu-item" @click="menu = false; shareOpen = true"><Icon name="share" :size="15" /> Share widget</button>
+          <!-- Chart type → submenu: swap the visualisation from the tile itself -->
+          <div v-if="tile.type === 'chart' && tile.chart" class="menu-item sub" @mouseenter="typeOpen = true; exportOpen = false" @mouseleave="typeOpen = false">
+            <span class="mi-l"><Icon name="chart-bar" :size="15" /> Chart type</span><Icon name="chevron-right" :size="14" class="mi-c" />
+            <transition name="pop"><div v-if="typeOpen" class="submenu types">
+              <button
+                v-for="ct in CHART_TYPES" :key="ct.id" class="menu-item ct"
+                :class="{ on: tile.chart.kind === ct.id }"
+                :disabled="!!disabledFor(ct)" :title="disabledFor(ct) || `Show as ${ct.label}`"
+                @click="setKind(ct)"
+              >
+                <Icon :name="ct.icon" :size="16" /> {{ ct.label }}
+                <Icon v-if="tile.chart.kind === ct.id" name="check" :size="14" class="ct-ck" />
+              </button>
+            </div></transition>
+          </div>
           <button v-if="tile.type === 'chart'" class="menu-item" @click="showLegend = !showLegend"><Icon name="list" :size="15" /> {{ showLegend ? 'Hide legend' : 'Show legend' }}</button>
           <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->
-          <div class="menu-item sub" @mouseenter="exportOpen = true" @mouseleave="exportOpen = false">
+          <div class="menu-item sub" @mouseenter="exportOpen = true; typeOpen = false" @mouseleave="exportOpen = false">
             <span class="mi-l"><Icon name="share" :size="15" /> Export</span><Icon name="chevron-right" :size="14" class="mi-c" />
             <transition name="pop"><div v-if="exportOpen" class="submenu">
               <button v-for="f in EXPORTS" :key="f" class="menu-item" @click="download(f)">{{ f }}</button>
@@ -293,6 +321,13 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .mi-l { display: flex; align-items: center; gap: 10px; }
 .mi-c { color: var(--muted); }
 .submenu { position: absolute; top: -7px; right: 100%; min-width: 124px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); padding: 6px; }
+/* chart-type submenu: 8 items, current one checked, incompatible ones greyed */
+.submenu.types { min-width: 178px; top: -80px; }
+.ct { justify-content: flex-start; gap: 10px; }
+.ct .ct-ck { margin-left: auto; color: var(--primary); }
+.ct.on { color: var(--primary-700); font-weight: 600; }
+.ct:disabled { opacity: .4; cursor: not-allowed; }
+.ct:disabled:hover { background: transparent; }
 .tbody { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; min-height: 0; }
 .loading { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 /* empty-widget states */

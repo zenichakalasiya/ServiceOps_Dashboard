@@ -22,7 +22,7 @@
 import { computed, ref, shallowRef, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, LineChart, PieChart } from 'echarts/charts'
+import { BarChart, LineChart, PieChart, FunnelChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { store } from '../../store'
@@ -31,7 +31,7 @@ import SeriesManager from './SeriesManager.vue'
 
 // Register only what we render. MarkLine/MarkArea come back with SLA threshold
 // bands; DataZoom went out with the ranked-bar re-encode.
-use([CanvasRenderer, BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
+use([CanvasRenderer, BarChart, LineChart, PieChart, FunnelChart, GridComponent, TooltipComponent, LegendComponent])
 
 const props = defineProps({
   chart: Object,
@@ -64,9 +64,10 @@ const HIGH_CARD = 12
 const kind = computed(() => props.chart?.kind || 'bar')
 const labels = computed(() => props.chart?.labels || [])
 const series = computed(() => props.chart?.series || [])
-/* A legend names slices on a donut, but series on a bar/line — there the
- * categories already sit on the x-axis and need no key. */
-const sliceBased = computed(() => kind.value === 'donut')
+/* Part-of-whole charts name *slices*; cartesian charts name *series*, because
+ * their categories already sit on the axis and need no key. */
+const SLICE_KINDS = ['pie', 'donut', 'funnel', 'pyramid']
+const sliceBased = computed(() => SLICE_KINDS.includes(kind.value))
 
 /* --- entities: the things a legend would name. Slices for single-series
  * charts, series for multi-series charts. Everything below works on these. --- */
@@ -260,28 +261,55 @@ const option = computed(() => {
     ? { animation: false }
     : { animation: true, animationDuration: 550, animationEasing: 'cubicOut', animationDelay: (i) => i * 20 }
 
-  if (k === 'donut') {
+  const sliceTip = { ...tip, trigger: 'item', formatter: (p) => `${dot(p.color)}${p.name}: ${pctOf(p.value)}% <b style="color:${t.ink}">(${p.value})</b>` }
+  const sliceData = rows.map((e) => ({ name: e.name, value: e.value, itemStyle: { color: e.color } }))
+
+  /* Pie / Doughnut — same series, different inner radius. */
+  if (k === 'pie' || k === 'donut') {
     return {
-      tooltip: { ...tip, trigger: 'item', formatter: (p) => `${dot(p.color)}${p.name}: ${pctOf(p.value)}% <b style="color:${t.ink}">(${p.value})</b>` },
+      tooltip: sliceTip,
       legend: { show: false },
       series: [{
-        type: 'pie', radius: ['52%', '78%'], center: ['50%', '50%'],
+        type: 'pie',
+        radius: k === 'donut' ? ['52%', '78%'] : ['0%', '74%'],
+        center: ['50%', '50%'],
         label: { show: false }, labelLine: { show: false },
         itemStyle: { borderColor: t.surface, borderWidth: 2 },
         emphasis: { focus: 'self', scale: true, scaleSize: 4 },
         blur: { itemStyle: { opacity: 0.18 } },
-        data: rows.map((e) => ({ name: e.name, value: e.value, itemStyle: { color: e.color } })),
+        data: sliceData,
         ...(reduceMotion ? { animation: false } : { animationType: 'expansion', animationDuration: 600, animationEasing: 'cubicOut' }),
       }],
     }
   }
 
+  /* Funnel / Pyramid — the same series, sorted the other way up. */
+  if (k === 'funnel' || k === 'pyramid') {
+    return {
+      tooltip: sliceTip,
+      legend: { show: false },
+      series: [{
+        type: 'funnel',
+        left: '8%', right: '8%', top: 10, bottom: 10,
+        sort: k === 'funnel' ? 'descending' : 'ascending',
+        gap: 2, minSize: '12%',
+        label: { show: false },
+        itemStyle: { borderColor: t.surface, borderWidth: 2 },
+        emphasis: { focus: 'self' },
+        blur: { itemStyle: { opacity: 0.18 } },
+        data: sliceData,
+      }],
+      ...anim,
+    }
+  }
+
   const splitLine = { show: true, lineStyle: { color: t.border, type: 'dashed', opacity: 0.7 } }
 
-  /* Cartesian: bar (column) | hbar (horizontal) | line.
+  /* Cartesian: bar (column) | hbar (horizontal) | line | area.
    * Here entities are *series*, so hiding one drops it from the plot. */
   const shown = series.value.filter((s) => !hidden.value.has(s.name))
-  const isLine = k === 'line'
+  const isArea = k === 'area'
+  const isLine = k === 'line' || isArea
   const horizontal = k === 'hbar'
   const cat = { type: 'category', data: labels.value, ...axis, boundaryGap: !isLine, ...(horizontal ? { inverse: true } : {}) }
   const val = { type: 'value', ...axis, splitLine }
@@ -303,7 +331,8 @@ const option = computed(() => {
       barMaxWidth: 26,
       itemStyle: { borderRadius: horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0], color: baseColor(s.name, series.value.indexOf(s)) },
       lineStyle: isLine ? { width: 2.5, cap: 'round', join: 'round' } : undefined,
-      areaStyle: isLine ? { opacity: 0.12 } : undefined,
+      // the fill is what separates Area from Line
+      areaStyle: isArea ? { opacity: 0.18 } : undefined,
       smooth: isLine ? 0.35 : undefined,
       symbolSize: isLine ? 7 : undefined,
       emphasis: { focus: 'series' },

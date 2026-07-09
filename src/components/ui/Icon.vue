@@ -32,6 +32,8 @@ const MAP = {
   rearrange: 'auto_awesome_mosaic', pen: 'draw', palette: 'palette',
   'shape-rect': 'crop_square', 'shape-ellipse': 'circle', 'shape-arrow': 'arrow_outward',
   erase: 'ink_eraser', mail: 'mail', cursor: 'arrow_selector_tool',
+  'chart-area': 'area_chart', 'chart-donut': 'donut_large', 'chart-funnel': 'filter_alt',
+  'chart-pyramid': 'change_history', 'chart-hbar': 'align_horizontal_left',
 }
 const FILLED = new Set(['star-fill'])
 
