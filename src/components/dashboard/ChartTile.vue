@@ -318,55 +318,57 @@ const option = computed(() => {
 })
 
 /* --- legend rendering decisions --- */
+/* ③ and ④ both keep the chart at full card width and reach the series list
+ * through a chip. Neither reserves layout space for it — a 250px column inside
+ * the card squeezed the chart into a corner. */
+const chipModes = computed(() => mode.value === 3 || mode.value === 4)
 const showInlineLegend = computed(() =>
-  props.legend && !gated.value && !asTable.value && !reEncoded.value && (mode.value === 0 || mode.value === 2 || mode.value === 4))
-const inlineEntries = computed(() => (mode.value === 4 ? plotted.value.slice(0, 8) : plotted.value))
+  props.legend && !gated.value && !asTable.value && !reEncoded.value && (mode.value === 0 || mode.value === 2 || chipModes.value))
+const inlineEntries = computed(() => (chipModes.value ? plotted.value.slice(0, 8) : plotted.value))
 /* Count against *all* entities, not the plotted ones. Isolating a series from
- * the popover shrinks `plotted` to 1 — measured that way the chip would delete
+ * the panel shrinks `plotted` to 1 — measured that way the chip would delete
  * itself and strand the user with no route back to the other 62. */
 const overflowCount = computed(() =>
-  mode.value === 4 ? Math.max(0, entities.value.length - inlineEntries.value.length) : 0)
+  chipModes.value ? Math.max(0, entities.value.length - inlineEntries.value.length) : 0)
+const chipLabel = computed(() =>
+  mode.value === 3 ? `Manage ${entities.length} series` : `+${overflowCount.value} more`)
 
-/* ④ The overflow popover floats above the whole tile. It has to be teleported:
- * anchored inside .chart it gets clipped by the card's overflow:hidden and
- * follows the chart box instead of the chip. */
-const POP_W = 300
-const overflowOpen = ref(false)
+/* The panel floats above the whole tile. It has to be teleported: anchored
+ * inside .chart it gets clipped by the card's overflow:hidden and follows the
+ * chart box instead of the chip. */
+const panelOpen = ref(false)
 const moreBtn = ref(null)
-const pop = ref({ left: 0, top: 0, maxH: 340, arrow: POP_W / 2, below: false })
+const popW = computed(() => (mode.value === 3 ? 340 : 300))
+const pop = ref({ left: 0, top: 0, maxH: 360, arrow: 150, below: false })
 
 function placePop() {
   const r = moreBtn.value?.getBoundingClientRect()
   if (!r) return
-  const GAP = 8, EDGE = 8
+  const GAP = 8, EDGE = 8, W = popW.value
   const roomAbove = r.top - EDGE
   const roomBelow = window.innerHeight - r.bottom - EDGE
   const below = roomAbove < 220 && roomBelow > roomAbove
-  const maxH = Math.min(360, Math.max(180, (below ? roomBelow : roomAbove) - GAP))
-  const left = Math.max(EDGE, Math.min(r.left + r.width / 2 - POP_W / 2, window.innerWidth - POP_W - EDGE))
-  pop.value = {
-    left,
-    top: below ? r.bottom + GAP : r.top - GAP - maxH,
-    maxH, below,
-    arrow: r.left + r.width / 2 - left,
-  }
+  const cap = mode.value === 3 ? 440 : 360
+  const maxH = Math.min(cap, Math.max(180, (below ? roomBelow : roomAbove) - GAP))
+  const left = Math.max(EDGE, Math.min(r.left + r.width / 2 - W / 2, window.innerWidth - W - EDGE))
+  pop.value = { left, top: below ? r.bottom + GAP : r.top - GAP - maxH, maxH, below, arrow: r.left + r.width / 2 - left }
 }
-function toggleOverflow() {
-  overflowOpen.value = !overflowOpen.value
-  if (overflowOpen.value) nextTick(placePop)
+function togglePanel() {
+  panelOpen.value = !panelOpen.value
+  if (panelOpen.value) nextTick(placePop)
 }
-function closeOverflow() { overflowOpen.value = false }
-function onDocKey(e) { if (e.key === 'Escape') closeOverflow() }
+function closePanel() { panelOpen.value = false }
+function onDocKey(e) { if (e.key === 'Escape') closePanel() }
 
-watch(overflowOpen, (open) => {
+watch(panelOpen, (open) => {
   const fn = open ? addEventListener : removeEventListener
   fn.call(window, 'scroll', placePop, true)   // capture: the board scrolls, not the window
   fn.call(window, 'resize', placePop)
   fn.call(window, 'keydown', onDocKey)
 })
-watch(mode, closeOverflow)
-// hiding series reflows the inline legend, which moves the chip under the popover
-watch(inlineEntries, () => { if (overflowOpen.value) nextTick(placePop) })
+watch(mode, closePanel)
+// hiding series reflows the inline legend, which moves the chip under the panel
+watch(inlineEntries, () => { if (panelOpen.value) nextTick(placePop) })
 onBeforeUnmount(() => {
   removeEventListener('scroll', placePop, true)
   removeEventListener('resize', placePop)
@@ -410,15 +412,6 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
           v-else ref="chartRef" class="ec" :option="option"
           :init-options="{ renderer: 'canvas' }" :update-options="{ notMerge: true }" autoresize
         />
-
-        <!-- ③ Series manager: the legend as a control surface -->
-        <aside v-if="mode === 3" class="sm-panel">
-          <SeriesManager
-            :entities="entities" :hidden="hidden" :total="trueTotal"
-            @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
-            @bulk="bulk" @recolor="recolor"
-          />
-        </aside>
       </div>
 
       <!-- ② census chip — truncation is stated on the tile, not buried in the builder -->
@@ -456,24 +449,24 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
           <b v-if="sliceBased">{{ pctOf(e.value) }}%</b>
         </span>
 
-        <!-- ④ overflow chip: nothing is hidden without saying so -->
-        <button v-if="mode === 4 && overflowCount" ref="moreBtn" class="more" :class="{ on: overflowOpen }" @click.stop="toggleOverflow">
-          +{{ overflowCount }} more
+        <!-- ③/④ the chip is the only handle: nothing is hidden without saying so -->
+        <button v-if="chipModes && overflowCount" ref="moreBtn" class="more" :class="{ on: panelOpen }" @click.stop="togglePanel">
+          <Icon v-if="mode === 3" name="rows" :size="12" />{{ chipLabel }}
         </button>
       </div>
 
       <teleport to="body">
-        <template v-if="overflowOpen && mode === 4">
-          <div class="more-back" @click="closeOverflow" @wheel.prevent />
+        <template v-if="panelOpen && chipModes">
+          <div class="more-back" @click="closePanel" @wheel.prevent />
           <div
             class="more-pop" :class="{ below: pop.below }"
-            :style="{ left: pop.left + 'px', top: pop.top + 'px', width: POP_W + 'px', maxHeight: pop.maxH + 'px' }"
+            :style="{ left: pop.left + 'px', top: pop.top + 'px', width: popW + 'px', maxHeight: pop.maxH + 'px' }"
             @click.stop
           >
             <span class="mp-arrow" :style="{ left: pop.arrow + 'px' }" />
-            <header class="mp-h">All {{ entities.length }} series<button class="mp-x" @click="closeOverflow"><Icon name="x" :size="14" /></button></header>
+            <header class="mp-h">All {{ entities.length }} series<button class="mp-x" @click="closePanel"><Icon name="x" :size="14" /></button></header>
             <SeriesManager
-              compact :entities="entities" :hidden="hidden" :total="trueTotal"
+              :compact="mode === 4" :entities="entities" :hidden="hidden" :total="trueTotal"
               @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
               @bulk="bulk" @recolor="recolor"
             />
@@ -500,7 +493,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .lg.faded { opacity: .4; }
 .lg i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 .lg b { color: var(--ink-2); }
-.more { border: 1px dashed var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
+.more { display: inline-flex; align-items: center; gap: 4px; border: 1px dashed var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
 .more:hover, .more.on { background: var(--primary-soft); border-style: solid; border-color: var(--primary); }
 
 /* ④ overflow popover — teleported to <body>, so it floats over the whole card
@@ -513,10 +506,6 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .mp-h { display: flex; align-items: center; justify-content: space-between; flex: none; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
 .mp-x { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 2px; border-radius: 5px; }
 .mp-x:hover { background: var(--surface-2); color: var(--ink); }
-
-/* ③ series manager panel */
-.sm-panel { width: 250px; flex: none; border-left: 1px solid var(--border); padding-left: 10px; display: flex; min-height: 0; }
-.sm-panel > * { flex: 1; min-height: 0; }
 
 /* ② census chip */
 .census { display: flex; align-items: center; gap: 10px; padding: 7px 2px 0; flex: none; position: relative; flex-wrap: wrap; }
