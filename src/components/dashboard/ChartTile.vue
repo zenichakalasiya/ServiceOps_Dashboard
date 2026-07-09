@@ -105,8 +105,10 @@ watch(() => props.chart, () => { hidden.value = new Set(); gateChoice.value = nu
 // switching legend strategy starts from a clean series selection
 watch(mode, () => { hidden.value = new Set(); lastClicked.value = null; gateChoice.value = null })
 
+/* In ⑥ the rank window already bounds what's on the chart, so hiding acts on the
+ * windowed set (plus Other) — hiding a series that isn't plotted is meaningless. */
 function isolate(key) {
-  const others = entities.value.filter((e) => e.key !== key).map((e) => e.key)
+  const others = manageable.value.filter((e) => e.key !== key).map((e) => e.key)
   // clicking the already-isolated series restores everything
   hidden.value = hidden.value.size === others.length && !hidden.value.has(key) ? new Set() : new Set(others)
   lastClicked.value = key
@@ -118,7 +120,7 @@ function toggle(key) {
   lastClicked.value = key
 }
 function rangeTo(key) {
-  const keys = entities.value.map((e) => e.key)
+  const keys = manageable.value.map((e) => e.key)
   const a = keys.indexOf(lastClicked.value ?? key), b = keys.indexOf(key)
   const [lo, hi] = a < b ? [a, b] : [b, a]
   const s = new Set(hidden.value)
@@ -127,12 +129,13 @@ function rangeTo(key) {
 }
 function resetSeries() { hidden.value = new Set(); lastClicked.value = null }
 function bulk({ verb, keys, n }) {
-  const all = entities.value.map((e) => e.key)
+  const list = manageable.value
+  const all = list.map((e) => e.key)
   if (verb === 'all') hidden.value = new Set()
   else if (verb === 'none') hidden.value = new Set(all)
   else if (verb === 'invert') hidden.value = new Set(all.filter((k) => !hidden.value.has(k)))
   else if (verb === 'top') {
-    const keep = new Set([...entities.value].sort((a, b) => b.value - a.value).slice(0, n).map((e) => e.key))
+    const keep = new Set([...list].sort((a, b) => b.value - a.value).slice(0, n).map((e) => e.key))
     hidden.value = new Set(all.filter((k) => !keep.has(k)))
   } else if (verb === 'hide') hidden.value = new Set([...hidden.value, ...keys])
   else if (verb === 'only') hidden.value = new Set(all.filter((k) => !keys.includes(k)))
@@ -149,41 +152,69 @@ const rangeTo_ = ref(20)
 const coverage = ref(90)
 const rankOpen = ref(false)
 
+const RANKS = [
+  { id: 'top', label: 'Top N' },
+  { id: 'bottom', label: 'Bottom N' },
+  { id: 'range', label: 'Custom range' },
+  { id: 'coverage', label: 'Coverage %' },
+  { id: 'all', label: 'All' },
+]
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : lo))
+
 const sortedDesc = computed(() => [...entities.value].sort((a, b) => b.value - a.value))
 const windowed = computed(() => {
-  const s = sortedDesc.value
-  if (rankMode.value === 'bottom') return s.slice(Math.max(0, s.length - rankN.value))
-  if (rankMode.value === 'range') return s.slice(Math.max(0, rangeFrom.value - 1), rangeTo_.value)
+  const s = sortedDesc.value, n = s.length
+  if (!n) return s
   if (rankMode.value === 'all') return s
+  if (rankMode.value === 'bottom') return s.slice(n - clamp(rankN.value, 1, n))
+  if (rankMode.value === 'range') {
+    const from = clamp(rangeFrom.value, 1, n)
+    return s.slice(from - 1, clamp(rangeTo_.value, from, n))
+  }
   if (rankMode.value === 'coverage') {
-    const target = (coverage.value / 100) * trueTotal.value
+    const target = (clamp(coverage.value, 1, 100) / 100) * trueTotal.value
     const out = []; let run = 0
     for (const e of s) { out.push(e); run += e.value; if (run >= target) break }
     return out
   }
-  return s.slice(0, rankN.value)
+  return s.slice(0, clamp(rankN.value, 1, n))
 })
 const otherCount = computed(() => entities.value.length - windowed.value.length)
 const otherValue = computed(() => trueTotal.value - windowed.value.reduce((a, e) => a + e.value, 0))
+const otherRow = computed(() => ({ key: '__other', name: `Other (${otherCount.value})`, value: otherValue.value, color: OTHER_COLOR }))
 const censusLabel = computed(() => {
   const n = windowed.value.length, t = entities.value.length
   if (rankMode.value === 'all') return `All ${t}`
   if (rankMode.value === 'bottom') return `Bottom ${n} of ${t}`
-  if (rankMode.value === 'range') return `Rank ${rangeFrom.value}–${rangeTo_.value} of ${t}`
-  if (rankMode.value === 'coverage') return `${n} of ${t} · ${coverage.value}% of volume`
+  if (rankMode.value === 'range') return `Rank ${clamp(rangeFrom.value, 1, t)}–${clamp(rangeTo_.value, 1, t)} of ${t}`
+  if (rankMode.value === 'coverage') return `${n} of ${t} · ${clamp(coverage.value, 1, 100)}% of volume`
   return `Top ${n} of ${t}`
 })
+// a new window is a new visible set — stale hidden keys would silently persist
+watch([rankMode, rankN, rangeFrom, rangeTo_, coverage], () => { hidden.value = new Set() })
 
 /* --- mode 5: the gate. Refuse to render; make the author pick. --- */
 const gateChoice = ref(null)   // null | 'topn' | 'bar' | 'table' | 'all'
 
+/* Modes that bound the series set to a rank window (Top/Bottom/Range/Coverage). */
+const rankModes = computed(() => mode.value === 2 || mode.value === 6 || (mode.value === 5 && gateChoice.value === 'topn'))
+
+/* Everything the legend names — hidden entries included, so a disabled series
+ * stays on screen (struck through) and can be switched back on. */
+const legendAll = computed(() => {
+  if (!rankModes.value) return entities.value
+  const rows = [...windowed.value]
+  if (otherCount.value > 0) rows.push(otherRow.value)
+  return rows
+})
+
+/* What the legend controls and the dropdown lists. */
+const manageable = computed(() => (mode.value === 6 ? legendAll.value : entities.value))
+
 /* --- which entities actually reach the chart, per mode --- */
 const plotted = computed(() => {
-  if (mode.value === 2 || (mode.value === 5 && gateChoice.value === 'topn')) {
-    const rows = [...windowed.value]
-    if (otherCount.value > 0) rows.push({ key: '__other', name: `Other (${otherCount.value})`, value: otherValue.value, color: OTHER_COLOR })
-    return rows
-  }
+  if (mode.value === 6) return legendAll.value.filter((e) => !hidden.value.has(e.key))
+  if (rankModes.value) return legendAll.value
   if (mode.value === 3 || mode.value === 4) return entities.value.filter((e) => !hidden.value.has(e.key))
   return entities.value
 })
@@ -321,57 +352,80 @@ const option = computed(() => {
 /* ③ and ④ both keep the chart at full card width and reach the series list
  * through a chip. Neither reserves layout space for it — a 250px column inside
  * the card squeezed the chart into a corner. */
-const chipModes = computed(() => mode.value === 3 || mode.value === 4)
+const chipModes = computed(() => mode.value === 3 || mode.value === 4 || mode.value === 6)
 const showInlineLegend = computed(() =>
   props.legend && !gated.value && !asTable.value && !reEncoded.value && (mode.value === 0 || mode.value === 2 || chipModes.value))
-const inlineEntries = computed(() => (chipModes.value ? plotted.value.slice(0, 8) : plotted.value))
-/* Count against *all* entities, not the plotted ones. Isolating a series from
- * the panel shrinks `plotted` to 1 — measured that way the chip would delete
- * itself and strand the user with no route back to the other 62. */
+/* ⑥ keeps disabled series in the legend (struck through) so they can be
+ * switched back on; ③/④ drop them, since the dropdown is the way back. */
+const legendEntries = computed(() => (mode.value === 6 ? legendAll.value : plotted.value))
+const inlineEntries = computed(() => (chipModes.value ? legendEntries.value.slice(0, 8) : legendEntries.value))
+/* Count against the manageable set, not the plotted one. Isolating a series
+ * shrinks `plotted` to 1 — measured that way the chip would delete itself and
+ * strand the user with no route back to the rest. */
 const overflowCount = computed(() =>
-  chipModes.value ? Math.max(0, entities.value.length - inlineEntries.value.length) : 0)
+  chipModes.value ? Math.max(0, manageable.value.length - inlineEntries.value.length) : 0)
 const chipLabel = computed(() =>
-  mode.value === 3 ? `Manage ${entities.length} series` : `+${overflowCount.value} more`)
+  mode.value === 3 ? `Manage ${entities.value.length} series` : `+${overflowCount.value} more`)
+// clicking a legend entry disables it and pulls its data out of the chart
+const legendClickable = computed(() => mode.value === 4 || mode.value === 6)
 
 /* The panel floats above the whole tile. It has to be teleported: anchored
  * inside .chart it gets clipped by the card's overflow:hidden and follows the
  * chart box instead of the chip. */
 const panelOpen = ref(false)
 const moreBtn = ref(null)
+const rankBtn = ref(null)
 const popW = computed(() => (mode.value === 3 ? 340 : 300))
-const pop = ref({ left: 0, top: 0, maxH: 360, arrow: 150, below: false })
+const BLANK = { left: '0px', top: 'auto', bottom: '0px', maxH: '360px', arrow: '0px', below: false }
+const pop = ref({ ...BLANK })
+const rankPos = ref({ ...BLANK })
 
-function placePop() {
-  const r = moreBtn.value?.getBoundingClientRect()
-  if (!r) return
-  const GAP = 8, EDGE = 8, W = popW.value
+/* Anchor a floating panel to a trigger, in viewport coords: centred on it,
+ * clamped to the edges, flipped below when there is no room above.
+ * Above the trigger we pin the *bottom* edge — pinning `top` at
+ * `trigger.top - maxH` only lands flush for panels that actually fill maxH,
+ * and leaves shorter ones floating away from their arrow. */
+function anchor(el, W, cap) {
+  const r = el?.getBoundingClientRect()
+  if (!r) return null
+  const GAP = 8, EDGE = 8
   const roomAbove = r.top - EDGE
   const roomBelow = window.innerHeight - r.bottom - EDGE
-  const below = roomAbove < 220 && roomBelow > roomAbove
-  const cap = mode.value === 3 ? 440 : 360
-  const maxH = Math.min(cap, Math.max(180, (below ? roomBelow : roomAbove) - GAP))
+  const below = roomAbove < 200 && roomBelow > roomAbove
+  const maxH = Math.min(cap, Math.max(170, (below ? roomBelow : roomAbove) - GAP))
   const left = Math.max(EDGE, Math.min(r.left + r.width / 2 - W / 2, window.innerWidth - W - EDGE))
-  pop.value = { left, top: below ? r.bottom + GAP : r.top - GAP - maxH, maxH, below, arrow: r.left + r.width / 2 - left }
+  return {
+    left: left + 'px',
+    top: below ? r.bottom + GAP + 'px' : 'auto',
+    bottom: below ? 'auto' : window.innerHeight - r.top + GAP + 'px',
+    maxH: maxH + 'px',
+    below,
+    arrow: r.left + r.width / 2 - left + 'px',
+  }
 }
-function togglePanel() {
-  panelOpen.value = !panelOpen.value
-  if (panelOpen.value) nextTick(placePop)
-}
-function closePanel() { panelOpen.value = false }
-function onDocKey(e) { if (e.key === 'Escape') closePanel() }
+const RANK_W = 330
+function placePop() { const p = anchor(moreBtn.value, popW.value, mode.value === 3 ? 440 : 360); if (p) pop.value = p }
+function placeRank() { const p = anchor(rankBtn.value, RANK_W, 320); if (p) rankPos.value = p }
+function reflow() { if (panelOpen.value) placePop(); if (rankOpen.value) placeRank() }
 
-watch(panelOpen, (open) => {
+function togglePanel() { rankOpen.value = false; panelOpen.value = !panelOpen.value; if (panelOpen.value) nextTick(placePop) }
+function toggleRank() { panelOpen.value = false; rankOpen.value = !rankOpen.value; if (rankOpen.value) nextTick(placeRank) }
+function closePops() { panelOpen.value = false; rankOpen.value = false }
+function onDocKey(e) { if (e.key === 'Escape') closePops() }
+
+const anyPop = computed(() => panelOpen.value || rankOpen.value)
+watch(anyPop, (open) => {
   const fn = open ? addEventListener : removeEventListener
-  fn.call(window, 'scroll', placePop, true)   // capture: the board scrolls, not the window
-  fn.call(window, 'resize', placePop)
+  fn.call(window, 'scroll', reflow, true)   // capture: the board scrolls, not the window
+  fn.call(window, 'resize', reflow)
   fn.call(window, 'keydown', onDocKey)
 })
-watch(mode, closePanel)
+watch(mode, closePops)
 // hiding series reflows the inline legend, which moves the chip under the panel
-watch(inlineEntries, () => { if (panelOpen.value) nextTick(placePop) })
+watch(inlineEntries, () => nextTick(reflow))
 onBeforeUnmount(() => {
-  removeEventListener('scroll', placePop, true)
-  removeEventListener('resize', placePop)
+  removeEventListener('scroll', reflow, true)
+  removeEventListener('resize', reflow)
   removeEventListener('keydown', onDocKey)
 })
 
@@ -414,64 +468,99 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
         />
       </div>
 
-      <!-- ② census chip — truncation is stated on the tile, not buried in the builder -->
+      <!-- ② only: the "Other" residue spelled out beneath the chart -->
       <div v-if="mode === 2 || (mode === 5 && gateChoice === 'topn')" class="census">
-        <button class="cs-chip" @click="rankOpen = !rankOpen">
-          <Icon name="filter" :size="12" /> {{ censusLabel }}
-          <Icon name="chevron-down" :size="13" />
-        </button>
         <span v-if="otherCount > 0" class="cs-note">
           <i :style="{ background: OTHER_COLOR }" /> Other = {{ otherCount }} more ({{ pctOf(otherValue) }}% of total)
         </span>
-
-        <div v-if="rankOpen" class="rank-pop">
-          <div class="rp-h">Which slice of the ranking?</div>
-          <label v-for="m in [['top','Top N'],['bottom','Bottom N'],['range','Rank range'],['coverage','Coverage %'],['all','All']]" :key="m[0]" class="rp-r">
-            <input type="radio" :value="m[0]" v-model="rankMode" /> {{ m[1] }}
-            <template v-if="m[0] === 'top' && rankMode === 'top'"><input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rankN" /></template>
-            <template v-if="m[0] === 'bottom' && rankMode === 'bottom'"><input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rankN" /></template>
-            <template v-if="m[0] === 'range' && rankMode === 'range'">
-              <input class="rp-n" type="number" min="1" v-model.number="rangeFrom" /><span class="rp-d">–</span><input class="rp-n" type="number" v-model.number="rangeTo_" />
-            </template>
-            <template v-if="m[0] === 'coverage' && rankMode === 'coverage'"><input class="rp-n" type="number" min="1" max="100" v-model.number="coverage" /><span class="rp-d">%</span></template>
-          </label>
-          <p class="rp-f">Percentages always use the full {{ trueTotal }}-record total, never the visible subset.</p>
-        </div>
       </div>
 
-      <!-- inline legend (classic ⓪, bounded ②, or truncated ④) -->
+      <!-- inline legend (classic ⓪, bounded ②, truncated ④, merged ⑥) -->
       <div v-if="showInlineLegend" class="legend">
+        <!-- the rank pill sits before the legend and states the truncation -->
+        <button
+          v-if="rankModes" ref="rankBtn" class="cs-chip" :class="{ on: rankOpen }"
+          title="Choose which slice of the ranking to plot" @click.stop="toggleRank"
+        >
+          <Icon name="filter" :size="12" /> {{ censusLabel }}
+          <Icon name="chevron-down" :size="13" />
+        </button>
+
         <span
           v-for="e in inlineEntries" :key="e.key" class="lg"
-          :class="{ faded: legendHover !== null && legendHover !== e.key }"
+          :class="{ faded: legendHover !== null && legendHover !== e.key, off: hidden.has(e.key), click: legendClickable }"
+          :title="legendClickable ? (hidden.has(e.key) ? `Show ${e.name}` : `Hide ${e.name}`) : e.name"
           @mouseenter="emphasise(e.key)" @mouseleave="relax()"
+          @click="legendClickable && toggle(e.key)"
         ><i :style="{ background: e.color }" />{{ e.name }}
           <b v-if="sliceBased">{{ pctOf(e.value) }}%</b>
         </span>
 
-        <!-- ③/④ the chip is the only handle: nothing is hidden without saying so -->
+        <!-- ③/④/⑥ the chip is the only handle: nothing is hidden without saying so -->
         <button v-if="chipModes && overflowCount" ref="moreBtn" class="more" :class="{ on: panelOpen }" @click.stop="togglePanel">
           <Icon v-if="mode === 3" name="rows" :size="12" />{{ chipLabel }}
         </button>
       </div>
 
       <teleport to="body">
-        <template v-if="panelOpen && chipModes">
-          <div class="more-back" @click="closePanel" @wheel.prevent />
-          <div
-            class="more-pop" :class="{ below: pop.below }"
-            :style="{ left: pop.left + 'px', top: pop.top + 'px', width: popW + 'px', maxHeight: pop.maxH + 'px' }"
-            @click.stop
-          >
-            <span class="mp-arrow" :style="{ left: pop.arrow + 'px' }" />
-            <header class="mp-h">All {{ entities.length }} series<button class="mp-x" @click="closePanel"><Icon name="x" :size="14" /></button></header>
-            <SeriesManager
-              :compact="mode === 4" :entities="entities" :hidden="hidden" :total="trueTotal"
-              @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
-              @bulk="bulk" @recolor="recolor"
-            />
+        <div v-if="anyPop" class="more-back" @click="closePops" @wheel.prevent />
+
+        <!-- series dropdown: floats over the tile, never inside it -->
+        <div
+          v-if="panelOpen && chipModes" class="more-pop" :class="{ below: pop.below }"
+          :style="{ left: pop.left, top: pop.top, bottom: pop.bottom, width: popW + 'px', maxHeight: pop.maxH }"
+          @click.stop
+        >
+          <span class="mp-arrow" :style="{ left: pop.arrow }" />
+          <header class="mp-h">{{ mode === 6 ? censusLabel : `All ${entities.length} series` }}<button class="mp-x" @click="closePops"><Icon name="x" :size="14" /></button></header>
+          <SeriesManager
+            :compact="mode !== 3" :entities="manageable" :hidden="hidden" :total="trueTotal"
+            @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
+            @bulk="bulk" @recolor="recolor"
+          />
+        </div>
+
+        <!-- rank window: tabs + one field each -->
+        <div
+          v-if="rankOpen && rankModes" class="more-pop rank-pop" :class="{ below: rankPos.below }"
+          :style="{ left: rankPos.left, top: rankPos.top, bottom: rankPos.bottom, width: RANK_W + 'px' }"
+          @click.stop
+        >
+          <span class="mp-arrow" :style="{ left: rankPos.arrow }" />
+          <header class="mp-h">Which slice of the ranking?<button class="mp-x" @click="closePops"><Icon name="x" :size="14" /></button></header>
+
+          <div class="rp-tabs">
+            <button v-for="r in RANKS" :key="r.id" class="rp-t" :class="{ on: rankMode === r.id }" @click="rankMode = r.id">{{ r.label }}</button>
           </div>
-        </template>
+
+          <div class="rp-field">
+            <template v-if="rankMode === 'top' || rankMode === 'bottom'">
+              <label>Show the</label>
+              <input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rankN" />
+              <span>{{ rankMode === 'top' ? 'largest' : 'smallest' }} of {{ entities.length }}</span>
+            </template>
+            <template v-else-if="rankMode === 'range'">
+              <label>Ranks</label>
+              <input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rangeFrom" />
+              <span class="rp-d">to</span>
+              <input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rangeTo_" />
+              <span>— reach the middle of the distribution</span>
+            </template>
+            <template v-else-if="rankMode === 'coverage'">
+              <label>Cover</label>
+              <input class="rp-n" type="number" min="1" max="100" v-model.number="coverage" />
+              <span>% of total volume — the tail collapses itself</span>
+            </template>
+            <template v-else>
+              <span class="rp-warn"><Icon name="alert" :size="13" /> All {{ entities.length }} series. Colour stops carrying meaning past about 10.</span>
+            </template>
+          </div>
+
+          <p class="rp-f">
+            <template v-if="otherCount > 0">The remaining {{ otherCount }} roll into <b>Other</b> — nothing is dropped.<br /></template>
+            Percentages always use the full {{ trueTotal }}-record total, never the visible subset.
+          </p>
+        </div>
       </teleport>
 
       <!-- ① re-encode: the axis is the legend -->
@@ -489,10 +578,15 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .gt { align-self: flex-start; }
 
 .legend { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 12px; padding: 6px 4px 0; flex: none; }
-.lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); cursor: pointer; transition: opacity .12s; }
+.lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); cursor: pointer; transition: opacity .12s; user-select: none; }
 .lg.faded { opacity: .4; }
 .lg i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 .lg b { color: var(--ink-2); }
+/* a disabled series stays in the legend, struck through, so it can come back */
+.lg.off { opacity: .42; }
+.lg.off i { background: var(--muted-2) !important; }
+.lg.off, .lg.off b { text-decoration: line-through; }
+.lg.click:hover { color: var(--ink); }
 .more { display: inline-flex; align-items: center; gap: 4px; border: 1px dashed var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
 .more:hover, .more.on { background: var(--primary-soft); border-style: solid; border-color: var(--primary); }
 
@@ -507,19 +601,30 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .mp-x { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 2px; border-radius: 5px; }
 .mp-x:hover { background: var(--surface-2); color: var(--ink); }
 
-/* ② census chip */
-.census { display: flex; align-items: center; gap: 10px; padding: 7px 2px 0; flex: none; position: relative; flex-wrap: wrap; }
-.cs-chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 999px; font-size: 11.5px; font-weight: 600; }
-.cs-chip:hover { border-color: var(--primary); color: var(--primary-700); }
+/* ② the "Other" residue, spelled out */
+.census { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 7px 2px 0; flex: none; flex-wrap: wrap; }
 .cs-note { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
 .cs-note i { width: 9px; height: 9px; border-radius: 3px; }
-.rank-pop { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 25; width: 268px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); padding: 10px 12px; }
-.rp-h { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
-.rp-r { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
-.rp-n { width: 52px; margin-left: auto; height: 24px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; text-align: center; }
-.rp-r .rp-n ~ .rp-n { margin-left: 0; }
+
+/* the rank pill — first item in the legend row */
+.cs-chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 999px; font-size: 11.5px; font-weight: 600; flex: none; }
+.cs-chip:hover, .cs-chip.on { border-color: var(--primary); color: var(--primary-700); background: var(--primary-soft); }
+
+/* rank window — tabs, then the one field that tab needs */
+.rank-pop { gap: 8px; padding: 10px 12px; }
+.rank-pop > * { flex: none; }
+.rp-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border-radius: 7px; }
+.rp-t { flex: 1; height: 26px; border: none; background: transparent; color: var(--muted); border-radius: 5px; font-size: 11px; font-weight: 600; white-space: nowrap; padding: 0 4px; }
+.rp-t:hover { color: var(--ink); }
+.rp-t.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); }
+.rp-field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 30px; font-size: 12px; color: var(--muted); }
+.rp-field label { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.rp-n { width: 56px; height: 26px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; text-align: center; }
+.rp-n:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .rp-d { color: var(--muted); font-size: 12px; }
-.rp-f { margin: 8px 0 0; padding-top: 7px; border-top: 1px solid var(--border); font-size: 10.5px; line-height: 1.45; color: var(--muted); }
+.rp-warn { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); font-size: 11.5px; line-height: 1.4; }
+.rp-f { margin: 0; padding-top: 7px; border-top: 1px solid var(--border); font-size: 10.5px; line-height: 1.5; color: var(--muted); }
+.rp-f b { color: var(--ink-2); }
 
 /* ⑤ gate */
 .gate { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 5px; padding: 14px; }

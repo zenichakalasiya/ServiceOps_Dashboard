@@ -117,6 +117,7 @@ const LSTYLES = [
   { id: 3, n: '③', label: 'Series manager', desc: 'A chip opens the legend as a searchable dropdown over the widget: click to isolate, Ctrl-click to toggle, or bulk-hide 50 series in two clicks.' },
   { id: 4, n: '④', label: 'Overflow chip', desc: 'Show 8 swatches inline, collapse the rest into “+N more” — the same dropdown, compact. The cheapest option that still doesn’t lie.' },
   { id: 5, n: '⑤', label: 'Cardinality gate', desc: 'Refuse to render an unreadable chart. Make the author choose before it reaches a dashboard.' },
+  { id: 6, n: '⑥', label: 'Merged ② + ④', desc: 'Rank pill (Top N · Bottom N · Custom range · Coverage % · All) before the legend; 8 series inline with “+N more”; click any legend entry to disable it and pull its data out of the chart.' },
 ]
 const showLegendDemo = true
 const ls = computed(() => store.ui.legendStyle)
