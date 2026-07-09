@@ -17,7 +17,7 @@
  *   4 Overflow chip 8 inline + "+N more" popover
  *   5 Cardinality gate  refuse to render; make the author choose
  */
-import { computed, ref, shallowRef, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, shallowRef, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, LineChart, PieChart } from 'echarts/charts'
@@ -321,8 +321,57 @@ const option = computed(() => {
 const showInlineLegend = computed(() =>
   props.legend && !gated.value && !asTable.value && !reEncoded.value && (mode.value === 0 || mode.value === 2 || mode.value === 4))
 const inlineEntries = computed(() => (mode.value === 4 ? plotted.value.slice(0, 8) : plotted.value))
-const overflowCount = computed(() => Math.max(0, plotted.value.length - 8))
+/* Count against *all* entities, not the plotted ones. Isolating a series from
+ * the popover shrinks `plotted` to 1 — measured that way the chip would delete
+ * itself and strand the user with no route back to the other 62. */
+const overflowCount = computed(() =>
+  mode.value === 4 ? Math.max(0, entities.value.length - inlineEntries.value.length) : 0)
+
+/* ④ The overflow popover floats above the whole tile. It has to be teleported:
+ * anchored inside .chart it gets clipped by the card's overflow:hidden and
+ * follows the chart box instead of the chip. */
+const POP_W = 300
 const overflowOpen = ref(false)
+const moreBtn = ref(null)
+const pop = ref({ left: 0, top: 0, maxH: 340, arrow: POP_W / 2, below: false })
+
+function placePop() {
+  const r = moreBtn.value?.getBoundingClientRect()
+  if (!r) return
+  const GAP = 8, EDGE = 8
+  const roomAbove = r.top - EDGE
+  const roomBelow = window.innerHeight - r.bottom - EDGE
+  const below = roomAbove < 220 && roomBelow > roomAbove
+  const maxH = Math.min(360, Math.max(180, (below ? roomBelow : roomAbove) - GAP))
+  const left = Math.max(EDGE, Math.min(r.left + r.width / 2 - POP_W / 2, window.innerWidth - POP_W - EDGE))
+  pop.value = {
+    left,
+    top: below ? r.bottom + GAP : r.top - GAP - maxH,
+    maxH, below,
+    arrow: r.left + r.width / 2 - left,
+  }
+}
+function toggleOverflow() {
+  overflowOpen.value = !overflowOpen.value
+  if (overflowOpen.value) nextTick(placePop)
+}
+function closeOverflow() { overflowOpen.value = false }
+function onDocKey(e) { if (e.key === 'Escape') closeOverflow() }
+
+watch(overflowOpen, (open) => {
+  const fn = open ? addEventListener : removeEventListener
+  fn.call(window, 'scroll', placePop, true)   // capture: the board scrolls, not the window
+  fn.call(window, 'resize', placePop)
+  fn.call(window, 'keydown', onDocKey)
+})
+watch(mode, closeOverflow)
+// hiding series reflows the inline legend, which moves the chip under the popover
+watch(inlineEntries, () => { if (overflowOpen.value) nextTick(placePop) })
+onBeforeUnmount(() => {
+  removeEventListener('scroll', placePop, true)
+  removeEventListener('resize', placePop)
+  removeEventListener('keydown', onDocKey)
+})
 
 /* table view (gate option 3) */
 const tableRows = computed(() => sortedDesc.value.map((e) => [e.name, String(e.value), `${pctOf(e.value)}%`]))
@@ -408,18 +457,29 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
         </span>
 
         <!-- ④ overflow chip: nothing is hidden without saying so -->
-        <button v-if="mode === 4 && overflowCount" class="more" @click="overflowOpen = !overflowOpen">
+        <button v-if="mode === 4 && overflowCount" ref="moreBtn" class="more" :class="{ on: overflowOpen }" @click.stop="toggleOverflow">
           +{{ overflowCount }} more
         </button>
       </div>
 
-      <div v-if="overflowOpen && mode === 4" class="more-pop">
-        <SeriesManager
-          compact :entities="entities" :hidden="hidden" :total="trueTotal"
-          @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
-          @bulk="bulk" @recolor="recolor"
-        />
-      </div>
+      <teleport to="body">
+        <template v-if="overflowOpen && mode === 4">
+          <div class="more-back" @click="closeOverflow" @wheel.prevent />
+          <div
+            class="more-pop" :class="{ below: pop.below }"
+            :style="{ left: pop.left + 'px', top: pop.top + 'px', width: POP_W + 'px', maxHeight: pop.maxH + 'px' }"
+            @click.stop
+          >
+            <span class="mp-arrow" :style="{ left: pop.arrow + 'px' }" />
+            <header class="mp-h">All {{ entities.length }} series<button class="mp-x" @click="closeOverflow"><Icon name="x" :size="14" /></button></header>
+            <SeriesManager
+              compact :entities="entities" :hidden="hidden" :total="trueTotal"
+              @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
+              @bulk="bulk" @recolor="recolor"
+            />
+          </div>
+        </template>
+      </teleport>
 
       <!-- ① re-encode: the axis is the legend -->
       <div v-if="reEncoded" class="reenc-note">
@@ -441,8 +501,18 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .lg i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 .lg b { color: var(--ink-2); }
 .more { border: 1px dashed var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
-.more:hover { background: var(--primary-soft); border-style: solid; }
-.more-pop { position: absolute; right: 8px; bottom: 34px; z-index: 20; width: 280px; max-height: 320px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); padding: 10px; display: flex; }
+.more:hover, .more.on { background: var(--primary-soft); border-style: solid; border-color: var(--primary); }
+
+/* ④ overflow popover — teleported to <body>, so it floats over the whole card
+   instead of being clipped by it. Positioned in viewport coords from the chip. */
+.more-back { position: fixed; inset: 0; z-index: 299; }
+.more-pop { position: fixed; z-index: 300; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); }
+.more-pop > * { flex: 1; min-height: 0; }
+.mp-arrow { position: absolute; bottom: -6px; width: 10px; height: 10px; flex: none; background: var(--surface); border: 1px solid var(--border); border-top: none; border-left: none; transform: translateX(-50%) rotate(45deg); }
+.more-pop.below .mp-arrow { top: -6px; bottom: auto; border: 1px solid var(--border); border-bottom: none; border-right: none; }
+.mp-h { display: flex; align-items: center; justify-content: space-between; flex: none; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.mp-x { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 2px; border-radius: 5px; }
+.mp-x:hover { background: var(--surface-2); color: var(--ink); }
 
 /* ③ series manager panel */
 .sm-panel { width: 250px; flex: none; border-left: 1px solid var(--border); padding-left: 10px; display: flex; min-height: 0; }
