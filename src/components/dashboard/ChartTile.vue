@@ -10,32 +10,28 @@
  * OEM licensing. See docs/chart-library-and-competitor-dashboard-research.md.
  *
  * LEGEND MODES (docs/legend-and-topn-design.md). When a chart exceeds
- * HIGH_CARD entities, store.ui.legendStyle picks one of five strategies:
- *   1 Re-encode     ranked hbar, names on the axis, no legend at all
- *   2 Top-N + Other bounded series set, explicit Other, census chip
- *   3 Series manager searchable side panel with bulk verbs
- *   4 Overflow chip 8 inline + "+N more" popover
- *   5 Cardinality gate  refuse to render; make the author choose
+ * HIGH_CARD entities, store.ui.legendStyle picks one of three strategies:
+ *   2 Top-N + Other  bounded series set, explicit Other, rank pill
+ *   4 Overflow chip  8 inline + "+N more" dropdown
+ *   6 Merged ② + ④   rank pill + 8 inline + "+N more"; click a legend entry
+ *                    to disable it and pull its data out of the chart
+ * Below HIGH_CARD every chart renders mode 0: a plain, complete legend.
+ * The doc still describes re-encode / series-manager / cardinality-gate — they
+ * were prototyped, compared, and cut.
  */
 import { computed, ref, shallowRef, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, LineChart, PieChart } from 'echarts/charts'
-import {
-  GridComponent, TooltipComponent, LegendComponent,
-  MarkLineComponent, MarkAreaComponent, DataZoomComponent,
-} from 'echarts/components'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { store } from '../../store'
 import Icon from '../ui/Icon.vue'
 import SeriesManager from './SeriesManager.vue'
-import DataTable from './DataTable.vue'
 
-use([
-  CanvasRenderer, BarChart, LineChart, PieChart,
-  GridComponent, TooltipComponent, LegendComponent,
-  MarkLineComponent, MarkAreaComponent, DataZoomComponent,
-])
+// Register only what we render. MarkLine/MarkArea come back with SLA threshold
+// bands; DataZoom went out with the ranked-bar re-encode.
+use([CanvasRenderer, BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 
 const props = defineProps({
   chart: Object,
@@ -101,9 +97,9 @@ const mode = computed(() => (isHighCard.value ? store.ui.legendStyle : 0))
 /* --- hidden series (modes 3 & 4) --- */
 const hidden = ref(new Set())
 const lastClicked = ref(null)
-watch(() => props.chart, () => { hidden.value = new Set(); gateChoice.value = null })
+watch(() => props.chart, () => { hidden.value = new Set() })
 // switching legend strategy starts from a clean series selection
-watch(mode, () => { hidden.value = new Set(); lastClicked.value = null; gateChoice.value = null })
+watch(mode, () => { hidden.value = new Set(); lastClicked.value = null })
 
 /* In ⑥ the rank window already bounds what's on the chart, so hiding acts on the
  * windowed set (plus Other) — hiding a series that isn't plotted is meaningless. */
@@ -193,11 +189,8 @@ const censusLabel = computed(() => {
 // a new window is a new visible set — stale hidden keys would silently persist
 watch([rankMode, rankN, rangeFrom, rangeTo_, coverage], () => { hidden.value = new Set() })
 
-/* --- mode 5: the gate. Refuse to render; make the author pick. --- */
-const gateChoice = ref(null)   // null | 'topn' | 'bar' | 'table' | 'all'
-
 /* Modes that bound the series set to a rank window (Top/Bottom/Range/Coverage). */
-const rankModes = computed(() => mode.value === 2 || mode.value === 6 || (mode.value === 5 && gateChoice.value === 'topn'))
+const rankModes = computed(() => mode.value === 2 || mode.value === 6)
 
 /* Everything the legend names — hidden entries included, so a disabled series
  * stays on screen (struck through) and can be switched back on. */
@@ -215,16 +208,9 @@ const manageable = computed(() => (mode.value === 6 ? legendAll.value : entities
 const plotted = computed(() => {
   if (mode.value === 6) return legendAll.value.filter((e) => !hidden.value.has(e.key))
   if (rankModes.value) return legendAll.value
-  if (mode.value === 3 || mode.value === 4) return entities.value.filter((e) => !hidden.value.has(e.key))
+  if (mode.value === 4) return entities.value.filter((e) => !hidden.value.has(e.key))
   return entities.value
 })
-
-/* mode 1, and the gate's "ranked bar" answer, re-encode as a ranked hbar:
- * category names live on the axis, so no legend and no colour are needed. */
-const reEncoded = computed(() => mode.value === 1 || (mode.value === 5 && gateChoice.value === 'bar'))
-const asTable = computed(() => mode.value === 5 && gateChoice.value === 'table')
-const gated = computed(() => mode.value === 5 && !gateChoice.value)
-const effectiveKind = computed(() => (reEncoded.value ? 'hbar' : kind.value))
 
 /* --- theme: read design tokens at runtime so dark mode Just Works --- */
 const themeTick = ref(0)
@@ -258,7 +244,7 @@ const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;borde
 
 const option = computed(() => {
   const t = tokens.value
-  const k = effectiveKind.value
+  const k = kind.value
   const rows = plotted.value
 
   const tip = {
@@ -292,30 +278,9 @@ const option = computed(() => {
 
   const splitLine = { show: true, lineStyle: { color: t.border, type: 'dashed', opacity: 0.7 } }
 
-  /* ① Re-encode: a ranked horizontal bar of the *slices*. One colour, names on
-   * the axis, dataZoom to scroll — the direct answer to "I can't reach the
-   * categories between rank 11 and rank 50". No legend is emitted at all. */
-  if (reEncoded.value) {
-    const ranked = [...rows].sort((a, b) => a.value - b.value)   // ECharts draws category axis bottom-up
-    const win = Math.min(100, (12 / Math.max(1, ranked.length)) * 100)
-    return {
-      tooltip: { ...tip, trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (ps) => `${dot(ps[0].color)}${ps[0].name}: ${pctOf(ps[0].value)}% <b style="color:${t.ink}">(${ps[0].value})</b>` },
-      legend: { show: false },
-      grid: { left: 6, right: 30, top: 10, bottom: 4, containLabel: true },
-      xAxis: { type: 'value', ...axis, splitLine },
-      yAxis: { type: 'category', data: ranked.map((e) => e.name), ...axis, axisLabel: { ...axis.axisLabel, width: 130, overflow: 'truncate' } },
-      dataZoom: [
-        { type: 'inside', yAxisIndex: 0, start: 100 - win, end: 100, zoomOnMouseWheel: false, moveOnMouseWheel: true },
-        { type: 'slider', yAxisIndex: 0, start: 100 - win, end: 100, width: 10, right: 4, borderColor: 'transparent', backgroundColor: t.border, fillerColor: t.primary + '33', handleStyle: { color: t.primary }, showDetail: false },
-      ],
-      series: [{ type: 'bar', barMaxWidth: 18, itemStyle: { borderRadius: [0, 3, 3, 0], color: t.primary }, data: ranked.map((e) => e.value), emphasis: { focus: 'series' } }],
-      ...anim,
-    }
-  }
-
-  /* Cartesian: bar (column) | hbar (native horizontal) | line.
+  /* Cartesian: bar (column) | hbar (horizontal) | line.
    * Here entities are *series*, so hiding one drops it from the plot. */
-  const shown = series.value.filter((s) => !hidden.value.has(s.name) || mode.value < 3)
+  const shown = series.value.filter((s) => !hidden.value.has(s.name))
   const isLine = k === 'line'
   const horizontal = k === 'hbar'
   const cat = { type: 'category', data: labels.value, ...axis, boundaryGap: !isLine, ...(horizontal ? { inverse: true } : {}) }
@@ -352,11 +317,10 @@ const option = computed(() => {
 /* ③ and ④ both keep the chart at full card width and reach the series list
  * through a chip. Neither reserves layout space for it — a 250px column inside
  * the card squeezed the chart into a corner. */
-const chipModes = computed(() => mode.value === 3 || mode.value === 4 || mode.value === 6)
-const showInlineLegend = computed(() =>
-  props.legend && !gated.value && !asTable.value && !reEncoded.value && (mode.value === 0 || mode.value === 2 || chipModes.value))
+const chipModes = computed(() => mode.value === 4 || mode.value === 6)
+const showInlineLegend = computed(() => props.legend)
 /* ⑥ keeps disabled series in the legend (struck through) so they can be
- * switched back on; ③/④ drop them, since the dropdown is the way back. */
+ * switched back on; ④ drops them, since the dropdown is the way back. */
 const legendEntries = computed(() => (mode.value === 6 ? legendAll.value : plotted.value))
 const inlineEntries = computed(() => (chipModes.value ? legendEntries.value.slice(0, 8) : legendEntries.value))
 /* Count against the manageable set, not the plotted one. Isolating a series
@@ -364,10 +328,8 @@ const inlineEntries = computed(() => (chipModes.value ? legendEntries.value.slic
  * strand the user with no route back to the rest. */
 const overflowCount = computed(() =>
   chipModes.value ? Math.max(0, manageable.value.length - inlineEntries.value.length) : 0)
-const chipLabel = computed(() =>
-  mode.value === 3 ? `Manage ${entities.value.length} series` : `+${overflowCount.value} more`)
 // clicking a legend entry disables it and pulls its data out of the chart
-const legendClickable = computed(() => mode.value === 4 || mode.value === 6)
+const legendClickable = computed(() => chipModes.value)
 
 /* The panel floats above the whole tile. It has to be teleported: anchored
  * inside .chart it gets clipped by the card's overflow:hidden and follows the
@@ -375,7 +337,7 @@ const legendClickable = computed(() => mode.value === 4 || mode.value === 6)
 const panelOpen = ref(false)
 const moreBtn = ref(null)
 const rankBtn = ref(null)
-const popW = computed(() => (mode.value === 3 ? 340 : 300))
+const POP_W = 300
 const BLANK = { left: '0px', top: 'auto', bottom: '0px', maxH: '360px', arrow: '0px', below: false }
 const pop = ref({ ...BLANK })
 const rankPos = ref({ ...BLANK })
@@ -404,7 +366,7 @@ function anchor(el, W, cap) {
   }
 }
 const RANK_W = 330
-function placePop() { const p = anchor(moreBtn.value, popW.value, mode.value === 3 ? 440 : 360); if (p) pop.value = p }
+function placePop() { const p = anchor(moreBtn.value, POP_W, 360); if (p) pop.value = p }
 function placeRank() { const p = anchor(rankBtn.value, RANK_W, 320); if (p) rankPos.value = p }
 function reflow() { if (panelOpen.value) placePop(); if (rankOpen.value) placeRank() }
 
@@ -429,9 +391,6 @@ onBeforeUnmount(() => {
   removeEventListener('keydown', onDocKey)
 })
 
-/* table view (gate option 3) */
-const tableRows = computed(() => sortedDesc.value.map((e) => [e.name, String(e.value), `${pctOf(e.value)}%`]))
-
 let raf = 0
 onMounted(() => { raf = requestAnimationFrame(() => chartRef.value?.resize()) })
 onBeforeUnmount(() => cancelAnimationFrame(raf))
@@ -439,37 +398,15 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 
 <template>
   <div class="chart" :style="{ height: height + 'px' }">
-    <!-- ⑤ Cardinality gate: refuse to render an unreadable chart; make the choice explicit -->
-    <div v-if="gated" class="gate">
-      <span class="g-ico"><Icon name="alert" :size="20" /></span>
-      <b class="g-t">{{ entities.length }} distinct values</b>
-      <span class="g-s">A donut can show about 8 before colour stops carrying meaning. How should this render?</span>
-      <div class="g-acts">
-        <button class="g-b primary" @click="gateChoice = 'topn'">Top 10 + Other<em>recommended</em></button>
-        <button class="g-b" @click="gateChoice = 'bar'">Ranked bar</button>
-        <button class="g-b" @click="gateChoice = 'table'">Table</button>
-        <button class="g-b ghost" @click="gateChoice = 'all'">Show all anyway</button>
-      </div>
-    </div>
-
-    <template v-else>
-      <!-- the gate's answer stays visible and reversible -->
-      <div v-if="mode === 5" class="g-crumb">
-        <Icon name="verified" :size="12" />
-        {{ gateChoice === 'topn' ? 'Top 10 + Other' : gateChoice === 'bar' ? 'Ranked bar' : gateChoice === 'table' ? 'Table' : 'Showing all ' + entities.length }}
-        <button @click="gateChoice = null">change</button>
-      </div>
-
       <div class="chart-row">
-        <DataTable v-if="asTable" class="gt" :columns="['Technician', 'Tickets', 'Share']" :rows="tableRows" />
         <VChart
-          v-else ref="chartRef" class="ec" :option="option"
+          ref="chartRef" class="ec" :option="option"
           :init-options="{ renderer: 'canvas' }" :update-options="{ notMerge: true }" autoresize
         />
       </div>
 
       <!-- ② only: the "Other" residue spelled out beneath the chart -->
-      <div v-if="mode === 2 || (mode === 5 && gateChoice === 'topn')" class="census">
+      <div v-if="mode === 2" class="census">
         <span v-if="otherCount > 0" class="cs-note">
           <i :style="{ background: OTHER_COLOR }" /> Other = {{ otherCount }} more ({{ pctOf(otherValue) }}% of total)
         </span>
@@ -496,9 +433,9 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
           <b v-if="sliceBased">{{ pctOf(e.value) }}%</b>
         </span>
 
-        <!-- ③/④/⑥ the chip is the only handle: nothing is hidden without saying so -->
+        <!-- ④/⑥ the chip is the only handle: nothing is hidden without saying so -->
         <button v-if="chipModes && overflowCount" ref="moreBtn" class="more" :class="{ on: panelOpen }" @click.stop="togglePanel">
-          <Icon v-if="mode === 3" name="rows" :size="12" />{{ chipLabel }}
+          +{{ overflowCount }} more
         </button>
       </div>
 
@@ -508,13 +445,13 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
         <!-- series dropdown: floats over the tile, never inside it -->
         <div
           v-if="panelOpen && chipModes" class="more-pop" :class="{ below: pop.below }"
-          :style="{ left: pop.left, top: pop.top, bottom: pop.bottom, width: popW + 'px', maxHeight: pop.maxH }"
+          :style="{ left: pop.left, top: pop.top, bottom: pop.bottom, width: POP_W + 'px', maxHeight: pop.maxH }"
           @click.stop
         >
           <span class="mp-arrow" :style="{ left: pop.arrow }" />
           <header class="mp-h">{{ mode === 6 ? censusLabel : `All ${entities.length} series` }}<button class="mp-x" @click="closePops"><Icon name="x" :size="14" /></button></header>
           <SeriesManager
-            :compact="mode !== 3" :entities="manageable" :hidden="hidden" :total="trueTotal"
+            compact :entities="manageable" :hidden="hidden" :total="trueTotal"
             @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
             @bulk="bulk" @recolor="recolor"
           />
@@ -562,12 +499,6 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
           </p>
         </div>
       </teleport>
-
-      <!-- ① re-encode: the axis is the legend -->
-      <div v-if="reEncoded" class="reenc-note">
-        <Icon name="bulb" :size="12" /> Names sit on the axis — no legend, no colour needed. Scroll or drag to reach any rank.
-      </div>
-    </template>
   </div>
 </template>
 
@@ -575,7 +506,6 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .chart { display: flex; flex-direction: column; min-width: 0; position: relative; }
 .chart-row { flex: 1; display: flex; min-height: 0; gap: 10px; }
 .ec { flex: 1; min-height: 0; min-width: 0; }
-.gt { align-self: flex-start; }
 
 .legend { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 12px; padding: 6px 4px 0; flex: none; }
 .lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); cursor: pointer; transition: opacity .12s; user-select: none; }
@@ -626,20 +556,4 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .rp-f { margin: 0; padding-top: 7px; border-top: 1px solid var(--border); font-size: 10.5px; line-height: 1.5; color: var(--muted); }
 .rp-f b { color: var(--ink-2); }
 
-/* ⑤ gate */
-.gate { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 5px; padding: 14px; }
-.g-ico { color: var(--amber); }
-.g-t { font-size: 14px; color: var(--ink); }
-.g-s { font-size: 12px; color: var(--muted); max-width: 380px; line-height: 1.5; }
-.g-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
-.g-b { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: var(--r-sm); font-size: 12px; font-weight: 500; }
-.g-b:hover { background: var(--surface-2); }
-.g-b.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
-.g-b.primary:hover { background: var(--primary-600); }
-.g-b.primary em { font-style: normal; font-size: 10px; opacity: .8; font-weight: 500; }
-.g-b.ghost { border-style: dashed; color: var(--muted); }
-.g-crumb { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; font-size: 11px; color: var(--muted); padding-bottom: 6px; flex: none; }
-.g-crumb button { border: none; background: transparent; color: var(--primary-700); font-weight: 600; font-size: 11px; text-decoration: underline; }
-
-.reenc-note { display: flex; align-items: center; gap: 6px; padding-top: 6px; font-size: 10.5px; color: var(--muted); flex: none; }
 </style>

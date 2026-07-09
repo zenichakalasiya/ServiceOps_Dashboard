@@ -112,11 +112,8 @@ const gs = computed(() => store.ui.groupStyle)
 // Only charts above the high-cardinality threshold react; the rest render normally.
 // See docs/legend-and-topn-design.md
 const LSTYLES = [
-  { id: 1, n: '①', label: 'Re-encode', desc: 'Ranked bar — names on the axis, so no legend and no colour are needed. Drag the rail to reach any rank.' },
   { id: 2, n: '②', label: 'Top-N + Other', desc: 'Bound the set, roll the tail into an explicit “Other”, and state the truncation on the tile. Percentages still use the full total.' },
-  { id: 3, n: '③', label: 'Series manager', desc: 'A chip opens the legend as a searchable dropdown over the widget: click to isolate, Ctrl-click to toggle, or bulk-hide 50 series in two clicks.' },
-  { id: 4, n: '④', label: 'Overflow chip', desc: 'Show 8 swatches inline, collapse the rest into “+N more” — the same dropdown, compact. The cheapest option that still doesn’t lie.' },
-  { id: 5, n: '⑤', label: 'Cardinality gate', desc: 'Refuse to render an unreadable chart. Make the author choose before it reaches a dashboard.' },
+  { id: 4, n: '④', label: 'Overflow chip', desc: 'Show 8 swatches inline, collapse the rest into a “+N more” dropdown. The cheapest option that still doesn’t lie.' },
   { id: 6, n: '⑥', label: 'Merged ② + ④', desc: 'Rank pill (Top N · Bottom N · Custom range · Coverage % · All) before the legend; 8 series inline with “+N more”; click any legend entry to disable it and pull its data out of the chart.' },
 ]
 const showLegendDemo = true
