@@ -82,24 +82,26 @@ const arcs = computed(() => {
   <div class="chart" :style="{ height: height + 'px' }">
     <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="xMidYMid meet" width="100%" height="100%">
       <template v-if="kind === 'bar'">
-        <rect v-for="(b, i) in bars" :key="i" class="seg" :class="{ dim: legendHover !== null && legendHover !== b.si }" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
+        <rect v-for="(b, i) in bars" :key="i" class="seg bar-in" :class="{ dim: legendHover !== null && legendHover !== b.si }" :style="{ animationDelay: i * 35 + 'ms' }" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
           @mousemove="showTip($event, b)" @mouseleave="hideTip" />
       </template>
       <template v-else-if="kind === 'hbar'">
-        <rect v-for="(b, i) in hbars" :key="i" class="seg" :class="{ dim: legendHover !== null && legendHover !== b.si }" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
+        <rect v-for="(b, i) in hbars" :key="i" class="seg hbar-in" :class="{ dim: legendHover !== null && legendHover !== b.si }" :style="{ animationDelay: i * 35 + 'ms' }" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.c" rx="3"
           @mousemove="showTip($event, b)" @mouseleave="hideTip" />
       </template>
       <template v-else-if="kind === 'line'">
-        <polygon :points="lineArea" :fill="PAL[0]" opacity="0.12" />
-        <polyline :points="linePts" fill="none" :stroke="PAL[0]" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        <polygon class="area-in" :points="lineArea" :fill="PAL[0]" opacity="0.12" />
+        <polyline class="line-draw" pathLength="1" :points="linePts" fill="none" :stroke="PAL[0]" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
         <g v-for="(p, i) in lineDots" :key="i">
-          <circle class="dot" :cx="p.x" :cy="p.y" r="3.5" :fill="p.c" />
+          <circle class="dot dot-in" :style="{ animationDelay: 350 + i * 45 + 'ms' }" :cx="p.x" :cy="p.y" r="3.5" :fill="p.c" />
           <circle class="hit" :cx="p.x" :cy="p.y" r="11" fill="transparent" @mousemove="showTip($event, p)" @mouseleave="hideTip" />
         </g>
       </template>
       <template v-else>
-        <path v-for="(a, i) in arcs" :key="i" class="seg" :class="{ dim: legendHover !== null && legendHover !== i }" :d="a.d" :fill="a.c"
-          @mousemove="showTip($event, a)" @mouseleave="hideTip" />
+        <g class="donut-in">
+          <path v-for="(a, i) in arcs" :key="i" class="seg" :class="{ dim: legendHover !== null && legendHover !== i }" :d="a.d" :fill="a.c"
+            @mousemove="showTip($event, a)" @mouseleave="hideTip" />
+        </g>
       </template>
     </svg>
 
@@ -135,6 +137,23 @@ const arcs = computed(() => {
 .seg:hover { opacity: .82; }
 /* legend hover → dim every segment except the hovered one */
 .seg.dim { opacity: .18; }
+/* --- chart entry animations: data draws itself in on load --- */
+.bar-in { transform-box: fill-box; transform-origin: bottom center; animation: barGrow .55s cubic-bezier(.2,.8,.2,1) backwards; }
+@keyframes barGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.hbar-in { transform-box: fill-box; transform-origin: left center; animation: hbarGrow .55s cubic-bezier(.2,.8,.2,1) backwards; }
+@keyframes hbarGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.line-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: lineDraw .9s cubic-bezier(.3,.7,.2,1) forwards; }
+@keyframes lineDraw { to { stroke-dashoffset: 0; } }
+.area-in { animation: fadeIn .7s ease .25s backwards; }
+.dot-in { animation: dotPop .35s cubic-bezier(.2,.8,.2,1) backwards; }
+@keyframes dotPop { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: none; } }
+.dot-in { transform-box: fill-box; transform-origin: center; }
+.donut-in { transform-box: view-box; transform-origin: 160px 80px; animation: donutIn .6s cubic-bezier(.2,.8,.2,1) backwards; }
+@keyframes donutIn { from { opacity: 0; transform: scale(.72) rotate(-14deg); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: .12; } }
+@media (prefers-reduced-motion: reduce) {
+  .bar-in, .hbar-in, .line-draw, .area-in, .dot-in, .donut-in { animation: none; stroke-dashoffset: 0; }
+}
 .hit { cursor: pointer; }
 .dot { pointer-events: none; }
 /* floating data tooltip (teleported to body) */
