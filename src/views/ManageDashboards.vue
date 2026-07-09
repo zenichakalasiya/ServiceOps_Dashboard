@@ -222,9 +222,9 @@ function onDrop(target) {
 .colbtn { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
 .cols-wrap { position: relative; }
 .cols-back { position: fixed; inset: 0; z-index: 40; }
-.cols-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 41; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--sh-pop); padding: 6px; }
-.cols-pop.right { right: 0; left: auto; }
-.col-opt { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px; font-size: 13px; color: var(--ink-2); cursor: pointer; width: 100%; border: none; background: transparent; text-align: left; }
+/* right-anchored so it never overflows past the viewport edge */
+.cols-pop { position: absolute; top: calc(100% + 4px); right: 0; left: auto; z-index: 41; min-width: 210px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--sh-pop); padding: 6px; }
+.col-opt { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px; font-size: 13px; color: var(--ink-2); cursor: pointer; width: 100%; border: none; background: transparent; text-align: left; white-space: nowrap; }
 .col-opt:hover { background: var(--surface-2); }
 .col-opt input { accent-color: var(--primary); }
 .col-foot { display: flex; justify-content: flex-end; padding: 6px 4px 2px; border-top: 1px solid var(--border); margin-top: 4px; }
