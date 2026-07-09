@@ -43,6 +43,16 @@ export const chart = (title, data, info) =>
 export const shortcut = (title, columns, rows, info) =>
   ({ id: uid('t'), type: 'shortcut', title, info, columns, rows, w: 6, h: 2 })
 
+// Share-widget recipients (technicians + technician groups)
+export const TECHNICIANS = [
+  'Aarav Mehta', 'Meera Iyer', 'Rohan Patel', 'Priya Nair', 'Vikram Reddy',
+  'Ananya Bose', 'Karan Gupta', 'Divya Menon', 'Arjun Rao', 'Nisha Shah',
+]
+export const TECH_GROUPS = [
+  'Service Desk L1', 'Service Desk L2', 'Network Team', 'Asset & Procurement',
+  'Change Advisory Board', 'All technicians',
+]
+
 const WK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
 
@@ -55,7 +65,8 @@ function helpdeskTiles() {
     chart('Created vs Resolved', grouped(WK, [42, 51, 38, 60, 55, 22, 18], [39, 48, 41, 57, 50, 25, 20]), 'Daily created vs resolved request volume.'),
     chart('Tickets by Priority', donut(['P1', 'P2', 'P3', 'P4'], [18, 64, 120, 46]), 'Open requests split by priority.'),
     chart('Backlog Trend', line(MON, [180, 210, 198, 240, 232, 248]), 'Open backlog at month end.'),
-    { ...chart('Tickets by Technician', technicianLoad(63), 'Open requests grouped by assigned technician — 63 distinct values.'), w: 12, h: 3, highCard: true },
+    // `wide` keeps Rearrange from shrinking it — the series-manager panel needs the width
+    { ...chart('Tickets by Technician', technicianLoad(63), 'Open requests grouped by assigned technician — 63 distinct values.'), w: 12, h: 3, highCard: true, wide: true },
     shortcut('My Open P1 Requests',
       ['ID', 'Subject', 'Priority', 'Status', 'Due'],
       [['INC-2041', 'VPN down for finance team', 'P1', 'In Progress', 'Today 4:00 PM'],

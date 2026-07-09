@@ -100,6 +100,86 @@ export function cloneDashboard(d) {
   toast(`Cloned to “${copy.name}”`)
   return copy
 }
+/* ---- Rearrange: reset every tile to its default footprint, then pack gap-free.
+ *
+ * Default footprint is (rows : columns) on the 12-column grid —
+ *   KPI 1:4 · Widget 2:4 · Shortcut 2:4
+ * Uniform width means three tiles tile a row exactly.
+ *
+ * A row's height is set by its tallest tile (the grid uses align-items:start),
+ * so a 1-row KPI beside a 2-row chart always leaves a dead cell underneath.
+ * To leave *no* space, tiles are banded by height — KPIs first, then
+ * charts/shortcuts, then anything full-width — and each band's rows are widened
+ * to consume all 12 columns, which is what pushes the next band onto a fresh
+ * row. Author order is preserved inside each band.
+ *
+ * The trade: a row that can't hold three tiles stretches the ones it has
+ * (two tiles → 6 columns each) rather than keeping w=4 and leaving a hole.
+ */
+export const DEFAULT_SIZE = { kpi: { w: 4, h: 1 }, chart: { w: 4, h: 2 }, shortcut: { w: 4, h: 2 } }
+
+// Split n tiles into rows. Three-up is the default (w=4); four-up when that
+// divides evenly. A trailing row of one looks orphaned, so it borrows a tile
+// from the row before it.
+function rowsFor(n) {
+  const perRow = n % 3 === 0 ? 3 : n % 4 === 0 ? 4 : 3
+  const rows = []
+  for (let i = 0; i < n; i += perRow) rows.push(Math.min(perRow, n - i))
+  const last = rows.length - 1
+  if (last > 0 && rows[last] === 1) { rows[last - 1] -= 1; rows[last] = 2 }
+  return rows
+}
+
+// Every row must consume all 12 columns. Not just for looks: a band that ends
+// mid-row lets the *next* band's first tile flow into the leftover columns, and
+// a 1-row KPI beside a 2-row chart leaves a dead cell. Filling each row is what
+// forces the next band onto a fresh row.
+function widthsFor(len) {
+  const base = Math.floor(12 / len), rem = 12 - base * len
+  return Array.from({ length: len }, (_, i) => base + (i < rem ? 1 : 0))
+}
+
+export function rearrangeTiles(dash, groupId = null) {
+  const inScope = (t) => (t.group ?? null) === groupId
+  const scoped = dash.tiles.filter(inScope)
+  if (scoped.length < 2) { toast('Nothing to rearrange here', 'warn'); return 0 }
+
+  // 1. reset to the default footprint
+  scoped.forEach((t) => {
+    if (t.wide) { t.w = 12; t.h = 3; return }
+    const s = DEFAULT_SIZE[t.type] || DEFAULT_SIZE.chart
+    t.w = s.w; t.h = s.h
+  })
+
+  // 2. band by height (full-width tiles get their own band, always last)
+  const bands = new Map()
+  scoped.forEach((t) => {
+    const k = t.wide ? 99 : t.h
+    if (!bands.has(k)) bands.set(k, [])
+    bands.get(k).push(t)
+  })
+
+  // 3. size each band row-by-row so every row is exactly 12 columns, then flatten
+  const ordered = []
+  for (const k of [...bands.keys()].sort((a, b) => a - b)) {
+    const band = bands.get(k)
+    if (k === 99) { ordered.push(...band); continue }   // full-width tiles own their row
+    let i = 0
+    for (const len of rowsFor(band.length)) {
+      widthsFor(len).forEach((w) => { band[i++].w = w })
+    }
+    ordered.push(...band)
+  }
+
+  // 4. write the new order back into the same slots, leaving other groups untouched
+  const next = ordered[Symbol.iterator]()
+  dash.tiles = dash.tiles.map((t) => (inScope(t) ? next.next().value : t))
+
+  dash.updated = new Date().toISOString()
+  toast(`Rearranged ${scoped.length} widgets — Ctrl+Z to undo`, 'success')
+  return scoped.length
+}
+
 export function addCategory(name) {
   const n = (name || '').trim()
   if (n && !store.categories.some((c) => c.toLowerCase() === n.toLowerCase())) store.categories.unshift(n)

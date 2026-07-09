@@ -14,7 +14,7 @@ import DownloadDialog from '../components/dashboard/DownloadDialog.vue'
 import SharePopover from '../components/dashboard/SharePopover.vue'
 import ShareDialog from '../components/dashboard/ShareDialog.vue'
 import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
-import { store, byId, recordView, toggleFavorite, removeTile, toast } from '../store/index.js'
+import { store, byId, recordView, toggleFavorite, removeTile, toast, rearrangeTiles } from '../store/index.js'
 import { uid } from '../data/mock.js'
 const route = useRoute()
 const router = useRouter()
@@ -299,6 +299,11 @@ function ungroup(g) {
   dirty.value = true
 }
 const editingGroup = ref(null)
+// Rearrange the canvas (groupId = null) or one group's contents.
+// The {tiles, groups} snapshot watcher already feeds undo/redo, so Ctrl+Z reverts it.
+function onRearrange(groupId) {
+  if (rearrangeTiles(d.value, groupId)) dirty.value = true
+}
 function onPin(t) { t.pinned = !t.pinned; d.value.updated = new Date().toISOString(); dirty.value = true; toast(t.pinned ? `Pinned “${t.title}”` : `Unpinned “${t.title}”`) }
 
 // ---- per-dashboard layout (from the create/clone panel) ----
@@ -508,7 +513,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <button class="btn ico-only" :class="{ on: showDownload }" @click.stop="showDownload = !showDownload" title="Download"><Icon name="download" :size="17" /></button>
           <DownloadDialog v-if="showDownload" :d="d" @close="showDownload = false" />
         </div>
-        <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" />
+        <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" @rearrange="onRearrange(null)" />
       </div>
     </header>
 
@@ -627,6 +632,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             <span class="grp-count">{{ tilesIn(g.id).length }}</span>
             <div class="grow" />
             <button v-if="tilesIn(g.id).length" class="grp-add" title="Add widget to this group" @click="addWidgetToGroup(g.id)"><Icon name="plus" :size="14" /> Add widget</button>
+            <button v-if="tilesIn(g.id).length > 1" class="grp-act" title="Rearrange widgets in this group" @click="onRearrange(g.id)"><Icon name="rearrange" :size="15" /></button>
             <button class="grp-act" title="Ungroup" @click="ungroup(g)"><Icon name="ungroup" :size="15" /></button>
           </header>
           <div v-if="!g.collapsed" class="grid" :style="gridStyle">

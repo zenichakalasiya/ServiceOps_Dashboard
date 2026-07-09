@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from './ChartTile.vue'
 import DataTable from './DataTable.vue'
+import ShareWidgetModal from './ShareWidgetModal.vue'
 import { toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin', 'select'])
@@ -95,7 +96,7 @@ function retry() { loading.value = true; setTimeout(() => { props.tile.state = u
 
 function download(fmt) { menu.value = false; exportOpen.value = false; toast(`Exporting “${props.tile.title}” as ${fmt}`) }
 function duplicate() { menu.value = false; emit('duplicate', props.tile) }
-function shareWidget() { navigator.clipboard?.writeText(`${location.origin}${location.pathname}${location.hash}#tile=${props.tile.id}`).catch(() => {}); toast(`Share link for “${props.tile.title}” copied`) }
+const shareOpen = ref(false)
 // task 12: record IDs in a shortcut table are explorable → jump to their module record
 const ID_MODULE = { INC: 'Requests', REC: 'Records', CNT: 'Contracts', PRB: 'Problems', CHG: 'Changes', AST: 'Assets' }
 function isId(v) { return /^[A-Z]{2,4}-\d/.test(String(v).trim()) }
@@ -154,7 +155,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <button v-if="tiny && canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
-          <button class="menu-item" @click="menu = false; shareWidget()"><Icon name="share" :size="15" /> Share widget</button>
+          <button class="menu-item" @click="menu = false; shareOpen = true"><Icon name="share" :size="15" /> Share widget</button>
           <button v-if="tile.type === 'chart'" class="menu-item" @click="showLegend = !showLegend"><Icon name="list" :size="15" /> {{ showLegend ? 'Hide legend' : 'Show legend' }}</button>
           <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->
           <div class="menu-item sub" @mouseenter="exportOpen = true" @mouseleave="exportOpen = false">
@@ -223,6 +224,11 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         </div>
       </template>
     </div>
+
+    <!-- Share widget: preview + screenshot-style markup + recipients -->
+    <teleport to="body">
+      <ShareWidgetModal v-if="shareOpen" :tile="tile" @close="shareOpen = false" />
+    </teleport>
 
     <!-- Present mode (single tile) -->
     <teleport to="body">
