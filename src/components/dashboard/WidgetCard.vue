@@ -48,6 +48,8 @@ function setKind(ct) {
 }
 const EXPORTS = ['PDF', 'PNG', 'JPEG', 'SVG', 'CSV']
 const searchOpen = ref(false)
+const filtersOpen = ref(false)
+const filterCount = ref(0)
 const tableSearch = ref('')
 const searchInput = ref(null)
 watch(searchOpen, (v) => { if (v) nextTick(() => searchInput.value?.focus()) })
@@ -140,6 +142,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       </div>
       <div v-if="!tile.sel" class="right">
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
+        <button v-if="tile.type === 'shortcut'" class="ti fbtn" :class="{ on: filtersOpen }" @click="filtersOpen = !filtersOpen" :title="filtersOpen ? 'Hide column filters' : 'Filter by column'">
+          <Icon name="filter" :size="15" /><span v-if="filterCount" class="fdot">{{ filterCount }}</span>
+        </button>
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
         <button v-if="!compact" class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
         <button v-if="!tiny && canEdit" class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
@@ -240,7 +245,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           </transition>
           <!-- scrollable table container (sticky header); click a header to sort -->
           <div class="stbl-scroll">
-            <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch">
+            <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch" :filters="filtersOpen" @filter-count="filterCount = $event">
               <template #cell="{ value }">
                 <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
                 <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
@@ -267,7 +272,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
             <ChartTile v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="620" />
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
             <div v-else class="stbl big">
-              <DataTable :columns="tile.columns" :rows="tile.rows || []">
+              <DataTable :columns="tile.columns" :rows="tile.rows || []" filters>
                 <template #cell="{ value }">
                   <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
                   <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
@@ -351,6 +356,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .sx { border: none; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 0; }
 .sx:hover { color: var(--ink); }
 .stbl-scroll { flex: 1; overflow: auto; min-height: 0; max-height: 200px; }
+/* filter row eats a row's worth of height — give it back so rows stay visible */
+.stbl-scroll:has(.fltr) { max-height: 236px; }
+.fbtn { position: relative; }
+.fdot { position: absolute; top: 1px; right: 1px; min-width: 13px; height: 13px; padding: 0 3px; display: grid; place-items: center; background: var(--primary); color: #fff; border-radius: 999px; font-size: 9px; font-weight: 700; line-height: 1; }
 /* table/th/td/.nodata chrome lives in DataTable.vue — scoped CSS cannot reach
    a child component's internals. Only the root <table> is styleable from here. */
 table { font-size: 12.5px; }
