@@ -12,10 +12,17 @@
  * LEGEND MODES (docs/legend-and-topn-design.md). When a chart exceeds
  * HIGH_CARD entities, store.ui.legendStyle picks one of three strategies:
  *   2 Top-N + Other  bounded series set, explicit Other, rank pill
- *   4 Overflow chip  8 inline + "+N more" dropdown
- *   6 Merged ② + ④   rank pill + 8 inline + "+N more"; click a legend entry
- *                    to disable it and pull its data out of the chart
+ *   4 Overflow chip  8 inline + "+N more" to reveal the rest
+ *   6 Merged ② + ④   rank pill + 8 inline + "+N more"
  * Below HIGH_CARD every chart renders mode 0: a plain, complete legend.
+ *
+ * The two pills answer two different questions and must not overlap:
+ *   rank pill  WHICH series?  → popover: rank window + the series it plots
+ *   "+N more"  SHOW the rest  → expands the legend in place; where a rank pill
+ *              exists, revealing everything means the filter now reads All
+ * Clicking any legend entry (or any row in the popover) disables that series and
+ * pulls its data out of the chart; it stays listed, struck through, to come back.
+ *
  * The doc still describes re-encode / series-manager / cardinality-gate — they
  * were prototyped, compared, and cut.
  */
@@ -95,48 +102,19 @@ const isHighCard = computed(() => entities.value.length > HIGH_CARD)
 /* Low-cardinality charts ignore the demo entirely and render as they always did. */
 const mode = computed(() => (isHighCard.value ? store.ui.legendStyle : 0))
 
-/* --- hidden series (modes 3 & 4) --- */
+/* --- disabled series. One verb: toggle. A disabled entity stays in the legend,
+ * struck through, and its data leaves the chart. --- */
 const hidden = ref(new Set())
-const lastClicked = ref(null)
 watch(() => props.chart, () => { hidden.value = new Set() })
 // switching legend strategy starts from a clean series selection
-watch(mode, () => { hidden.value = new Set(); lastClicked.value = null })
+watch(mode, () => { hidden.value = new Set() })
 
-/* In ⑥ the rank window already bounds what's on the chart, so hiding acts on the
- * windowed set (plus Other) — hiding a series that isn't plotted is meaningless. */
-function isolate(key) {
-  const others = manageable.value.filter((e) => e.key !== key).map((e) => e.key)
-  // clicking the already-isolated series restores everything
-  hidden.value = hidden.value.size === others.length && !hidden.value.has(key) ? new Set() : new Set(others)
-  lastClicked.value = key
-}
 function toggle(key) {
   const s = new Set(hidden.value)
   s.has(key) ? s.delete(key) : s.add(key)
   hidden.value = s
-  lastClicked.value = key
 }
-function rangeTo(key) {
-  const keys = manageable.value.map((e) => e.key)
-  const a = keys.indexOf(lastClicked.value ?? key), b = keys.indexOf(key)
-  const [lo, hi] = a < b ? [a, b] : [b, a]
-  const s = new Set(hidden.value)
-  for (let i = lo; i <= hi; i++) s.delete(keys[i])
-  hidden.value = s
-}
-function resetSeries() { hidden.value = new Set(); lastClicked.value = null }
-function bulk({ verb, keys, n }) {
-  const list = manageable.value
-  const all = list.map((e) => e.key)
-  if (verb === 'all') hidden.value = new Set()
-  else if (verb === 'none') hidden.value = new Set(all)
-  else if (verb === 'invert') hidden.value = new Set(all.filter((k) => !hidden.value.has(k)))
-  else if (verb === 'top') {
-    const keep = new Set([...list].sort((a, b) => b.value - a.value).slice(0, n).map((e) => e.key))
-    hidden.value = new Set(all.filter((k) => !keep.has(k)))
-  } else if (verb === 'hide') hidden.value = new Set([...hidden.value, ...keys])
-  else if (verb === 'only') hidden.value = new Set(all.filter((k) => !keys.includes(k)))
-}
+function resetSeries() { hidden.value = new Set() }
 function recolor({ key, color }) { overrides.value = { ...overrides.value, [key]: color } }
 
 /* --- mode 2: the rank window. "Top N" is one window onto a sorted list;
@@ -193,24 +171,17 @@ watch([rankMode, rankN, rangeFrom, rangeTo_, coverage], () => { hidden.value = n
 const rankModes = computed(() => mode.value === 2 || mode.value === 6)
 
 /* Everything the legend names — hidden entries included, so a disabled series
- * stays on screen (struck through) and can be switched back on. */
-const legendAll = computed(() => {
+ * stays on screen (struck through) and can be switched back on. This is also
+ * exactly what the series panel lists: one set, one source of truth. */
+const manageable = computed(() => {
   if (!rankModes.value) return entities.value
   const rows = [...windowed.value]
   if (otherCount.value > 0) rows.push(otherRow.value)
   return rows
 })
 
-/* What the legend controls and the dropdown lists. */
-const manageable = computed(() => (mode.value === 6 ? legendAll.value : entities.value))
-
-/* --- which entities actually reach the chart, per mode --- */
-const plotted = computed(() => {
-  if (mode.value === 6) return legendAll.value.filter((e) => !hidden.value.has(e.key))
-  if (rankModes.value) return legendAll.value
-  if (mode.value === 4) return entities.value.filter((e) => !hidden.value.has(e.key))
-  return entities.value
-})
+/* Disabling a series removes it from the chart in every mode. */
+const plotted = computed(() => manageable.value.filter((e) => !hidden.value.has(e.key)))
 
 /* --- theme: read design tokens at runtime so dark mode Just Works --- */
 const themeTick = ref(0)
@@ -342,36 +313,50 @@ const option = computed(() => {
 })
 
 /* --- legend rendering decisions --- */
-/* ③ and ④ both keep the chart at full card width and reach the series list
- * through a chip. Neither reserves layout space for it — a 250px column inside
- * the card squeezed the chart into a corner. */
+const INLINE_CAP = 8
 const chipModes = computed(() => mode.value === 4 || mode.value === 6)
 const showInlineLegend = computed(() => props.legend)
-/* ⑥ keeps disabled series in the legend (struck through) so they can be
- * switched back on; ④ drops them, since the dropdown is the way back. */
-const legendEntries = computed(() => (mode.value === 6 ? legendAll.value : plotted.value))
-const inlineEntries = computed(() => (chipModes.value ? legendEntries.value.slice(0, 8) : legendEntries.value))
-/* Count against the manageable set, not the plotted one. Isolating a series
- * shrinks `plotted` to 1 — measured that way the chip would delete itself and
- * strand the user with no route back to the rest. */
-const overflowCount = computed(() =>
-  chipModes.value ? Math.max(0, manageable.value.length - inlineEntries.value.length) : 0)
-// clicking a legend entry disables it and pulls its data out of the chart
-const legendClickable = computed(() => chipModes.value)
 
-/* One panel, two triggers. The rank window and the series list are the same
- * question — "which series are on this chart?" — so they live together: tabs
- * and field on top, the resulting series underneath. Either the rank pill or
- * the "+N more" chip opens it, anchored to whichever was clicked.
+/* The "+N more" chip expands the legend in place rather than opening a second
+ * panel. Two popovers answering the same question ("which series?") was the
+ * confusion; now the rank pill owns the filter and the chip owns the reveal. */
+const expanded = ref(false)
+watch([mode, () => props.chart], () => { expanded.value = false })
+// leaving All re-truncates the legend — the rank pill is the way back
+watch(rankMode, (m) => { if (m !== 'all') expanded.value = false })
+
+const truncating = computed(() => chipModes.value && !expanded.value)
+const inlineEntries = computed(() =>
+  truncating.value ? manageable.value.slice(0, INLINE_CAP) : manageable.value)
+/* Count against the manageable set, not the plotted one: disabling series shrinks
+ * `plotted`, and measured that way the chip would delete itself and strand the
+ * user with no route back to the rest. */
+const overflowCount = computed(() =>
+  truncating.value ? Math.max(0, manageable.value.length - inlineEntries.value.length) : 0)
+// clicking a legend entry disables it and pulls its data out of the chart
+const legendClickable = computed(() => rankModes.value || chipModes.value)
+
+/* Reveal every legend. Where there is a rank pill it *is* the filter, so showing
+ * all the legends means the filter now reads All — the pill must not keep
+ * claiming "Top 11 of 63" while all 63 sit beneath it. */
+function expandAll() {
+  if (rankModes.value) rankMode.value = 'all'   // resets `hidden`, then:
+  expanded.value = true
+}
+
+/* One panel, one trigger: the rank pill. The rank window and the series list are
+ * the same question — "which series are on this chart?" — so they live together:
+ * tabs and field on top, the resulting series underneath. The panel is sized so
+ * the series list, not the chrome, is what the space goes to.
  *
  * It has to be teleported: anchored inside .chart it gets clipped by the card's
- * overflow:hidden and follows the chart box instead of the chip. */
+ * overflow:hidden and follows the chart box instead of the pill. */
 const panelOpen = ref(false)
 const panelAnchor = ref(null)
-const moreBtn = ref(null)
 const rankBtn = ref(null)
-const POP_W = 330
-const BLANK = { left: '0px', top: 'auto', bottom: '0px', maxH: '460px', arrow: '0px', below: false }
+const POP_W = 380
+const POP_H = 560
+const BLANK = { left: '0px', top: 'auto', bottom: '0px', maxH: POP_H + 'px', arrow: '0px', below: false }
 const pop = ref({ ...BLANK })
 
 /* Anchor a floating panel to a trigger, in viewport coords: centred on it,
@@ -397,7 +382,7 @@ function anchor(el, W, cap) {
     arrow: r.left + r.width / 2 - left + 'px',
   }
 }
-function reflow() { if (!panelOpen.value) return; const p = anchor(panelAnchor.value, POP_W, 460); if (p) pop.value = p }
+function reflow() { if (!panelOpen.value) return; const p = anchor(panelAnchor.value, POP_W, POP_H); if (p) pop.value = p }
 
 function togglePanel(el) {
   if (panelOpen.value && panelAnchor.value === el) { panelOpen.value = false; return }
@@ -446,29 +431,39 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 
       <!-- inline legend (classic ⓪, bounded ②, truncated ④, merged ⑥) -->
       <div v-if="showInlineLegend" class="legend">
-        <!-- the rank pill sits before the legend and states the truncation -->
+        <!-- the rank pill states the truncation and opens the one panel that can
+             change it. It sits outside the scroll box so it never scrolls away. -->
         <button
-          v-if="rankModes" ref="rankBtn" class="cs-chip" :class="{ on: panelOpen && panelAnchor === rankBtn }"
+          v-if="rankModes" ref="rankBtn" class="cs-chip" :class="{ on: panelOpen }"
           title="Choose which slice of the ranking to plot" @click.stop="togglePanel(rankBtn)"
         >
           <Icon name="filter" :size="12" /> {{ censusLabel }}
           <Icon name="chevron-down" :size="13" />
         </button>
 
-        <span
-          v-for="e in inlineEntries" :key="e.key" class="lg"
-          :class="{ faded: legendHover !== null && legendHover !== e.key, off: hidden.has(e.key), click: legendClickable }"
-          :title="legendClickable ? (hidden.has(e.key) ? `Show ${e.name}` : `Hide ${e.name}`) : e.name"
-          @mouseenter="emphasise(e.key)" @mouseleave="relax()"
-          @click="legendClickable && toggle(e.key)"
-        ><i :style="{ background: e.color }" />{{ e.name }}
-          <b v-if="sliceBased">{{ pctOf(e.value) }}%</b>
-        </span>
+        <div class="lg-wrap" :class="{ scroller: expanded }">
+          <span
+            v-for="e in inlineEntries" :key="e.key" class="lg"
+            :class="{ faded: legendHover !== null && legendHover !== e.key, off: hidden.has(e.key), click: legendClickable }"
+            :title="legendClickable ? (hidden.has(e.key) ? `Show ${e.name} on the chart` : `Hide ${e.name} from the chart`) : e.name"
+            @mouseenter="emphasise(e.key)" @mouseleave="relax()"
+            @click="legendClickable && toggle(e.key)"
+          ><i :style="{ background: e.color }" />{{ e.name }}
+            <b v-if="sliceBased">{{ pctOf(e.value) }}%</b>
+          </span>
 
-        <!-- ④/⑥ the chip is the only handle: nothing is hidden without saying so -->
-        <button v-if="chipModes && overflowCount" ref="moreBtn" class="more" :class="{ on: panelOpen && panelAnchor === moreBtn }" @click.stop="togglePanel(moreBtn)">
-          +{{ overflowCount }} more
-        </button>
+          <!-- nothing is hidden without saying so. Clicking reveals the rest —
+               and, where there is a rank pill, moves the filter to All. -->
+          <button
+            v-if="overflowCount" class="more"
+            :title="rankModes
+              ? `Show all ${entities.length} series — switches the filter to All`
+              : `Show all ${entities.length} series`"
+            @click.stop="expandAll()"
+          >
+            +{{ overflowCount }} more
+          </button>
+        </div>
       </div>
 
       <teleport to="body">
@@ -515,17 +510,11 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
             </div>
           </template>
 
-          <!-- the series that slice actually plots -->
+          <!-- the series that slice actually plots — click one to drop it from the chart -->
           <SeriesManager
             compact :entities="manageable" :hidden="hidden" :total="trueTotal"
-            @isolate="isolate" @toggle="toggle" @range="rangeTo" @reset="resetSeries"
-            @bulk="bulk" @recolor="recolor"
+            @toggle="toggle" @reset="resetSeries" @recolor="recolor"
           />
-
-          <p v-if="rankModes" class="rp-f">
-            <template v-if="otherCount > 0">The remaining {{ otherCount }} roll into <b>Other</b> — nothing is dropped.<br /></template>
-            Percentages always use the full {{ trueTotal }}-record total, never the visible subset.
-          </p>
         </div>
       </teleport>
   </div>
@@ -536,7 +525,14 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .chart-row { flex: 1; display: flex; min-height: 0; gap: 10px; }
 .ec { flex: 1; min-height: 0; min-width: 0; }
 
-.legend { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 12px; padding: 6px 4px 0; flex: none; }
+/* The pill is the row's anchor: it must sit at the far left and stay there. So the
+   row itself never wraps — only the chips inside .lg-wrap do. (With flex-wrap on
+   .legend the chip block was wide enough to take its own line, which left the pill
+   stranded and centred above it.) */
+.legend { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 10px; padding: 6px 4px 0; flex: none; }
+.lg-wrap { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 12px; }
+/* revealing all 63 legends must not shove the chart out of the tile */
+.lg-wrap.scroller { max-height: 74px; overflow-y: auto; padding: 1px 2px; }
 .lg { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); cursor: pointer; transition: opacity .12s; user-select: none; }
 .lg.faded { opacity: .4; }
 .lg i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
@@ -546,8 +542,8 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .lg.off i { background: var(--muted-2) !important; }
 .lg.off, .lg.off b { text-decoration: line-through; }
 .lg.click:hover { color: var(--ink); }
-.more { display: inline-flex; align-items: center; gap: 4px; border: 1px dashed var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
-.more:hover, .more.on { background: var(--primary-soft); border-style: solid; border-color: var(--primary); }
+.more { display: inline-flex; align-items: center; gap: 4px; border: 1px dashed var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 600; flex: none; }
+.more:hover { background: var(--primary-soft); border-style: solid; border-color: var(--primary); }
 
 /* ④ overflow popover — teleported to <body>, so it floats over the whole card
    instead of being clipped by it. Positioned in viewport coords from the chip. */
@@ -582,7 +578,5 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .rp-n:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .rp-d { color: var(--muted); font-size: 12px; }
 .rp-warn { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); font-size: 11.5px; line-height: 1.4; }
-.rp-f { margin: 0; padding-top: 7px; border-top: 1px solid var(--border); font-size: 10.5px; line-height: 1.5; color: var(--muted); }
-.rp-f b { color: var(--ink-2); }
 
 </style>
