@@ -108,15 +108,17 @@ const GSTYLES = [
 const showGroupDemo = true    // demo switcher visible; default grouping is ① Select
 const gs = computed(() => store.ui.groupStyle)
 
-// ---- Legend-strategy DEMO switcher: compare the 5 answers to a 63-category chart.
-// Only charts above the high-cardinality threshold react; the rest render normally.
+// ---- Legend-strategy DEMO switcher.
+// Hidden: ⑥ (rank pill + 8 inline + "+N more" + click-to-disable) is now THE legend,
+// not one option among several — store.ui.legendStyle defaults to 6. Flip
+// showLegendDemo back to true to compare ②/④/⑥ side by side again.
 // See docs/legend-and-topn-design.md
 const LSTYLES = [
   { id: 2, n: '②', label: 'Top-N + Other', desc: 'Bound the set, roll the tail into an explicit “Other”, and state the truncation on the tile. Percentages still use the full total.' },
   { id: 4, n: '④', label: 'Overflow chip', desc: 'Show 8 swatches inline; “+N more” reveals the rest in place. The cheapest option that still doesn’t lie.' },
   { id: 6, n: '⑥', label: 'Merged ② + ④', desc: 'Rank pill opens the filter (Top N · Bottom N · Custom range · Coverage % · All) and the series list for it; 8 series inline, and “+N more” reveals the rest — which switches the filter to All. Click any legend entry to disable it and pull its data out of the chart.' },
 ]
-const showLegendDemo = true
+const showLegendDemo = false
 const ls = computed(() => store.ui.legendStyle)
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
 const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)

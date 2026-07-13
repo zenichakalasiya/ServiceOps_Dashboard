@@ -152,11 +152,16 @@ function onDrop(target) {
             :draggable="!isArchive" @dragstart="onDragStart(d)" @dragover.prevent @drop="onDrop(d)">
             <td class="c-chk"><input type="checkbox" :checked="sel.has(d.id)" @change="toggleSel(d)" /></td>
             <td class="nm">
-              <Icon v-if="!isArchive" name="drag" :size="15" class="drag" />
-              <b class="nm-t ellip" @click="open(d)">{{ d.name }}</b>
-              <!-- favourite + default are independent → shown together when both apply -->
-              <button v-if="!isArchive" class="nm-ic fav" :class="{ on: d.favorite }" :title="d.favorite ? 'Favourite' : 'Add to favourites'" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="14" /></button>
-              <Icon v-if="d.default" name="default-home" :size="15" class="nm-ic def" title="Default dashboard" />
+              <!-- inner wrapper carries the flex; a <td> set to display:flex stops
+                   being a table-cell, so its border-bottom no longer lines up with
+                   the neighbouring cells and the row rule visibly breaks -->
+              <div class="nm-in">
+                <Icon v-if="!isArchive" name="drag" :size="15" class="drag" />
+                <b class="nm-t ellip" @click="open(d)">{{ d.name }}</b>
+                <!-- favourite + default are independent → shown together when both apply -->
+                <button v-if="!isArchive" class="nm-ic fav" :class="{ on: d.favorite }" :title="d.favorite ? 'Favourite' : 'Add to favourites'" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="14" /></button>
+                <Icon v-if="d.default" name="default-home" :size="15" class="nm-ic def" title="Default dashboard" />
+              </div>
             </td>
             <td v-if="col('category')"><span v-if="d.category" class="cat-pill">{{ d.category }}</span><span v-else class="muted">—</span></td>
             <td v-if="col('tech')" class="techcell">
@@ -176,20 +181,22 @@ function onDrop(target) {
             </td>
             <td v-if="col('updated')" class="muted">{{ rel(d.updated) }}</td>
             <td class="acts">
-              <button v-if="isArchive" class="ia" title="Restore" @click="restoreDashboard(d)"><Icon name="restore" :size="15" /></button>
-              <template v-else>
-                <button class="ia" title="Open" @click="open(d)"><Icon name="layout" :size="15" /></button>
-                <button class="ia" title="Edit" @click="edit(d)"><Icon name="edit" :size="15" /></button>
-                <button class="ia" title="Schedule" @click="scheduleTarget = d"><Icon name="calendar2" :size="15" /></button>
-                <button class="ia" title="History" @click="historyTarget = d"><Icon name="history" :size="15" /></button>
-              </template>
-              <div class="del-wrap">
-                <button class="ia del" :title="isArchive ? 'Delete forever' : 'Archive'" @click.stop="confirmId = confirmId === d.id ? null : d.id"><Icon name="trash" :size="15" /></button>
-                <div v-if="confirmId === d.id" class="cfm-back" @click="confirmId = null" />
-                <div v-if="confirmId === d.id" class="cfm">
-                  <span>{{ isArchive ? 'Delete forever?' : 'Archive this dashboard?' }}</span>
-                  <button class="btn btn-sm danger" @click="doDelete(d)">Yes</button>
-                  <button class="btn btn-sm" @click="confirmId = null">No</button>
+              <div class="acts-in">
+                <button v-if="isArchive" class="ia" title="Restore" @click="restoreDashboard(d)"><Icon name="restore" :size="15" /></button>
+                <template v-else>
+                  <button class="ia" title="Open" @click="open(d)"><Icon name="layout" :size="15" /></button>
+                  <button class="ia" title="Edit" @click="edit(d)"><Icon name="edit" :size="15" /></button>
+                  <button class="ia" title="Schedule" @click="scheduleTarget = d"><Icon name="calendar2" :size="15" /></button>
+                  <button class="ia" title="History" @click="historyTarget = d"><Icon name="history" :size="15" /></button>
+                </template>
+                <div class="del-wrap">
+                  <button class="ia del" :title="isArchive ? 'Delete forever' : 'Archive'" @click.stop="confirmId = confirmId === d.id ? null : d.id"><Icon name="trash" :size="15" /></button>
+                  <div v-if="confirmId === d.id" class="cfm-back" @click="confirmId = null" />
+                  <div v-if="confirmId === d.id" class="cfm">
+                    <span>{{ isArchive ? 'Delete forever?' : 'Archive this dashboard?' }}</span>
+                    <button class="btn btn-sm danger" @click="doDelete(d)">Yes</button>
+                    <button class="btn btn-sm" @click="confirmId = null">No</button>
+                  </div>
                 </div>
               </div>
             </td>
@@ -242,9 +249,14 @@ function onDrop(target) {
 .mtbl tbody tr.sel { background: var(--primary-softer); }
 .mtbl tbody tr.dim { opacity: .55; }
 .c-chk { width: 34px; } .c-chk input { accent-color: var(--primary); }
-.nm { display: flex; align-items: center; gap: 8px; min-width: 220px; }
+/* Lay the cell out with an inner flex row, never on the <td> itself: a table-cell
+   set to display:flex leaves the table layout, so it no longer stretches to the
+   row height and its border-bottom draws above the neighbouring cells' — the row
+   rule then visibly breaks at that cell's edges. Same for .acts below. */
+.nm { min-width: 220px; }
+.nm-in { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .drag { color: var(--muted-2); cursor: grab; flex: none; }
-.nm-t { cursor: pointer; } .nm-t:hover { color: var(--primary-700); }
+.nm-t { cursor: pointer; min-width: 0; } .nm-t:hover { color: var(--primary-700); }
 /* favourite (star) + default (home) indicators, side by side */
 .nm-ic { flex: none; display: inline-grid; place-items: center; }
 .nm-ic.def { color: var(--primary); }
@@ -263,7 +275,8 @@ function onDrop(target) {
 .sw { width: 38px; height: 22px; border-radius: 999px; border: none; background: var(--border-strong); position: relative; flex: none; }
 .sw i { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: var(--sh-sm); }
 .sw.on { background: var(--green); } .sw.on i { left: 18px; }
-.acts { display: flex; gap: 2px; align-items: center; }
+.acts { white-space: nowrap; }
+.acts-in { display: flex; gap: 2px; align-items: center; }
 .ia { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
 .ia:hover { background: var(--surface); color: var(--ink); }
 .ia.del:hover { color: var(--red); background: var(--red-soft); }
