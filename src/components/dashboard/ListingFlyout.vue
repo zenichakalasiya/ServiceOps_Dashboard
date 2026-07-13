@@ -22,17 +22,28 @@ const tabbed = computed(() => {
   return arr
 })
 
-// groups: Recently used → My Favourite → category-wise
+/* The default dashboard is pinned on its own row under the search, so it is the
+ * one board you can always reach without opening a group. It follows the tab and
+ * the search query — a pin that ignored the filter would be lying about the list. */
+const defaultDash = computed(() => tabbed.value.find((d) => d.default) || null)
+
+// groups: My Favourite → Recently used → category-wise
 const groups = computed(() => {
   const set = new Set(tabbed.value.map((d) => d.id))
   const inTab = (d) => set.has(d.id)
   const g = []
+  // The default still belongs to Favourite / Recently used — those are lists you
+  // built, not shelves. Only the *categories* give it up, since the pin above
+  // already stands in for it there.
   const fav = tabbed.value.filter((d) => d.favorite)
   if (fav.length) g.push({ name: 'My Favourite', items: fav })
   const rec = recents.value.filter(inTab)
   if (rec.length) g.push({ name: 'Recently used', items: rec })
   const cats = {}
-  tabbed.value.forEach((d) => { const c = d.category || 'Other'; (cats[c] ||= []).push(d) })
+  tabbed.value.forEach((d) => {
+    if (d.default) return
+    const c = d.category || 'Other'; (cats[c] ||= []).push(d)
+  })
   Object.keys(cats).sort().forEach((c) => g.push({ name: c, items: cats[c] }))
   return g
 })
@@ -93,6 +104,19 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 
     <div class="fsearch"><Icon name="search" :size="15" class="muted" /><input v-model="store.ui.listingQuery" placeholder="Search dashboards…" /></div>
 
+    <!-- default dashboard: pinned above every category, home icon leading the name -->
+    <div v-if="defaultDash" class="def-row">
+      <div class="item def" :class="{ active: route.params.id === defaultDash.id, 'menu-open': menuId === defaultDash.id }"
+        title="Default dashboard — the one you land on" @click="openBoard(defaultDash)">
+        <Icon name="default-home" :size="15" class="def-lead" />
+        <span class="iname ellip">{{ defaultDash.name }}</span>
+        <span class="hov">
+          <button class="hb fav" :class="{ on: defaultDash.favorite }" title="Favourite" @click.stop="toggleFavorite(defaultDash)"><Icon :name="defaultDash.favorite ? 'star-fill' : 'star'" :size="13" /></button>
+          <button class="hb" title="Actions" @click.stop="openMenu(defaultDash, $event)"><Icon name="dots-v" :size="14" /></button>
+        </span>
+      </div>
+    </div>
+
     <div class="glist">
       <section v-for="grp in groups" :key="grp.name" class="grp">
           <button class="grp-head" @click="toggleGroup(grp.name)">
@@ -101,10 +125,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
             <span class="gcount">{{ grp.items.length }}</span>
           </button>
           <div v-if="open.has(grp.name)" class="items">
-            <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id, 'menu-open': menuId === d.id }" @click="openBoard(d)" :title="d.default ? 'Default dashboard' : ''">
+            <!-- no default marker here: the pinned row above is the only place the
+                 default is called out, so inside Favourite it reads like any other -->
+            <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id, 'menu-open': menuId === d.id }" @click="openBoard(d)">
               <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
               <span class="iname ellip">{{ d.name }}</span>
-              <Icon v-if="d.default" name="default-home" :size="14" class="def-ic" title="Default dashboard" />
               <span class="hov">
                 <button class="hb fav" :class="{ on: d.favorite }" title="Favourite" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="13" /></button>
                 <button class="hb" title="Actions" @click.stop="openMenu(d, $event)"><Icon name="dots-v" :size="14" /></button>
@@ -185,7 +210,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .lk.ic-mine { color: var(--green); }
 .iname { flex: 1; font-size: 13px; }
 .tag-pre { font-size: 9.5px; font-weight: 500; color: var(--primary-700); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; flex: none; }
-.def-ic { color: var(--primary); flex: none; }
+/* pinned default row — sits above the groups, so no chevron indent */
+.def-row { margin: 0 8px 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.item.def { padding-left: 8px; }
+.item.def .iname { font-weight: 600; color: var(--ink); }
+.def-lead { color: var(--primary); flex: none; }
 .lk.arch { color: var(--muted); }
 .hov { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
 .item:hover .hov, .item.menu-open .hov { opacity: 1; }
