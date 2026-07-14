@@ -50,9 +50,14 @@ export function markDefault(d) {
   d.default = true
   toast(`“${d.name}” is now your default dashboard`)
 }
+/* Predefined dashboards ship with the product. They cannot be archived or deleted,
+ * and nothing can be removed from them — only added. The UI hides these actions;
+ * these guards make sure a stray call can't route around it. */
 export function archiveDashboard(d) {
+  if (d.predefined) { toast(`“${d.name}” is a predefined dashboard — it can't be deleted`, 'warn'); return false }
   d.archived = true
   toast(`Archived “${d.name}” — restore it from the Archive`, 'warn')
+  return true
 }
 export function restoreDashboard(d) {
   d.archived = false
@@ -70,8 +75,13 @@ export function moveDashboardsToCategory(list, category) {
   toast(`Moved ${list.length} dashboard${list.length > 1 ? 's' : ''} to “${category || 'Uncategorized'}”`, 'success')
 }
 export function archiveMany(list) {
-  list.forEach((d) => (d.archived = true))
-  toast(`Archived ${list.length} dashboard${list.length > 1 ? 's' : ''}`, 'warn')
+  // bulk is the easiest way to route around a per-row rule — skip predefined boards
+  // and SAY SO, rather than silently archiving fewer than the user selected
+  const locked = list.filter((d) => d.predefined)
+  const ok = list.filter((d) => !d.predefined)
+  ok.forEach((d) => (d.archived = true))
+  if (ok.length) toast(`Archived ${ok.length} dashboard${ok.length > 1 ? 's' : ''}`, 'warn')
+  if (locked.length) toast(`Skipped ${locked.length} predefined dashboard${locked.length > 1 ? 's' : ''} — they can't be deleted`, 'warn')
 }
 // which live dashboards contain a widget/KPI/shortcut like this library item (title+type)
 export function libUsage(lt) {
@@ -222,8 +232,10 @@ export function addBuiltTile(d, tile) {
   toast(`Added “${tile.title}”`, 'success')
 }
 export function removeTile(d, tile) {
+  if (d.predefined) { toast(`“${d.name}” is predefined — widgets can be added, not removed`, 'warn'); return false }
   d.tiles = d.tiles.filter((t) => t.id !== tile.id)
   toast(`Removed “${tile.title}”`)
+  return true
 }
 export function toggleLibFavorite(lt) { lt.favorite = !lt.favorite }
 export function duplicateLibTile(lt) {

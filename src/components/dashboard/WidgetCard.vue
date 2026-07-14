@@ -6,7 +6,9 @@ import DataTable from './DataTable.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
 import { CHART_TYPES, whyDisabled } from '../../data/chartTypes.js'
 import { toast } from '../../store/index.js'
-const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
+// `locked` = this tile sits on a PREDEFINED dashboard. Nothing may be removed from
+// one — you can only add. That's a property of the board, not of the tile.
+const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean, locked: Boolean })
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin', 'select'])
 function onCardClick() { if (props.tile.sel) emit('select', props.tile) }
 
@@ -121,7 +123,10 @@ const provMeta = computed(() => PROV[prov.value] || PROV.user)
 // Predefined widgets are editable (limited to Highlights + chart type in the builder)
 // but can't be deleted from the dashboard.
 const canEdit = computed(() => true)
-const canDelete = computed(() => prov.value !== 'predefined')
+/* Two independent locks:
+ *   · the DASHBOARD is predefined → nothing can be removed from it, whoever made it
+ *   · the TILE is predefined       → it can't be removed even from an editable board */
+const canDelete = computed(() => !props.locked && prov.value !== 'predefined')
 
 // Empty-widget states: unconfigured vs error vs no-data vs ok (distinct copy each)
 const tileState = computed(() => {

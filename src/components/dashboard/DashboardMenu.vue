@@ -25,8 +25,12 @@ function act(fn) { open.value = false; fn() }
         <button class="menu-item" @click="act(() => emit('history'))"><Icon name="history" :size="16" /> Version history</button>
         <button class="menu-item" @click="act(() => { store.ui.cloneTarget = d; store.ui.createOpen = true })"><Icon name="copy" :size="16" /> Clone</button>
         <button v-if="!d.default" class="menu-item" @click="act(() => markDefault(d))"><Icon name="pin" :size="16" /> Mark as default landing</button>
-        <div class="menu-sep" />
-        <button class="menu-item danger" @click="act(() => archiveDashboard(d))"><Icon name="archive" :size="16" /> Delete / Archive</button>
+        <!-- predefined dashboards ship with the product: they cannot be deleted or
+             archived, so the action is absent rather than disabled -->
+        <template v-if="!d.predefined">
+          <div class="menu-sep" />
+          <button class="menu-item danger" @click="act(() => archiveDashboard(d))"><Icon name="archive" :size="16" /> Delete / Archive</button>
+        </template>
       </div>
     </transition>
   </div>

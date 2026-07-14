@@ -51,15 +51,16 @@ const groups = computed(() => {
 const isCustom = (d) => d.mine && !d.predefined
 // identify a dashboard by icon: predefined · shared-with-me · created-by-me
 function dashKind(d) {
+  // Predefined WINS, even over ownership. It used to lose, so a predefined board
+  // that happened to list you as owner showed the person icon. But predefined now
+  // means *locked* — it can't be deleted and its tiles can't be removed — and the
+  // icon has to say so. You cannot have authored a board that ships with the product.
+  if (d.predefined) return 'pre'        // predefined / out-of-box → monitor
   // In the Created-by-me / Shared-with-me tabs the icon reflects the tab.
   if (tab.value === 'mine') return 'mine'
   if (tab.value === 'shared') return 'shared'
-  // All tab — categorize by the dashboard's real relationship to me.
-  // Ownership / sharing wins over the predefined flag, so the monitor icon only
-  // shows on a genuinely predefined board that is neither mine nor shared to me.
   if (d.mine) return 'mine'             // created by me → person
   if (d.sharedWithMe) return 'shared'   // shared with me → share
-  if (d.predefined) return 'pre'        // predefined / out-of-box → monitor
   return 'shared'                       // owned by someone else, surfaced to me → shared
 }
 // pre = monitor (predefined) · shared = share icon · mine = person
@@ -158,8 +159,12 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
           <button class="menu-item" @click="menuAct(() => doClone(menuDash))"><Icon name="copy" :size="15" /> Clone</button>
           <button v-if="!menuDash.default" class="menu-item" @click="menuAct(() => markDefault(menuDash))"><Icon name="pin" :size="15" /> Mark as default landing</button>
           <button class="menu-item" @click="menuAct(() => { shareTarget = menuDash })"><Icon name="share" :size="15" /> Share</button>
-          <div class="menu-sep" />
-          <button class="menu-item danger" @click="menuAct(() => del(menuDash))"><Icon name="archive" :size="15" /> Archive</button>
+          <!-- a predefined dashboard cannot be archived or deleted — the action is
+               absent, not disabled: there is nothing the user could do to enable it -->
+          <template v-if="!menuDash.predefined">
+            <div class="menu-sep" />
+            <button class="menu-item danger" @click="menuAct(() => del(menuDash))"><Icon name="archive" :size="15" /> Archive</button>
+          </template>
         </div>
       </transition>
     </teleport>

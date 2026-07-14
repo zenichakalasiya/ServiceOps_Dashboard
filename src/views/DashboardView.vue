@@ -593,7 +593,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             <header class="grp-head"><Icon name="template" :size="15" class="sec-ic" /><b class="grp-name">{{ grp.name }}</b><span class="grp-count">{{ grp.tiles.length }}</span></header>
             <div class="grid" :style="gridStyle">
               <div v-for="t in grp.tiles" :key="t.id" :data-tile="t.id" class="cell" :style="cellStyle(t)">
-                <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+                <WidgetCard :tile="t" :edit="edit" :locked="!!d.predefined" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               </div>
             </div>
           </section>
@@ -607,7 +607,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
               :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id), selected: selTileId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
-              <WidgetCard :tile="t" :edit="edit" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              <WidgetCard :tile="t" :edit="edit" :locked="!!d.predefined" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
@@ -639,7 +639,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             <div v-for="t in tilesIn(g.id)" :key="t.id" :data-tile="t.id" class="cell"
               :class="{ flash: highlightId === t.id, dragging: dragId === t.id, selected: selTileId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
-              <WidgetCard :tile="t" :edit="edit" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              <WidgetCard :tile="t" :edit="edit" :locked="!!d.predefined" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>

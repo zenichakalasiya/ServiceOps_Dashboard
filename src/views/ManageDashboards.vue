@@ -190,7 +190,10 @@ function onDrop(target) {
                   <button class="ia" title="History" @click="historyTarget = d"><Icon name="history" :size="15" /></button>
                 </template>
                 <div class="del-wrap">
-                  <button class="ia del" :title="isArchive ? 'Delete forever' : 'Archive'" @click.stop="confirmId = confirmId === d.id ? null : d.id"><Icon name="trash" :size="15" /></button>
+                  <!-- predefined boards can't be deleted; disabled rather than hidden
+                       here, so the actions column doesn't reflow row by row -->
+                  <button v-if="d.predefined && !isArchive" class="ia del" disabled title="Predefined dashboard — can't be deleted"><Icon name="lock" :size="15" /></button>
+                  <button v-else class="ia del" :title="isArchive ? 'Delete forever' : 'Archive'" @click.stop="confirmId = confirmId === d.id ? null : d.id"><Icon name="trash" :size="15" /></button>
                   <div v-if="confirmId === d.id" class="cfm-back" @click="confirmId = null" />
                   <div v-if="confirmId === d.id" class="cfm">
                     <span>{{ isArchive ? 'Delete forever?' : 'Archive this dashboard?' }}</span>
@@ -278,6 +281,8 @@ function onDrop(target) {
 .acts { white-space: nowrap; }
 .acts-in { display: flex; gap: 2px; align-items: center; }
 .ia { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
+.ia:disabled { color: var(--muted-2); cursor: not-allowed; }
+.ia:disabled:hover { background: transparent; }
 .ia:hover { background: var(--surface); color: var(--ink); }
 .ia.del:hover { color: var(--red); background: var(--red-soft); }
 .del-wrap { position: relative; }
