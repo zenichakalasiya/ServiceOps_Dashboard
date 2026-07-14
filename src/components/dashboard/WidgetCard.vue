@@ -6,7 +6,7 @@ import DataTable from './DataTable.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
 import FilterMenu from '../ui/FilterMenu.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import { CHART_TYPES, whyDisabled } from '../../data/chartTypes.js'
+import { typesFor, isFrozen, frozenReason, whyDisabled } from '../../data/chartTypes.js'
 import { fieldsFrom } from '../../data/filters.js'
 import { toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
@@ -75,8 +75,14 @@ const exportOpen = ref(false)
 const showLegend = computed(() => props.tile.legend !== false)
 
 /* Switch the chart type in place, from the tile, without reopening the builder.
+ * Only Column / Bar / Line are offered — see chartTypes.js. A predefined pie is
+ * frozen, so the submenu is disabled rather than empty: a disabled item with a
+ * reason answers the question, an absent one just poses it.
  * The dashboard's {tiles, groups} snapshot watcher picks it up, so Ctrl+Z reverts. */
 const typeOpen = ref(false)
+const chartTypes = computed(() => typesFor(props.tile))
+const typeFrozen = computed(() => isFrozen(props.tile))
+const typeFrozenWhy = computed(() => frozenReason(props.tile))
 const disabledFor = (ct) => whyDisabled(ct, props.tile.chart)
 function setKind(ct) {
   if (disabledFor(ct)) return
@@ -221,12 +227,18 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
           <button class="menu-item" @click="menu = false; shareOpen = true"><Icon name="share" :size="15" /> Share widget</button>
-          <!-- Chart type → submenu: swap the visualisation from the tile itself -->
-          <div v-if="tile.type === 'chart' && tile.chart" class="menu-item sub" @mouseenter="typeOpen = true; exportOpen = false" @mouseleave="typeOpen = false">
+          <!-- Chart type → submenu. Only Column / Bar / Line can be swapped for one
+               another; a predefined pie is frozen, so the item is disabled with the
+               reason rather than silently missing. -->
+          <div
+            v-if="tile.type === 'chart' && tile.chart" class="menu-item sub"
+            :class="{ dis: typeFrozen }" :title="typeFrozen ? typeFrozenWhy : ''"
+            @mouseenter="typeOpen = !typeFrozen; exportOpen = false" @mouseleave="typeOpen = false"
+          >
             <span class="mi-l"><Icon name="chart-bar" :size="15" /> Chart type</span><Icon name="chevron-right" :size="14" class="mi-c" />
             <transition name="pop"><div v-if="typeOpen" class="submenu types">
               <button
-                v-for="ct in CHART_TYPES" :key="ct.id" class="menu-item ct"
+                v-for="ct in chartTypes" :key="ct.id" class="menu-item ct"
                 :class="{ on: tile.chart.kind === ct.id }"
                 :disabled="!!disabledFor(ct)" :title="disabledFor(ct) || `Show as ${ct.label}`"
                 @click="setKind(ct)"
@@ -391,6 +403,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ct.on { color: var(--primary-700); font-weight: 600; }
 .ct:disabled { opacity: .4; cursor: not-allowed; }
 .ct:disabled:hover { background: transparent; }
+/* frozen: a predefined pie/KPI/shortcut can't be recast at all */
+.menu-item.sub.dis { opacity: .4; cursor: not-allowed; }
+.menu-item.sub.dis:hover { background: transparent; }
 .tbody { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; min-height: 0; }
 .loading { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 /* empty-widget states */

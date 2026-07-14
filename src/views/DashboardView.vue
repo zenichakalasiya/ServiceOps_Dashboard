@@ -341,12 +341,31 @@ function onResizeUp() {
 }
 
 // derive the builder's `type` descriptor from an existing tile
+/* A chart KIND is not a builder TYPE id, and conflating them was a real bug: kind
+ * `bar` (a column chart) was landing on the builder's `bar` tab — which is the
+ * *horizontal* bar — while `donut` and `area` matched no tab at all, so the builder
+ * opened with nothing selected and a nonsense label. It went unnoticed because the
+ * type tabs used to be disabled outright when editing.
+ *
+ * The ⋯ menu can also produce kinds the builder has no tab for (area, funnel,
+ * pyramid); those fold into the nearest tab, and the tile's real kind is preserved
+ * unless the user actually switches type. */
+const KIND_TO_TYPE = {
+  line: { id: 'line', label: 'Line' },
+  area: { id: 'line', label: 'Line' },        // an area chart is a line with a fill
+  hbar: { id: 'bar', label: 'Bar' },          // "Bar" = horizontal
+  bar: { id: 'column', label: 'Column' },     // "Column" = vertical
+  pie: { id: 'pie', label: 'Pie' },
+  donut: { id: 'pie', label: 'Pie' },
+  funnel: { id: 'pie', label: 'Pie' },
+  pyramid: { id: 'pie', label: 'Pie' },
+}
 function typeForTile(t) {
   if (t.type === 'kpi') return { id: 'kpi', label: 'KPI', type: 'kpi', kind: null }
   if (t.type === 'shortcut') return { id: 'shortcut', label: 'Shortcut', type: 'shortcut', kind: null }
   const kind = t.chart?.kind || 'bar'
-  const label = kind === 'line' ? 'Line' : kind === 'donut' ? 'Pie' : 'Bar'
-  return { id: kind, label, type: 'chart', kind }
+  const m = KIND_TO_TYPE[kind] || KIND_TO_TYPE.bar
+  return { id: m.id, label: m.label, type: 'chart', kind }
 }
 
 // After a widget is created, smooth-scroll to it (it's appended last) + briefly highlight.

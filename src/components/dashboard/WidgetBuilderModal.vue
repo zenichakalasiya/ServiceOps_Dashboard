@@ -26,17 +26,47 @@ const TYPES = [
   { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null },
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
 ]
-const curType = ref(TYPES.find((t) => t.id === props.type.id) || props.type)
-// Editing a predefined widget is restricted: only the chart type + Highlights can change.
+/* Start on the tile's own tab, but keep the tile's REAL kind. The six tabs don't
+ * cover every kind the ⋯ menu can produce (area, funnel, pyramid all fold into a
+ * tab), and merely *opening* the builder must not silently convert an area chart
+ * into a plain line. Switching type replaces the kind with the tab's canonical one. */
+const baseType = TYPES.find((t) => t.id === props.type.id) || props.type
+const curType = ref({ ...baseType, kind: props.type.kind ?? baseType.kind })
+// Editing a predefined widget is restricted: Highlights only (plus the type swap below).
 const predefinedEdit = computed(() => editing.value && ex?.prov === 'predefined')
-// Editing / duplicating a tile locks the type — except a predefined edit, where the
-// chart type is one of the two things you're allowed to change.
-const typeLocked = computed(() => (editing.value && !predefinedEdit.value) || libMode.value || props.duplicate)
+
+/* ---- Which types can this widget become? --------------------------------------
+ * Two independent rules:
+ *
+ *  1. Only Bar, Column and Line can be swapped for one another. All three plot a
+ *     category axis against a value axis, so one becomes another with no
+ *     reconfiguration. A Pie is part-of-whole, a KPI is a scalar, a Shortcut is a
+ *     table — you can never switch INTO one of those, because the fields would have
+ *     to be re-derived and there is nothing to derive them from.
+ *
+ *  2. A PREDEFINED widget that already IS a Pie / KPI / Shortcut is frozen: it can't
+ *     be converted at all. A custom one may still leave for one of the three.
+ *
+ * Creating a new widget is unconstrained — you're choosing what to build.
+ */
+const SWITCH_IDS = ['line', 'bar', 'column']
+const frozenType = computed(() => predefinedEdit.value && !SWITCH_IDS.includes(curType.value.id))
+
+function typeBlock(t) {
+  if (t.id === curType.value.id) return null                    // the current type is never blocked
+  if (libMode.value || props.duplicate) return 'The type is fixed when cloning or duplicating'
+  if (!editing.value) return null                               // creating: pick anything
+  if (frozenType.value) return `A predefined ${curType.value.label} can’t be converted to another type`
+  if (!SWITCH_IDS.includes(t.id)) return `${t.label} needs its own configuration — only Bar, Column and Line can be swapped for one another`
+  return null
+}
+
 const isChart = computed(() => curType.value.type === 'chart')
 const isKpi = computed(() => curType.value.type === 'kpi')
 const isShortcut = computed(() => curType.value.type === 'shortcut')
 const ctaLabel = computed(() => (isChart.value ? 'Widget' : curType.value.label))
 function switchType(t) {
+  if (typeBlock(t)) return
   if (!cfg.name || cfg.name === `New ${curType.value.label}`) cfg.name = `New ${t.label}`
   curType.value = t
 }
@@ -221,8 +251,13 @@ function save(place) {
           <!-- LEFT: live preview (ServiceOps) -->
           <section class="preview">
             <!-- switch tile type (updates preview + right-side config) -->
-            <div class="pv-tabs" :class="{ locked: typeLocked }">
-              <button v-for="t in TYPES" :key="t.id" class="pv-tab" :class="{ on: curType.id === t.id }" :disabled="typeLocked" @click="switchType(t)">
+            <div class="pv-tabs">
+              <button
+                v-for="t in TYPES" :key="t.id" class="pv-tab"
+                :class="{ on: curType.id === t.id }"
+                :disabled="!!typeBlock(t)" :title="typeBlock(t) || `Show as ${t.label}`"
+                @click="switchType(t)"
+              >
                 <Icon :name="t.icon" :size="16" :class="{ rot90: t.id === 'bar' }" /> {{ t.label }}
               </button>
             </div>
@@ -241,7 +276,13 @@ function save(place) {
             <div class="cfg-scroll">
               <!-- predefined widget: only the chart type (above) + Highlights (below) can change -->
               <div v-if="predefinedEdit" class="sec pe-note">
-                <Icon name="verified" :size="15" /> <span>This is a <b>predefined</b> widget — you can change its <b>chart type</b> (tabs above) and <b>Highlights</b> below.</span>
+                <Icon name="verified" :size="15" />
+                <span v-if="frozenType">
+                  This is a <b>predefined {{ curType.label }}</b> — its type can’t be changed, and only <b>Highlights</b> below are editable.
+                </span>
+                <span v-else>
+                  This is a <b>predefined</b> widget — you can switch it between <b>Bar, Column and Line</b> (tabs above) and edit <b>Highlights</b> below. Nothing else.
+                </span>
               </div>
               <template v-if="!predefinedEdit">
               <!-- Basic Details -->
@@ -311,14 +352,15 @@ function save(place) {
               </div>
               </template>
 
-              <!-- Display. The toggles show for a predefined widget too: they are
-                   display preferences like a Highlight, and with "Hide legend" gone
-                   from the ⋯ menu this is the only place left to turn one off. The
-                   rank window is data shaping, so it stays out of a predefined edit. -->
-              <div v-if="isChart" class="sec">
+              <!-- Display — custom widgets only. A predefined widget is Highlights and
+                   the chart type, nothing else; the legend and data-label toggles are
+                   configuration like any other. (This means a predefined widget's legend
+                   can no longer be turned off anywhere — "Hide legend" left the ⋯ menu
+                   too. That is the rule as stated.) -->
+              <div v-if="isChart && !predefinedEdit" class="sec">
                 <div class="sec-h">Display</div>
 
-                <div v-if="manualMode && !predefinedEdit" class="fld">
+                <div v-if="manualMode" class="fld">
                   <label>Show</label>
                   <div class="rank-row">
                     <div class="seg">

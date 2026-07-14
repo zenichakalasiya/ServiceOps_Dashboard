@@ -14,26 +14,35 @@ export const CHART_TYPES = [
   { id: 'pyramid', label: 'Pyramid', icon: 'chart-pyramid', slice: true },
 ]
 
-/* A PREDEFINED widget may only be recast among these three.
+/* SWITCHING RULES — one place, used by both the tile's ⋯ menu and the builder.
  *
- * The reason is data shape, not taste: Column, Bar and Line all plot the same
- * thing — a category axis against a value axis — so one can become another with
- * no reconfiguration. Pie is part-of-whole, a KPI is a scalar, a Shortcut is a
- * table; converting to or from those needs the fields re-derived, which is
- * exactly what a predefined widget doesn't let you do.
+ * Only Column, Bar and Line can be swapped for one another. The reason is data
+ * shape, not taste: all three plot a category axis against a value axis, so one
+ * becomes another with no reconfiguration. Pie is part-of-whole, a KPI is a
+ * scalar, a Shortcut is a table — converting to or from those needs the fields
+ * re-derived. So you can never switch *into* one of them.
  *
- * So the rule is symmetric: you can only switch if you are ALREADY one of these
- * three. A predefined pie/KPI/shortcut cannot be recast at all.
- *
- * Custom widgets are unaffected — they get the full list above.
+ * On top of that, a PREDEFINED widget that already IS a pie / KPI / shortcut is
+ * frozen: it cannot be converted at all. A custom one may still leave for one of
+ * the three (it just can't come back inside the same edit — Reset restores it).
  */
-export const RESTRICTED_KINDS = ['bar', 'hbar', 'line']
+export const SWITCHABLE_KINDS = ['bar', 'hbar', 'line']   // Column · Bar · Line
+const isSwitchable = (k) => SWITCHABLE_KINDS.includes(k)
 
+// A predefined pie/KPI/shortcut can't be recast at all.
+export function isFrozen(tile) {
+  return tile?.prov === 'predefined' && !isSwitchable(tile?.chart?.kind)
+}
+
+// What the ⋯ menu may offer. Empty = the widget is frozen.
 export function typesFor(tile) {
-  if (tile?.prov !== 'predefined') return CHART_TYPES
-  // a predefined pie / KPI / shortcut is frozen — nothing to offer
-  if (!RESTRICTED_KINDS.includes(tile?.chart?.kind)) return []
-  return CHART_TYPES.filter((t) => RESTRICTED_KINDS.includes(t.id))
+  if (isFrozen(tile)) return []
+  return CHART_TYPES.filter((t) => isSwitchable(t.id))
+}
+
+export function frozenReason(tile) {
+  const label = CHART_TYPES.find((t) => t.id === tile?.chart?.kind)?.label || 'widget'
+  return `A predefined ${label} can’t be converted to another type`
 }
 
 // Why a type can't be used here — null when it can. Shown as the item's tooltip,
