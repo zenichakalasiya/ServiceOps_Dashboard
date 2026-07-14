@@ -199,6 +199,15 @@ const tokens = computed(() => {
 })
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
+/* Hold the chart back until its card has faded in (the board staggers cards in over
+ * ~0.2s). Draw it sooner and the animation plays out behind an opacity-0 card. */
+const ENTER_DELAY = 260
+/* Everything AFTER the entrance — hiding a series, moving the rank window, switching
+ * type — updates quickly and must NOT replay the entrance. ECharts only honours these
+ * if the option is MERGED; `notMerge: true` makes every setOption look like a first
+ * render, which would re-run the full 1.5s draw on every legend click. */
+const UPDATE_ANIM = { animationDurationUpdate: 300, animationEasingUpdate: 'cubicOut', animationDelayUpdate: 0 }
+
 /* --- legend hover → native ECharts highlight/downplay --- */
 const chartRef = shallowRef(null)
 const legendHover = ref(null)
@@ -228,9 +237,35 @@ const option = computed(() => {
     axisLine: { show: false }, axisTick: { show: false },
     axisLabel: { color: t.muted, fontSize: 11, fontFamily: t.font },
   }
-  const anim = reduceMotion
-    ? { animation: false }
-    : { animation: true, animationDuration: 550, animationEasing: 'cubicOut', animationDelay: (i) => i * 20 }
+  /* ---- Entrance animation ------------------------------------------------------
+   * Each type draws itself in the way its own geometry implies, slowly enough to
+   * actually be seen:
+   *
+   *   column   bars grow bottom → top, stepping left → right
+   *   bar      bars grow left → right, stepping top → bottom
+   *   line     the path draws itself left → right (ECharts clips it from the left)
+   *   pie      the ring sweeps round from twelve o'clock
+   *   funnel   the bands widen out, stepping down
+   *
+   * ENTER_DELAY holds the chart back until its card has faded in. Without it the
+   * chart finished drawing while the card was still at opacity 0 — which is exactly
+   * why the charts appeared to pop in fully formed with no animation at all.
+   *
+   * The stagger tightens as the series grows, so a 63-slice donut doesn't take ten
+   * seconds to arrive. */
+  const anim = (count) => {
+    if (reduceMotion) return { animation: false }
+    const step = Math.min(70, Math.max(18, 500 / Math.max(1, count)))
+    if (k === 'line' || k === 'area') {
+      return { animation: true, animationDuration: 1500, animationEasing: 'cubicOut', animationDelay: ENTER_DELAY }
+    }
+    if (k === 'pie' || k === 'donut') {
+      return { animation: true, animationType: 'expansion', animationDuration: 1400, animationEasing: 'cubicOut', animationDelay: ENTER_DELAY }
+    }
+    // bar | hbar | funnel — all grow from their baseline, so the delay is what
+    // turns them into a sweep rather than a simultaneous pop
+    return { animation: true, animationDuration: 900, animationEasing: 'cubicOut', animationDelay: (i) => ENTER_DELAY + i * step }
+  }
 
   const sliceTip = { ...tip, trigger: 'item', formatter: (p) => `${dot(p.color)}${p.name}: ${pctOf(p.value)}% <b style="color:${t.ink}">(${p.value})</b>` }
   const sliceData = rows.map((e) => ({ name: e.name, value: e.value, itemStyle: { color: e.color } }))
@@ -254,8 +289,9 @@ const option = computed(() => {
         emphasis: { focus: 'self', scale: true, scaleSize: 4 },
         blur: { itemStyle: { opacity: 0.18 } },
         data: sliceData,
-        ...(reduceMotion ? { animation: false } : { animationType: 'expansion', animationDuration: 600, animationEasing: 'cubicOut' }),
+        ...anim(sliceData.length),
       }],
+      ...UPDATE_ANIM,
     }
   }
 
@@ -274,8 +310,9 @@ const option = computed(() => {
         emphasis: { focus: 'self' },
         blur: { itemStyle: { opacity: 0.18 } },
         data: sliceData,
+        ...anim(sliceData.length),
       }],
-      ...anim,
+      ...UPDATE_ANIM,
     }
   }
 
@@ -302,7 +339,7 @@ const option = computed(() => {
     grid: { left: 6, right: 14, top: 14, bottom: 4, containLabel: true },
     xAxis: horizontal ? val : cat,
     yAxis: horizontal ? cat : val,
-    series: shown.map((s) => ({
+    series: shown.map((s, si) => ({
       name: s.name, type: isLine ? 'line' : 'bar', data: s.values,
       barMaxWidth: 26,
       itemStyle: { borderRadius: horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0], color: baseColor(s.name, series.value.indexOf(s)) },
@@ -311,10 +348,18 @@ const option = computed(() => {
       areaStyle: isArea ? { opacity: 0.18 } : undefined,
       smooth: isLine ? 0.35 : undefined,
       symbolSize: isLine ? 7 : undefined,
+      // a grouped bar's second series starts a beat after the first, so the pair
+      // sweeps across rather than landing together
+      ...(() => {
+        const a = anim(s.values.length)
+        if (!a.animation || typeof a.animationDelay !== 'function') return a
+        const base = a.animationDelay
+        return { ...a, animationDelay: (i) => base(i) + si * 90 }
+      })(),
       emphasis: { focus: 'series' },
       blur: { itemStyle: { opacity: 0.18 }, lineStyle: { opacity: 0.18 }, areaStyle: { opacity: 0.04 } },
     })),
-    ...anim,
+    ...UPDATE_ANIM,
   }
 })
 
@@ -458,9 +503,11 @@ onBeforeUnmount(() => {
   removeEventListener('keydown', onDocKey)
 })
 
-let raf = 0
-onMounted(() => { raf = requestAnimationFrame(() => chartRef.value?.resize()) })
-onBeforeUnmount(() => cancelAnimationFrame(raf))
+/* NO resize() on mount. It used to fire on the next frame to nudge the chart into
+ * its box — but a resize re-lays-out the series and SNAPS a running entrance
+ * animation to its end state. That is why the bars and the pie appeared fully
+ * formed while only the line (whose clip animation survives a relayout) looked
+ * animated. `autoresize` on <VChart> already handles the container. */
 </script>
 
 <template>
@@ -468,7 +515,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
       <div class="chart-row">
         <VChart
           ref="chartRef" class="ec" :option="option"
-          :init-options="{ renderer: 'canvas' }" :update-options="{ notMerge: true }" autoresize
+          :init-options="{ renderer: 'canvas' }" :update-options="{ replaceMerge: ['series'] }" autoresize
         />
 
         <!-- Part-of-whole charts: legend to the RIGHT, one slice per line, paged to

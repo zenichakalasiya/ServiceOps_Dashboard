@@ -813,15 +813,18 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .cell:hover .resize { opacity: .9; }
 .resize:hover { opacity: 1; }
 /* staggered widget reveal after the loading skeleton */
-.revealing .cell { animation: cellReveal .5s cubic-bezier(.2,.8,.2,1) backwards; }
-.revealing .cell:nth-child(2) { animation-delay: .05s; }
-.revealing .cell:nth-child(3) { animation-delay: .1s; }
-.revealing .cell:nth-child(4) { animation-delay: .15s; }
-.revealing .cell:nth-child(5) { animation-delay: .2s; }
-.revealing .cell:nth-child(6) { animation-delay: .25s; }
-.revealing .cell:nth-child(7) { animation-delay: .3s; }
-.revealing .cell:nth-child(n+8) { animation-delay: .35s; }
-@keyframes cellReveal { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+/* The CARD arrives quickly and quietly; the CHART inside it is what animates. This
+   used to run .5s with up to .35s of stagger — long enough that a chart's 550ms draw
+   finished behind a still-invisible card, which is why the charts appeared to pop in
+   fully formed. Now the cards are all present by ~.5s and the chart entrance (held
+   back by ENTER_DELAY in ChartTile) plays out in full view. */
+.revealing .cell { animation: cellReveal .3s cubic-bezier(.2,.8,.2,1) backwards; }
+.revealing .cell:nth-child(2) { animation-delay: .04s; }
+.revealing .cell:nth-child(3) { animation-delay: .08s; }
+.revealing .cell:nth-child(4) { animation-delay: .12s; }
+.revealing .cell:nth-child(5) { animation-delay: .16s; }
+.revealing .cell:nth-child(n+6) { animation-delay: .2s; }
+@keyframes cellReveal { from { opacity: 0; transform: translateY(10px) scale(.99); } to { opacity: 1; transform: none; } }
 /* widget groups (collapsible rows) */
 .board-groups { display: flex; flex-direction: column; gap: 16px; }
 .group { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); padding: 6px 12px 14px; transition: box-shadow .15s, border-color .15s; }
