@@ -252,11 +252,11 @@ function submit(openAdd = false) {
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .req { color: var(--red); }
 .err { color: var(--red); font-size: 12px; margin-top: 5px; }
-/* duplicate name blocks the save, so it reads as an error, not a hint */
-.dup-err { display: flex; align-items: flex-start; gap: 7px; margin: 6px 0 0; padding: 8px 10px; font-size: 12px; line-height: 1.45; color: var(--red); background: var(--red-soft); border-radius: 7px; }
+/* Duplicate name reads as a WARNING, not an error — amber, not red. */
+.dup-err { display: flex; align-items: flex-start; gap: 7px; margin: 6px 0 0; padding: 8px 10px; font-size: 12px; line-height: 1.45; color: var(--amber); background: var(--amber-soft); border-radius: 7px; }
 .dup-err :deep(.ico) { flex: none; margin-top: 1px; }
-.dup-err b { font-weight: 600; }
-.input.bad { border-color: var(--red); }
+.dup-err b { font-weight: 600; color: var(--amber); }
+.input.bad { border-color: var(--amber); }
 .sec-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
 .seg { display: inline-flex; gap: 6px; }
 .seg-btn { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); font-weight: 500; font-size: 13px; flex: 1; justify-content: center; }

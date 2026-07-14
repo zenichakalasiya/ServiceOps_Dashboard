@@ -439,11 +439,11 @@ function save(place) {
  * it belonged to the Technician fields it was jammed against.
  * align-items: flex-start keeps the icon at the top-left when the text wraps to
  * two lines, instead of the icon drifting to the vertical centre. */
-/* A duplicate name BLOCKS the save, so it reads as an error, not a suggestion. */
-.dup-warn { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.45; color: var(--red); background: var(--red-soft); border: 1px solid var(--red-soft); border-radius: 7px; padding: 8px 10px; margin: -6px 0 10px; }
+/* Duplicate name reads as a WARNING, not an error — amber, not red. */
+.dup-warn { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.45; color: var(--amber); background: var(--amber-soft); border-radius: 7px; padding: 8px 10px; margin: -6px 0 10px; }
 .dup-warn .ico { flex: none; margin-top: 1px; }   /* optical-align with the first text line */
-.dup-warn b { font-weight: 600; }
-.input.bad { border-color: var(--red); }
+.dup-warn b { font-weight: 600; color: var(--amber); }
+.input.bad { border-color: var(--amber); }
 .sec:last-child { border-bottom: none; margin-bottom: 0; }
 .sec-h { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
