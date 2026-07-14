@@ -242,7 +242,7 @@ const option = computed(() => {
       series: [{
         type: 'pie',
         radius: k === 'donut' ? ['52%', '78%'] : ['0%', '74%'],
-        center: ['50%', '50%'],
+        center: ['50%', '50%'],   // the legend is its own flex column, so the plot area is already narrowed
         label: { show: false }, labelLine: { show: false },
         itemStyle: { borderColor: t.surface, borderWidth: 2 },
         emphasis: { focus: 'self', scale: true, scaleSize: 4 },
@@ -336,6 +336,50 @@ const overflowCount = computed(() =>
 // clicking a legend entry disables it and pulls its data out of the chart
 const legendClickable = computed(() => rankModes.value || chipModes.value)
 
+/* ---- Side legend (part-of-whole charts) -------------------------------------
+ * A pie/donut names slices, and slice names are long. Laid out centre-bottom they
+ * wrap into a paragraph and eat the chart's height. Stacked to the RIGHT they read
+ * as a list, one per line — but then only as many fit as the chart is tall, so the
+ * rest paginate. Grow the widget and more fit per page; the page count falls out.
+ *
+ * Cartesian charts keep the bottom legend: they name *series*, of which there are
+ * usually two or three, and a side column would steal width from the plot. */
+const sideLegend = computed(() => sliceBased.value && props.legend)
+
+const ROW_H = 22          // one legend row, incl. gap — keep in step with .lg-side
+const PAGER_H = 26        // the ‹ 1/3 › strip, only rendered when it's needed
+const legendCol = ref(null)
+const colH = ref(0)
+const page = ref(0)
+
+let ro = null
+onMounted(() => {
+  if (typeof ResizeObserver === 'undefined') return
+  ro = new ResizeObserver(([e]) => { colH.value = e.contentRect.height })
+  watch(legendCol, (el) => { ro.disconnect(); if (el) ro.observe(el) }, { immediate: true, flush: 'post' })
+})
+onBeforeUnmount(() => ro?.disconnect())
+
+const sideEntries = computed(() => manageable.value)
+/* How many rows fit. Measured twice: once assuming no pager, and if that already
+ * needs one, again with the pager's height taken out — otherwise adding the pager
+ * could push a row out and change the answer after the fact. */
+const perPage = computed(() => {
+  const h = colH.value
+  if (!h) return sideEntries.value.length || 1
+  const naive = Math.max(1, Math.floor(h / ROW_H))
+  if (naive >= sideEntries.value.length) return naive          // everything fits, no pager
+  return Math.max(1, Math.floor((h - PAGER_H) / ROW_H))
+})
+const pageCount = computed(() => Math.max(1, Math.ceil(sideEntries.value.length / perPage.value)))
+const paged = computed(() => {
+  const start = page.value * perPage.value
+  return sideEntries.value.slice(start, start + perPage.value)
+})
+// resizing the tile changes how many fit — never strand the user past the last page
+watch([pageCount], () => { if (page.value > pageCount.value - 1) page.value = pageCount.value - 1 })
+watch([() => props.chart, mode, rankMode], () => { page.value = 0 })
+
 /* Reveal every legend. Where there is a rank pill it *is* the filter, so showing
  * all the legends means the filter now reads All — the pill must not keep
  * claiming "Top 11 of 63" while all 63 sit beneath it. */
@@ -420,17 +464,50 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
           ref="chartRef" class="ec" :option="option"
           :init-options="{ renderer: 'canvas' }" :update-options="{ notMerge: true }" autoresize
         />
+
+        <!-- Part-of-whole charts: legend to the RIGHT, one slice per line, paged to
+             whatever the widget's height can hold. Taller widget → more per page. -->
+        <aside v-if="sideLegend" class="legend-side">
+          <button
+            v-if="rankModes" ref="rankBtn" class="cs-chip side" :class="{ on: panelOpen }"
+            title="Choose which slice of the ranking to plot" @click.stop="togglePanel(rankBtn)"
+          >
+            <Icon name="filter" :size="12" /> {{ censusLabel }}
+            <Icon name="chevron-down" :size="13" />
+          </button>
+
+          <div ref="legendCol" class="ls-list">
+            <span
+              v-for="e in paged" :key="e.key" class="lg lg-side"
+              :class="{ faded: legendHover !== null && legendHover !== e.key, off: hidden.has(e.key), click: legendClickable }"
+              :title="legendClickable ? (hidden.has(e.key) ? `Show ${e.name} on the chart` : `Hide ${e.name} from the chart`) : e.name"
+              @mouseenter="emphasise(e.key)" @mouseleave="relax()"
+              @click="legendClickable && toggle(e.key)"
+            >
+              <i :style="{ background: e.color }" />
+              <span class="ls-nm">{{ e.name }}</span>
+              <b>{{ pctOf(e.value) }}%</b>
+            </span>
+          </div>
+
+          <!-- only when the list genuinely doesn't fit -->
+          <div v-if="pageCount > 1" class="ls-pager">
+            <button :disabled="page === 0" title="Previous" @click="page--"><Icon name="chevron-left" :size="14" /></button>
+            <span>{{ page + 1 }} / {{ pageCount }}</span>
+            <button :disabled="page >= pageCount - 1" title="Next" @click="page++"><Icon name="chevron-right" :size="14" /></button>
+          </div>
+        </aside>
       </div>
 
       <!-- ② only: the "Other" residue spelled out beneath the chart -->
-      <div v-if="mode === 2" class="census">
+      <div v-if="mode === 2 && !sideLegend" class="census">
         <span v-if="otherCount > 0" class="cs-note">
           <i :style="{ background: OTHER_COLOR }" /> Other = {{ otherCount }} more ({{ pctOf(otherValue) }}% of total)
         </span>
       </div>
 
-      <!-- inline legend (classic ⓪, bounded ②, truncated ④, merged ⑥) -->
-      <div v-if="showInlineLegend" class="legend">
+      <!-- bottom legend — cartesian charts only (classic ⓪, bounded ②, truncated ④, merged ⑥) -->
+      <div v-if="showInlineLegend && !sideLegend" class="legend">
         <!-- the rank pill states the truncation and opens the one panel that can
              change it. It sits outside the scroll box so it never scrolls away. -->
         <button
@@ -524,6 +601,19 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .chart { display: flex; flex-direction: column; min-width: 0; position: relative; }
 .chart-row { flex: 1; display: flex; min-height: 0; gap: 10px; }
 .ec { flex: 1; min-height: 0; min-width: 0; }
+
+/* Side legend — part-of-whole charts. The list is the only part that flexes, so
+   the pager stays pinned at the bottom and the rank pill at the top. */
+.legend-side { flex: none; width: 168px; display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 2px 0; }
+.ls-list { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+.lg-side { width: 100%; height: 18px; justify-content: flex-start; }   /* 18 + 4 gap = ROW_H */
+.ls-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-side b { flex: none; font-variant-numeric: tabular-nums; }
+.ls-pager { flex: none; display: flex; align-items: center; justify-content: center; gap: 4px; height: 22px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ls-pager button { width: 20px; height: 20px; border: none; background: transparent; color: var(--muted); border-radius: 5px; display: grid; place-items: center; }
+.ls-pager button:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.ls-pager button:disabled { opacity: .3; cursor: not-allowed; }
+.cs-chip.side { align-self: stretch; justify-content: center; }
 
 /* The pill is the row's anchor: it must sit at the far left and stay there. So the
    row itself never wraps — only the chips inside .lg-wrap do. (With flex-wrap on

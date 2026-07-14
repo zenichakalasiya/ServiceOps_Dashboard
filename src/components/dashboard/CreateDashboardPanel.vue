@@ -11,6 +11,10 @@ const router = useRouter()
 const src = store.ui.cloneTarget || store.ui.editTarget
 const isClone = computed(() => !!store.ui.cloneTarget)
 const isEdit = computed(() => !!store.ui.editTarget)
+/* Editing a PREDEFINED dashboard: its identity (name, description, visibility)
+ * ships with the product and can't be changed. Cloning one is unrestricted —
+ * the copy is yours — so this is scoped to edit, not clone. */
+const lockedDash = computed(() => isEdit.value && !!store.ui.editTarget?.predefined)
 
 // Clone naming: "{base} - copy N" — strip any existing "- copy N" suffix to find the
 // base, then pick the lowest N not already used (so a 2nd copy becomes "- copy 2").
@@ -60,16 +64,21 @@ const PREVIEW = ['Top Server Monitors', 'Monitor Availability', 'CPU Utilisation
 
 function close() { store.ui.createOpen = false; store.ui.cloneTarget = null; store.ui.editTarget = null }
 function submit(openAdd = false) {
-  if (!name.value.trim()) { err.value = 'Give your dashboard a name.'; return }
+  if (!lockedDash.value && !name.value.trim()) { err.value = 'Give your dashboard a name.'; return }
   const ta = access.value === 'restricted' ? techAccess.value : undefined
   const ga = access.value === 'restricted' && groupAccess.value ? [groupAccess.value] : undefined
   // ---- edit in place ----
   if (isEdit.value) {
     Object.assign(src, {
-      name: name.value.trim(), access: access.value, category: category.value, description: description.value,
+      // a predefined board keeps its identity — writing these back would blank the
+      // very fields we just removed from the form
+      ...(lockedDash.value ? {} : {
+        name: name.value.trim(), access: access.value, description: description.value,
+        ...(ta ? { techAccess: ta } : {}), ...(ga ? { groupAccess: ga } : {}),
+      }),
+      category: category.value,
       headerFont: layout.headerFont, hGap: layout.hGap, vGap: layout.vGap, rowHeight: layout.rowHeight,
       updated: new Date().toISOString(),
-      ...(ta ? { techAccess: ta } : {}), ...(ga ? { groupAccess: ga } : {}),
     })
     if (defaultLanding.value) { store.dashboards.forEach((x) => (x.default = false)); src.default = true }
     close()
@@ -101,16 +110,25 @@ function submit(openAdd = false) {
       </div>
 
       <div class="body">
-        <div class="grp">
-          <label class="field">Dashboard Name <span class="req">*</span></label>
-          <input class="input" v-model="name" placeholder="e.g. Network SLA Overview" autofocus @input="err = ''" />
-          <div v-if="err" class="err">{{ err }}</div>
-        </div>
+        <!-- predefined board: identity ships with the product, so Name / Description /
+             Visibility are removed outright and this line says why -->
+        <p v-if="lockedDash" class="pd-note">
+          <Icon name="verified" :size="14" />
+          <span>This is a <b>predefined dashboard</b> — you can’t edit its <b>Name</b>, <b>Description</b> or <b>Visibility &amp; Sharing</b>. You can still change its Category, layout, and the widgets on it.</span>
+        </p>
 
-        <div class="grp">
-          <label class="field">Description</label>
-          <textarea class="input" rows="2" v-model="description" placeholder="What is this dashboard for, and who is it for?" />
-        </div>
+        <template v-if="!lockedDash">
+          <div class="grp">
+            <label class="field">Dashboard Name <span class="req">*</span></label>
+            <input class="input" v-model="name" placeholder="e.g. Network SLA Overview" autofocus @input="err = ''" />
+            <div v-if="err" class="err">{{ err }}</div>
+          </div>
+
+          <div class="grp">
+            <label class="field">Description</label>
+            <textarea class="input" rows="2" v-model="description" placeholder="What is this dashboard for, and who is it for?" />
+          </div>
+        </template>
 
         <!-- Category + Add New -->
         <div class="grp">
@@ -132,7 +150,7 @@ function submit(openAdd = false) {
         </div>
 
         <!-- Access + one-liner -->
-        <div class="grp">
+        <div v-if="!lockedDash" class="grp">
           <label class="field">Visibility &amp; Sharing</label>
           <div class="seg">
             <button v-for="(a, k) in ACCESS" :key="k" class="seg-btn" :class="{ on: access === k }" @click="access = k">
@@ -142,8 +160,8 @@ function submit(openAdd = false) {
           <p class="oneliner"><Icon name="info" :size="13" /> {{ ACC_DESC[access] }}</p>
         </div>
 
-        <!-- Restricted targeting -->
-        <div v-if="access === 'restricted'" class="two">
+        <!-- Restricted targeting — belongs to Visibility, so it goes when Visibility does -->
+        <div v-if="!lockedDash && access === 'restricted'" class="two">
           <div class="grp">
             <label class="field">Technician Access Level <span class="req">*</span></label>
             <Dropdown v-model="techAccess" :options="store.owners" :multiple="true" placeholder="Select technicians" />
@@ -222,6 +240,9 @@ function submit(openAdd = false) {
 .seg { display: inline-flex; gap: 6px; }
 .seg-btn { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); font-weight: 500; font-size: 13px; flex: 1; justify-content: center; }
 .seg-btn.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-700); }
+/* predefined-dashboard note — same treatment as the predefined-widget line in the builder */
+.pd-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--primary-700); background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 9px; padding: 10px 12px; }
+.pd-note :deep(.ico) { flex: none; margin-top: 1px; }
 .oneliner { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .oneliner.plain { margin: 2px 0 0; }
 /* category + add new */

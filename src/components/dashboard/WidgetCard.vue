@@ -6,9 +6,7 @@ import DataTable from './DataTable.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
 import { CHART_TYPES, whyDisabled } from '../../data/chartTypes.js'
 import { toast } from '../../store/index.js'
-// `locked` = this tile sits on a PREDEFINED dashboard. Nothing may be removed from
-// one — you can only add. That's a property of the board, not of the tile.
-const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean, locked: Boolean })
+const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin', 'select'])
 function onCardClick() { if (props.tile.sel) emit('select', props.tile) }
 
@@ -68,7 +66,10 @@ function toggleMenu() {
   nextTick(placeMenu)       // then correct it against the rendered size
 }
 const exportOpen = ref(false)
-const showLegend = ref(true)
+/* Legend visibility is a property of the WIDGET now, set in its configuration —
+ * not a transient view toggle in the ⋯ menu. Undefined means on, so existing
+ * tiles keep their legend without a migration. */
+const showLegend = computed(() => props.tile.legend !== false)
 
 /* Switch the chart type in place, from the tile, without reopening the builder.
  * The dashboard's {tiles, groups} snapshot watcher picks it up, so Ctrl+Z reverts. */
@@ -123,10 +124,11 @@ const provMeta = computed(() => PROV[prov.value] || PROV.user)
 // Predefined widgets are editable (limited to Highlights + chart type in the builder)
 // but can't be deleted from the dashboard.
 const canEdit = computed(() => true)
-/* Two independent locks:
- *   · the DASHBOARD is predefined → nothing can be removed from it, whoever made it
- *   · the TILE is predefined       → it can't be removed even from an editable board */
-const canDelete = computed(() => !props.locked && prov.value !== 'predefined')
+/* Deletability follows WHO PUT THE TILE HERE, not who owns its definition.
+ * Only a `seeded` tile — one that shipped with a predefined dashboard — is
+ * undeletable. A predefined widget the user *added* to that board is theirs to
+ * remove again; so is a custom one. */
+const canDelete = computed(() => !props.tile.seeded)
 
 // Empty-widget states: unconfigured vs error vs no-data vs ok (distinct copy each)
 const tileState = computed(() => {
@@ -227,7 +229,6 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
               </button>
             </div></transition>
           </div>
-          <button v-if="tile.type === 'chart'" class="menu-item" @click="showLegend = !showLegend"><Icon name="list" :size="15" /> {{ showLegend ? 'Hide legend' : 'Show legend' }}</button>
           <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->
           <div class="menu-item sub" @mouseenter="exportOpen = true; typeOpen = false" @mouseleave="exportOpen = false">
             <span class="mi-l"><Icon name="share" :size="15" /> Export</span><Icon name="chevron-right" :size="14" class="mi-c" />

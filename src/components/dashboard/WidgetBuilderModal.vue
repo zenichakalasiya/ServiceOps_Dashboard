@@ -67,6 +67,8 @@ function initCfg() {
     assetType: '', dateFilter: 'Created date', description: ex?.info || '',
     sortOrder: 'none', topN: '', excludeZero: false, sqlQuery: ex?.sql || '',
     sharedAccess: ex?.sharedAccess || 'view',   // access granted to people it's shared with
+    // legend is a saved property of the widget, not a view toggle. undefined = on.
+    legend: ex?.legend !== false,
   }
 }
 const cfg = reactive(initCfg())
@@ -103,7 +105,9 @@ const previewTile = computed(() => {
     }
     if (cfg.sortOrder === 'asc') series = series.map((s) => ({ ...s, values: [...s.values].sort((a, b) => a - b) }))
     if (cfg.sortOrder === 'desc') series = series.map((s) => ({ ...s, values: [...s.values].sort((a, b) => b - a) }))
-    return mkChart(title, { kind: curType.value.kind, labels, series }, cfg.description)
+    const t = mkChart(title, { kind: curType.value.kind, labels, series }, cfg.description)
+    t.legend = cfg.legend          // so the live preview reflects the toggle
+    return t
   }
   return ex
     ? mkShortcut(title, ex.columns, ex.rows.map((r) => [...r]), cfg.description)
@@ -135,7 +139,7 @@ function save(place) {
     t.title = cfg.name || t.title
     t.info = cfg.description
     t.type = curType.value.type
-    if (isChart.value) { t.chart = pv.chart; t.columns = undefined; t.rows = undefined; t.value = undefined }
+    if (isChart.value) { t.chart = pv.chart; t.legend = cfg.legend; t.columns = undefined; t.rows = undefined; t.value = undefined }
     else if (isShortcut.value) { t.columns = pv.columns; t.rows = pv.rows; t.sql = cfg.sqlQuery; t.chart = undefined }
     else if (isKpi.value) { t.value = pv.value; t.unit = pv.unit; t.chart = undefined; t.columns = undefined; t.rows = undefined }
     if (!isShortcut.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
@@ -184,7 +188,7 @@ function save(place) {
             <div class="pv-card">
               <div class="pv-canvas">
                 <div v-if="isKpi" class="pv-kpi">{{ previewTile.value }}<span v-if="previewTile.unit" class="u">{{ previewTile.unit }}</span><span class="d">▲ {{ previewTile.delta?.pct }}%</span></div>
-                <ChartTile v-else-if="isChart" :chart="previewTile.chart" :height="320" />
+                <ChartTile v-else-if="isChart" :chart="previewTile.chart" :legend="cfg.legend" :height="320" />
                 <table v-else class="pv-tbl"><thead><tr><th v-for="c in previewTile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in previewTile.rows" :key="i"><td v-for="(c,j) in r" :key="j">{{ c }}</td></tr></tbody></table>
               </div>
             </div>
@@ -280,6 +284,22 @@ function save(place) {
               </div>
               </template>
 
+              <!-- Display — legend on/off. Shown for a predefined widget too: it's a
+                   display preference like a Highlight, not a change to the data, and
+                   with "Hide legend" gone from the ⋯ menu this is the only way to
+                   turn a predefined widget's legend off. -->
+              <div v-if="isChart" class="sec">
+                <div class="sec-h">Display</div>
+                <label class="tgl-row">
+                  <span class="tgl-txt">
+                    <b>Legend</b>
+                    <em>Show the key that names each series or slice.</em>
+                  </span>
+                  <button class="tgl" :class="{ on: cfg.legend }" role="switch" :aria-checked="cfg.legend"
+                    @click.prevent="cfg.legend = !cfg.legend"><i /></button>
+                </label>
+              </div>
+
               <!-- Highlights (also the only editable section for a predefined widget) -->
               <div v-if="manualMode || predefinedEdit" class="sec">
                 <div class="sec-h">Highlights</div>
@@ -340,6 +360,16 @@ function save(place) {
 .config { width: 480px; flex: none; display: flex; flex-direction: column; min-height: 0; }
 .cfg-scroll { flex: 1; overflow: auto; padding: 18px 20px; }
 .sec { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+/* Display → Legend toggle */
+.tgl-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; }
+.tgl-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tgl-txt b { font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+.tgl-txt em { font-style: normal; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.tgl { flex: none; width: 38px; height: 22px; padding: 0; border: none; border-radius: 999px; background: var(--border-strong); position: relative; transition: background .15s; }
+.tgl i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: var(--sh-sm); transition: transform .15s; }
+.tgl.on { background: var(--primary); }
+.tgl.on i { transform: translateX(16px); }
+
 .pe-note { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--primary-700); background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 9px; padding: 10px 12px; }
 .pe-note :deep(.ico) { flex: none; margin-top: 1px; }
 /* Duplicate-name warning. It belongs to the Name field, so it hugs it: the top

@@ -156,8 +156,21 @@ export function seed() {
     id: uid('d'), enabled: true, archived: false, default: i === 0, groups: [],
     history: demoHistory(), schedules: demoSchedules(),
     mine: d.owner === 'Aarav Mehta', viewedAt: i < 3 ? days(i) : null, ...d,
-    // tag each tile's provenance so the dashboard can show a predefined / user / shared icon
-    tiles: d.tiles.map((t) => ({ ...t, prov: t.prov || (d.predefined ? 'predefined' : d.sharedWithMe ? 'shared' : 'user') })),
+    // Tag each tile's provenance so the dashboard can show a predefined / user / shared icon.
+    //
+    // `seeded` = this tile SHIPPED WITH a predefined dashboard, so it can't be
+    // removed. It is deliberately NOT the same thing as `prov: 'predefined'`:
+    //   · seeded predefined tile      → can't delete, restricted edit
+    //   · predefined tile the USER added → CAN delete (they placed it), restricted edit
+    //   · user tile the USER added       → can delete, full edit
+    // Deletability follows who put the tile there; editability follows who owns
+    // its definition. Conflating the two is what made the earlier board-level lock
+    // wrong — it froze even the widgets the user had added themselves.
+    tiles: d.tiles.map((t) => ({
+      ...t,
+      prov: t.prov || (d.predefined ? 'predefined' : d.sharedWithMe ? 'shared' : 'user'),
+      ...(d.predefined && t.prov !== 'user' ? { seeded: true } : {}),
+    })),
     // Technician Access Level + Technician Group Access Level (from .185 Manage list)
     techAccess: d.access === 'public' ? ['All technicians']
       : d.access === 'private' ? [d.owner]

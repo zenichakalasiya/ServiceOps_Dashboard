@@ -232,7 +232,11 @@ export function addBuiltTile(d, tile) {
   toast(`Added “${tile.title}”`, 'success')
 }
 export function removeTile(d, tile) {
-  if (d.predefined) { toast(`“${d.name}” is predefined — widgets can be added, not removed`, 'warn'); return false }
+  // Only a SEEDED tile — one that shipped with a predefined dashboard — is
+  // undeletable. A widget the user added to that board is theirs to remove,
+  // predefined or not. (This used to refuse on the whole board, which froze the
+  // user's own widgets along with the shipped ones.)
+  if (tile.seeded) { toast(`“${tile.title}” ships with this dashboard — it can't be removed`, 'warn'); return false }
   d.tiles = d.tiles.filter((t) => t.id !== tile.id)
   toast(`Removed “${tile.title}”`)
   return true
