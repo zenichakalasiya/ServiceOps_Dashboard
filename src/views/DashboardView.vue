@@ -299,8 +299,10 @@ function ungroup(g) {
   dirty.value = true
 }
 const editingGroup = ref(null)
-// Rearrange the canvas (groupId = null) or one group's contents.
-// The {tiles, groups} snapshot watcher already feeds undo/redo, so Ctrl+Z reverts it.
+/* Rearrange one GROUP's contents, from the button in its header. The whole-canvas
+ * entry point (the topbar ⋯ item) is gone; `rearrangeTiles` still takes a null
+ * groupId for the canvas, so bringing it back is a one-line change.
+ * The {tiles, groups} snapshot watcher feeds undo/redo, so Ctrl+Z reverts it. */
 function onRearrange(groupId) {
   if (rearrangeTiles(d.value, groupId)) dirty.value = true
 }
@@ -523,7 +525,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <button class="btn ico-only" :class="{ on: showDownload }" @click.stop="showDownload = !showDownload" title="Download"><Icon name="download" :size="17" /></button>
           <DownloadDialog v-if="showDownload" :d="d" @close="showDownload = false" />
         </div>
-        <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" @rearrange="onRearrange(null)" />
+        <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" />
       </div>
     </header>
 

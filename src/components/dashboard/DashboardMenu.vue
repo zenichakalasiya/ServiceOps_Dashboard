@@ -4,9 +4,7 @@ import Icon from '../ui/Icon.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { store, markDefault, archiveDashboard } from '../../store/index.js'
 const props = defineProps({ d: Object, align: { type: String, default: 'right' } })
-const emit = defineEmits(['present', 'schedule', 'history', 'rearrange'])
-// Rearrange acts on the canvas — i.e. the widgets that aren't in any group.
-const canvasTiles = () => (props.d?.tiles || []).filter((t) => !t.group).length
+const emit = defineEmits(['present', 'schedule', 'history'])
 const open = ref(false)
 function act(fn) { open.value = false; fn() }
 // archiving a whole dashboard is the most destructive thing in this menu — confirm it
@@ -23,7 +21,6 @@ const confirmDel = ref(false)
       <div v-if="open" class="menu" :class="align" @click.stop>
         <button class="menu-item" @click="act(() => { store.ui.cloneTarget = null; store.ui.editTarget = d; store.ui.createOpen = true })"><Icon name="edit" :size="16" /> Edit</button>
         <button class="menu-item" @click="act(() => emit('present'))"><Icon name="maximize-tile" :size="16" /> Present</button>
-        <button class="menu-item" :disabled="canvasTiles() < 2" :title="canvasTiles() < 2 ? 'No ungrouped widgets on the canvas' : 'Reset every canvas widget to its default size and close the gaps'" @click="act(() => emit('rearrange'))"><Icon name="rearrange" :size="16" /> Rearrange widgets</button>
         <button class="menu-item" @click="act(() => emit('schedule'))"><Icon name="calendar2" :size="16" /> Schedule dashboard</button>
         <button class="menu-item" @click="act(() => emit('history'))"><Icon name="history" :size="16" /> Version history</button>
         <button class="menu-item" @click="act(() => { store.ui.cloneTarget = d; store.ui.createOpen = true })"><Icon name="copy" :size="16" /> Clone</button>
