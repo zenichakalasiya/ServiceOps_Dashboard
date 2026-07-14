@@ -25,12 +25,45 @@ function pillClass(v) {
 const loading = ref(false)
 const menu = ref(false)
 const menuBtn = ref(null)
+const menuEl = ref(null)
 const menuPos = ref({ top: 0, left: 0 })
-function toggleMenu() {
-  if (menu.value) { menu.value = false; exportOpen.value = false; return }
+/* Submenus fly out away from the nearer screen edge, so they can't run off it. */
+const subLeft = ref(true)
+
+const MENU_W = 190   // .tile-menu min-width
+const SUB_W = 178    // widest submenu (chart types)
+const MENU_H = 260   // first-paint estimate; refined from the real rect below
+const GAP = 6, EDGE = 8
+
+/* The menu opens clear of the WIDGET, off the card's right edge — not just off
+ * the button, or it still clips the corner of the chart it is acting on. When the
+ * card sits too close to the right of the screen for that, it flips to the LEFT of
+ * the ⋯ button instead. It used to be right-aligned *under* the button, which
+ * dropped it straight on top of the chart. */
+function placeMenu() {
   const r = menuBtn.value?.getBoundingClientRect()
-  if (r) menuPos.value = { top: r.bottom + 6, left: Math.max(8, r.right - 190) }
+  if (!r) return
+  const card = cardEl.value?.getBoundingClientRect()
+  const m = menuEl.value?.getBoundingClientRect()
+  const w = m?.width || MENU_W
+  const h = m?.height || MENU_H
+
+  const rightAnchor = (card?.right ?? r.right) + GAP
+  const fitsRight = rightAnchor + w + EDGE <= window.innerWidth
+  const left = fitsRight ? rightAnchor : Math.max(EDGE, r.left - GAP - w)
+
+  // top-align with the button, but never let a long menu run off the bottom
+  const top = Math.max(EDGE, Math.min(r.top, window.innerHeight - h - EDGE))
+
+  menuPos.value = { top, left }
+  subLeft.value = window.innerWidth - (left + w) < SUB_W + GAP
+}
+
+function toggleMenu() {
+  if (menu.value) { menu.value = false; exportOpen.value = false; typeOpen.value = false; return }
   menu.value = true
+  placeMenu()               // estimate, so it never paints at 0,0
+  nextTick(placeMenu)       // then correct it against the rendered size
 }
 const exportOpen = ref(false)
 const showLegend = ref(true)
@@ -168,7 +201,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
     <teleport to="body">
       <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false; typeOpen = false" />
       <transition name="pop">
-        <div v-if="menu" class="menu tile-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+        <div v-if="menu" ref="menuEl" class="menu tile-menu" :class="{ 'sub-right': !subLeft }" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
           <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
           <button v-if="tiny && canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
@@ -326,6 +359,8 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .mi-l { display: flex; align-items: center; gap: 10px; }
 .mi-c { color: var(--muted); }
 .submenu { position: absolute; top: -7px; right: 100%; min-width: 124px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); padding: 6px; }
+/* near the left edge there is no room to fly out leftwards — go right instead */
+.tile-menu.sub-right .submenu { right: auto; left: 100%; }
 /* chart-type submenu: 8 items, current one checked, incompatible ones greyed */
 .submenu.types { min-width: 178px; top: -80px; }
 .ct { justify-content: flex-start; gap: 10px; }
