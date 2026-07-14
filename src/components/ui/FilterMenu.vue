@@ -26,7 +26,7 @@ const emit = defineEmits(['update:modelValue'])
 
 const open = ref(false)
 const btn = ref(null)
-const pos = ref({ top: 0, left: 0 })
+const pos = ref({ top: 0, left: 0, subRight: true })
 const activeField = ref(null)     // which field's value list is showing
 
 const active = computed(() => props.fields.find((f) => f.key === activeField.value) || null)
@@ -51,13 +51,20 @@ function clearField(key) {
 }
 function clearAll() { emit('update:modelValue', {}) }
 
+const W = 210, SUB_W = 210, GAP = 4, EDGE = 8
+
+/* The trigger usually sits at the right of a toolbar, so the panel gets clamped to
+ * the right edge — and the submenu, opening at left:100%, then landed entirely
+ * OFF-SCREEN. It was rendering the whole time, just outside the viewport. So the
+ * submenu flips to the left of the panel whenever the right won't fit. */
 function place() {
   const r = btn.value?.getBoundingClientRect()
   if (!r) return
-  const W = 210, EDGE = 8
+  const left = Math.max(EDGE, Math.min(r.left, window.innerWidth - W - EDGE))
   pos.value = {
     top: r.bottom + 6,
-    left: Math.max(EDGE, Math.min(r.left, window.innerWidth - W - EDGE)),
+    left,
+    subRight: left + W + GAP + SUB_W + EDGE <= window.innerWidth,
   }
 }
 function toggleOpen() {
@@ -100,7 +107,7 @@ onBeforeUnmount(detach)
         </button>
 
         <!-- level 2: that field's values, multi-select -->
-        <div v-if="active" class="fm-sub" @mouseenter="activeField = active.key">
+        <div v-if="active" class="fm-sub" :class="{ left: !pos.subRight }" @mouseenter="activeField = active.key">
           <div class="fm-head">
             <span>{{ active.label }}</span>
             <button v-if="picked(active.key).length" class="fm-clr" @click="clearField(active.key)">Clear</button>
@@ -140,6 +147,8 @@ onBeforeUnmount(detach)
 
 /* level 2 flies out to the right of the field list */
 .fm-sub { position: absolute; top: 0; left: calc(100% + 4px); width: 210px; max-height: 320px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); padding: 6px; }
+/* no room on the right (the panel is clamped to the viewport edge) → fly out left */
+.fm-sub.left { left: auto; right: calc(100% + 4px); }
 .fm-vals { flex: 1; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
 .fm-val { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
 .fm-val:hover { background: var(--surface-2); }

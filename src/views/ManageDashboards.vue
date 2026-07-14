@@ -108,7 +108,15 @@ const selDashboards = () => rows.value.filter((d) => sel.value.has(d.id))
 const bulkCatOpen = ref(false)
 function bulkArchive() { archiveMany(selDashboards()); sel.value = new Set() }
 function bulkMove(cat) { moveDashboardsToCategory(selDashboards(), cat); bulkCatOpen.value = false; sel.value = new Set() }
-function bulkPublish(on) { setPublished(selDashboards(), on); sel.value = new Set() }
+/* One button, not two. It offers the action that applies to what's selected: while
+ * anything selected is still enabled it reads "Disable all"; once they're all off it
+ * flips to "Enable all". The selection is deliberately KEPT — clearing it would take
+ * the bar away and the user would never see the label flip, which is the whole point. */
+const allSelDisabled = computed(() => {
+  const s = selDashboards()
+  return s.length > 0 && s.every((d) => d.enabled === false)
+})
+function bulkTogglePublished() { setPublished(selDashboards(), allSelDisabled.value) }
 
 // ---- tech-access pills expand (task 7) ----
 const openTech = ref(null)
@@ -175,9 +183,15 @@ function onDrop(target) {
             <button class="col-opt btn-like" @click="bulkMove('')">Uncategorized</button>
           </div>
         </div>
-        <!-- enable / disable the whole selection -->
-        <button v-if="!isArchive" class="btn btn-sm" title="Make these visible in listings" @click="bulkPublish(true)"><Icon name="eye" :size="14" /> Enable</button>
-        <button v-if="!isArchive" class="btn btn-sm" title="Hide these from listings" @click="bulkPublish(false)"><Icon name="lock" :size="14" /> Disable</button>
+        <!-- one toggle: it names the action that applies, and flips once it's done -->
+        <button
+          v-if="!isArchive" class="btn btn-sm"
+          :title="allSelDisabled ? 'Make these visible in listings again' : 'Hide these from listings'"
+          @click="bulkTogglePublished"
+        >
+          <Icon :name="allSelDisabled ? 'eye' : 'lock'" :size="14" />
+          {{ allSelDisabled ? 'Enable all' : 'Disable all' }}
+        </button>
         <button class="btn btn-sm danger" @click="bulkArchive"><Icon name="archive" :size="14" /> Archive</button>
         <button class="btn btn-sm" @click="sel = new Set()">Clear</button>
       </div>
