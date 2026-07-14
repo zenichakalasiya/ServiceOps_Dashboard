@@ -617,8 +617,12 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .legend-side { flex: none; width: 168px; display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 2px 0; }
 .ls-list { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
 .lg-side { width: 100%; height: 18px; justify-content: flex-start; }   /* 18 + 4 gap = ROW_H */
-.ls-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lg-side b { flex: none; font-variant-numeric: tabular-nums; }
+/* The name takes only the width it needs (flex: 0 1 auto), so the value sits right
+   beside it. It used to be flex: 1, which ate every spare pixel and shoved the value
+   to the far edge — a chasm of dead space next to a label as short as "P1". A long
+   name still shrinks and ellipses, which is what the min-width: 0 is for. */
+.ls-nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-side b { flex: none; margin-left: 2px; font-variant-numeric: tabular-nums; }
 .ls-pager { flex: none; display: flex; align-items: center; justify-content: center; gap: 4px; height: 22px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ls-pager button { width: 20px; height: 20px; border: none; background: transparent; color: var(--muted); border-radius: 5px; display: grid; place-items: center; }
 .ls-pager button:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
