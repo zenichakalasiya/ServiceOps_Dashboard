@@ -342,7 +342,14 @@ function save(place) {
 .sec { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
 .pe-note { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--primary-700); background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 9px; padding: 10px 12px; }
 .pe-note :deep(.ico) { flex: none; margin-top: 1px; }
-.dup-warn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber); background: var(--amber-soft); border-radius: 7px; padding: 7px 10px; margin: 4px 0 0; }
+/* Duplicate-name warning. It belongs to the Name field, so it hugs it: the top
+ * margin pulls back most of the field's 12px, and the gap it owns sits *below*.
+ * It used to be the other way round — 16px above, 0 below — which read as though
+ * it belonged to the Technician fields it was jammed against.
+ * align-items: flex-start keeps the icon at the top-left when the text wraps to
+ * two lines, instead of the icon drifting to the vertical centre. */
+.dup-warn { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.45; color: var(--amber); background: var(--amber-soft); border-radius: 7px; padding: 8px 10px; margin: -6px 0 10px; }
+.dup-warn .ico { flex: none; margin-top: 1px; }   /* optical-align with the first text line */
 .sec:last-child { border-bottom: none; margin-bottom: 0; }
 .sec-h { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
