@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import WidgetBuilderModal from './WidgetBuilderModal.vue'
-import { store, addTilesToDashboard, deleteLibTile, restoreLibTile, removeLibTileForever, libUsage, removeTileFromDashboard, toast } from '../../store/index.js'
+import { store, addTilesToDashboard, deleteLibTile, restoreLibTile, removeLibTileForever, libUsage, toast } from '../../store/index.js'
 import { uid } from '../../data/mock.js'
 const props = defineProps({ d: Object, group: { type: String, default: null } })
 const emit = defineEmits(['close', 'created', 'newgroup'])
@@ -186,8 +186,6 @@ onBeforeUnmount(() => clearTimeout(closeTimer))
 
 const usageItem = computed(() => store.library.find((l) => l.id === usageOpen.value) || null)
 
-function removeFromDash(l, dash) { removeTileFromDashboard(dash, l); if (!usageOf(l).length) usageOpen.value = null }
-
 /* Jump to this widget where it lives. The tile is matched by title+type — the same
  * identity the library uses everywhere else — and DashboardView focuses it once the
  * board has finished its skeleton, so the scroll lands on a widget that exists. */
@@ -345,6 +343,8 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
         @mouseenter="keepUsage" @mouseleave="closeUsageSoon"
       >
         <div class="up-h">Placed on {{ usageOf(usageItem).length }} dashboard{{ usageOf(usageItem).length > 1 ? 's' : '' }}</div>
+        <!-- names only. No remove action here: a predefined widget can't be pulled off,
+             and the arrow on hover already says the row is a link. -->
         <button
           v-for="dash in usageOf(usageItem)" :key="dash.id" class="up-row"
           :title="`Go to “${usageItem.title}” on ${dash.name}`"
@@ -352,9 +352,8 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
         >
           <Icon name="layout" :size="13" class="up-ic" />
           <span class="ellip">{{ dash.name }}</span>
-          <span class="up-rm" title="Remove from this dashboard" @click.stop="removeFromDash(usageItem, dash)"><Icon name="trash" :size="13" /></span>
+          <Icon name="open-in" :size="14" class="up-go" />
         </button>
-        <p class="up-f">Click a dashboard to jump to this widget on it.</p>
       </div>
     </teleport>
 
@@ -439,9 +438,9 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .up-ic { color: var(--muted-2); flex: none; }
 .up-row:hover .up-ic { color: var(--primary); }
 .up-row .ellip { flex: 1; min-width: 0; }
-.up-rm { width: 24px; height: 24px; color: var(--muted-2); border-radius: 6px; display: grid; place-items: center; flex: none; }
-.up-rm:hover { color: var(--red); background: var(--red-soft); }
-.up-f { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid var(--border); font-size: 10.5px; line-height: 1.4; color: var(--muted); }
+/* the arrow IS the affordance — it appears on hover, so no explainer line is needed */
+.up-go { flex: none; color: var(--primary); opacity: 0; transform: translateX(-3px); transition: opacity .12s, transform .12s; }
+.up-row:hover .up-go { opacity: 1; transform: none; }
 /* left-pointing description tooltip (teleported, fixed to viewport) */
 .lib-tip { position: fixed; z-index: 200; transform: translateY(-50%); width: 232px; background: #20223a; color: #fff; font-size: 11.5px; line-height: 1.45; padding: 8px 11px; border-radius: 8px; box-shadow: var(--sh-pop); pointer-events: none; text-align: left; }
 .lib-tip-arrow { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 6px solid transparent; border-left-color: #20223a; }
