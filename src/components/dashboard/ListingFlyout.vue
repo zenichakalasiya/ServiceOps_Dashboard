@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import ShareDialog from './ShareDialog.vue'
+import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { store, live, recents, toggleFavorite, archiveDashboard, markDefault, recordView } from '../../store/index.js'
 import { ACCESS } from '../../data/mock.js'
 const route = useRoute()
@@ -76,6 +77,8 @@ const menuId = ref(null)
 const menuPos = ref({ top: 0, left: 0 })
 const menuDash = computed(() => (menuId.value ? live.value.find((d) => d.id === menuId.value) : null))
 const shareTarget = ref(null)
+// archiving from the listing used to fire on a single click — confirm it by name
+const delTarget = ref(null)
 function openMenu(d, e) {
   if (menuId.value === d.id) { menuId.value = null; return }
   const r = e.currentTarget.getBoundingClientRect()
@@ -83,7 +86,14 @@ function openMenu(d, e) {
   menuPos.value = { top: r.bottom + 6, left: Math.min(r.right + 6, window.innerWidth - 210) }
   menuId.value = d.id
 }
-function menuAct(fn) { menuId.value = null; fn() }
+/* Capture the dashboard BEFORE closing the menu. `menuDash` is derived from
+ * `menuId`, so clearing the menu first handed every action a null dashboard —
+ * Edit, Clone, Mark-default, Share and Archive were all silently no-ops. */
+function menuAct(fn) {
+  const d = menuDash.value
+  menuId.value = null
+  if (d) fn(d)
+}
 function doEdit(d) { store.ui.cloneTarget = null; store.ui.editTarget = d; store.ui.createOpen = true }
 function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; store.ui.createOpen = true }
 </script>
@@ -155,21 +165,31 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <div v-if="menuId" class="row-backdrop" @click="menuId = null" />
       <transition name="pop">
         <div v-if="menuDash" class="menu row-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
-          <button class="menu-item" @click="menuAct(() => doEdit(menuDash))"><Icon name="edit" :size="15" /> Edit</button>
-          <button class="menu-item" @click="menuAct(() => doClone(menuDash))"><Icon name="copy" :size="15" /> Clone</button>
-          <button v-if="!menuDash.default" class="menu-item" @click="menuAct(() => markDefault(menuDash))"><Icon name="pin" :size="15" /> Mark as default landing</button>
-          <button class="menu-item" @click="menuAct(() => { shareTarget = menuDash })"><Icon name="share" :size="15" /> Share</button>
+          <button class="menu-item" @click="menuAct((d) => doEdit(d))"><Icon name="edit" :size="15" /> Edit</button>
+          <button class="menu-item" @click="menuAct((d) => doClone(d))"><Icon name="copy" :size="15" /> Clone</button>
+          <button v-if="!menuDash.default" class="menu-item" @click="menuAct((d) => markDefault(d))"><Icon name="pin" :size="15" /> Mark as default landing</button>
+          <button class="menu-item" @click="menuAct((d) => { shareTarget = d })"><Icon name="share" :size="15" /> Share</button>
           <!-- a predefined dashboard cannot be archived or deleted — the action is
                absent, not disabled: there is nothing the user could do to enable it -->
           <template v-if="!menuDash.predefined">
             <div class="menu-sep" />
-            <button class="menu-item danger" @click="menuAct(() => del(menuDash))"><Icon name="archive" :size="15" /> Archive</button>
+            <button class="menu-item danger" @click="menuAct((d) => { delTarget = d })"><Icon name="archive" :size="15" /> Archive</button>
           </template>
         </div>
       </transition>
     </teleport>
 
     <ShareDialog v-if="shareTarget" :d="shareTarget" @close="shareTarget = null" />
+
+    <ConfirmDialog
+      v-if="delTarget"
+      title="Archive this dashboard?"
+      :target="delTarget.name"
+      message="will be moved to the Archive, along with its widgets. You can restore it from there."
+      confirm-label="Archive"
+      @confirm="del(delTarget); delTarget = null"
+      @cancel="delTarget = null"
+    />
   </aside>
 </template>
 

@@ -15,11 +15,15 @@ const OPTS = [
 ]
 
 let timer = null
-function pulse() { spin.value = true; setTimeout(() => (spin.value = false), 700); emit('refresh') }
-function manual() { pulse(); toast('Dashboard refreshed') }
+/* A MANUAL refresh replays the skeleton — the user asked for it and is watching.
+ * An AUTO tick must not: a wallboard on a 5-minute cycle would strobe. (Grafana's
+ * playlist reloads the page each cycle and flickers; that is the thing to avoid.)
+ * So the two are told apart, and the listener decides what each one means. */
+function pulse(isManual) { spin.value = true; setTimeout(() => (spin.value = false), 700); emit('refresh', isManual) }
+function manual() { pulse(true); toast('Dashboard refreshed') }
 function restart(sec) {
   if (timer) { clearInterval(timer); timer = null }
-  if (sec > 0) timer = setInterval(pulse, sec * 1000)
+  if (sec > 0) timer = setInterval(() => pulse(false), sec * 1000)
 }
 function pick(o) { store.autoRefresh = { interval: o.k, label: o.label }; open.value = false; restart(o.sec) }
 watch(() => store.autoRefresh.interval, (k) => restart((OPTS.find((o) => o.k === k) || {}).sec || 0), { immediate: true })

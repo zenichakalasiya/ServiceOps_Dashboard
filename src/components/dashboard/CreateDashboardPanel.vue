@@ -34,6 +34,17 @@ const groupAccess = ref((src?.groupAccess && src.groupAccess[0]) || '')
 const defaultLanding = ref(src?.default || false)
 const err = ref('')
 
+/* Dashboard names must be unique. The board being edited is excluded by id, so it
+ * can't collide with itself; archived boards still count, because restoring one
+ * would then produce two dashboards with the same name. */
+const nameTaken = computed(() => {
+  const n = name.value.trim().toLowerCase()
+  if (!n || lockedDash.value) return false
+  const selfId = store.ui.editTarget?.id
+  return store.dashboards.some((d) => d.id !== selfId && d.name.trim().toLowerCase() === n)
+})
+const canSave = computed(() => lockedDash.value || (!!name.value.trim() && !nameTaken.value))
+
 // per-dashboard layout
 const FONTS = ['S', 'M', 'L']
 const FONT_PX = { S: 12, M: 13.5, L: 15 }
@@ -65,6 +76,7 @@ const PREVIEW = ['Top Server Monitors', 'Monitor Availability', 'CPU Utilisation
 function close() { store.ui.createOpen = false; store.ui.cloneTarget = null; store.ui.editTarget = null }
 function submit(openAdd = false) {
   if (!lockedDash.value && !name.value.trim()) { err.value = 'Give your dashboard a name.'; return }
+  if (nameTaken.value) return   // the field already says why; never save a duplicate
   const ta = access.value === 'restricted' ? techAccess.value : undefined
   const ga = access.value === 'restricted' && groupAccess.value ? [groupAccess.value] : undefined
   // ---- edit in place ----
@@ -120,8 +132,12 @@ function submit(openAdd = false) {
         <template v-if="!lockedDash">
           <div class="grp">
             <label class="field">Dashboard Name <span class="req">*</span></label>
-            <input class="input" v-model="name" placeholder="e.g. Network SLA Overview" autofocus @input="err = ''" />
-            <div v-if="err" class="err">{{ err }}</div>
+            <input class="input" :class="{ bad: nameTaken }" v-model="name" placeholder="e.g. Network SLA Overview" autofocus @input="err = ''" />
+            <p v-if="nameTaken" class="dup-err">
+              <Icon name="alert" :size="13" />
+              <span>A dashboard named “{{ name.trim() }}” already exists. <b>Dashboard names must be unique</b> — pick another.</span>
+            </p>
+            <div v-else-if="err" class="err">{{ err }}</div>
           </div>
 
           <div class="grp">
@@ -216,7 +232,7 @@ function submit(openAdd = false) {
 
       <div class="foot">
         <button class="btn" @click="close">Cancel</button>
-        <button class="btn btn-primary" @click="submit(false)">
+        <button class="btn btn-primary" :disabled="!canSave" :title="nameTaken ? 'That name is already taken — dashboard names must be unique' : ''" @click="submit(false)">
           <Icon :name="isEdit ? 'check' : isClone ? 'copy' : 'plus'" :size="16" /> {{ isEdit ? 'Save changes' : isClone ? 'Clone Dashboard' : 'Create' }}
         </button>
       </div>
@@ -236,6 +252,11 @@ function submit(openAdd = false) {
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .req { color: var(--red); }
 .err { color: var(--red); font-size: 12px; margin-top: 5px; }
+/* duplicate name blocks the save, so it reads as an error, not a hint */
+.dup-err { display: flex; align-items: flex-start; gap: 7px; margin: 6px 0 0; padding: 8px 10px; font-size: 12px; line-height: 1.45; color: var(--red); background: var(--red-soft); border-radius: 7px; }
+.dup-err :deep(.ico) { flex: none; margin-top: 1px; }
+.dup-err b { font-weight: 600; }
+.input.bad { border-color: var(--red); }
 .sec-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
 .seg { display: inline-flex; gap: 6px; }
 .seg-btn { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); font-weight: 500; font-size: 13px; flex: 1; justify-content: center; }

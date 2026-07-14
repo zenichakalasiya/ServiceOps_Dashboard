@@ -5,6 +5,7 @@ import ChartTile from './ChartTile.vue'
 import DataTable from './DataTable.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
 import FilterMenu from '../ui/FilterMenu.vue'
+import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { CHART_TYPES, whyDisabled } from '../../data/chartTypes.js'
 import { fieldsFrom } from '../../data/filters.js'
 import { toast } from '../../store/index.js'
@@ -157,6 +158,8 @@ function retry() { loading.value = true; setTimeout(() => { props.tile.state = u
 
 function download(fmt) { menu.value = false; exportOpen.value = false; toast(`Exporting “${props.tile.title}” as ${fmt}`) }
 function duplicate() { menu.value = false; emit('duplicate', props.tile) }
+// deleting a widget is destructive and one click away — confirm it by name
+const confirmDel = ref(false)
 const shareOpen = ref(false)
 // task 12: record IDs in a shortcut table are explorable → jump to their module record
 const ID_MODULE = { INC: 'Requests', REC: 'Records', CNT: 'Contracts', PRB: 'Problems', CHG: 'Changes', AST: 'Assets' }
@@ -242,7 +245,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           </div>
           <template v-if="canDelete">
             <div class="menu-sep" />
-            <button class="menu-item danger" @click="menu = false; emit('remove', tile)"><Icon name="trash" :size="15" /> Delete card</button>
+            <button class="menu-item danger" @click="menu = false; confirmDel = true"><Icon name="trash" :size="15" /> Delete card</button>
           </template>
         </div>
       </transition>
@@ -304,6 +307,16 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
     <!-- Share widget: preview + screenshot-style markup + recipients -->
     <teleport to="body">
       <ShareWidgetModal v-if="shareOpen" :tile="tile" @close="shareOpen = false" />
+
+      <ConfirmDialog
+        v-if="confirmDel"
+        title="Delete this widget?"
+        :target="tile.title"
+        message="will be removed from this dashboard. The widget stays in the library, so you can add it back."
+        confirm-label="Delete widget"
+        @confirm="confirmDel = false; emit('remove', tile)"
+        @cancel="confirmDel = false"
+      />
     </teleport>
 
     <!-- Present mode (single tile) -->

@@ -378,6 +378,11 @@ function loadBoard() {
 onMounted(loadBoard)
 watch(() => route.params.id, loadBoard)
 
+/* Manual refresh replays the whole entrance — skeleton, then the staggered reveal
+ * with the charts drawing themselves in. An auto tick does not: it would strobe a
+ * wallboard. There the spinner is the only signal, and the data updates in place. */
+function onRefresh(isManual) { if (isManual) loadBoard() }
+
 // ---- Undo / Redo (dashboard tiles + groups history) ----
 const undoStack = ref([])
 const redoStack = ref([])
@@ -508,7 +513,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <span class="vsep" />
         </template>
         <TimeFilter />
-        <AutoRefresh />
+        <AutoRefresh @refresh="onRefresh" />
         <span class="vsep" />
         <div class="pop-wrap">
           <button class="btn ico-only" :class="{ on: sharePop }" @click.stop="sharePop = !sharePop" title="Share / Export"><Icon name="share" :size="17" /></button>

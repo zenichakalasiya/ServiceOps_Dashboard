@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import Icon from '../ui/Icon.vue'
+import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { store, markDefault, archiveDashboard } from '../../store/index.js'
 const props = defineProps({ d: Object, align: { type: String, default: 'right' } })
 const emit = defineEmits(['present', 'schedule', 'history', 'rearrange'])
@@ -8,6 +9,8 @@ const emit = defineEmits(['present', 'schedule', 'history', 'rearrange'])
 const canvasTiles = () => (props.d?.tiles || []).filter((t) => !t.group).length
 const open = ref(false)
 function act(fn) { open.value = false; fn() }
+// archiving a whole dashboard is the most destructive thing in this menu — confirm it
+const confirmDel = ref(false)
 </script>
 
 <template>
@@ -29,10 +32,20 @@ function act(fn) { open.value = false; fn() }
              archived, so the action is absent rather than disabled -->
         <template v-if="!d.predefined">
           <div class="menu-sep" />
-          <button class="menu-item danger" @click="act(() => archiveDashboard(d))"><Icon name="archive" :size="16" /> Delete / Archive</button>
+          <button class="menu-item danger" @click="act(() => { confirmDel = true })"><Icon name="archive" :size="16" /> Delete / Archive</button>
         </template>
       </div>
     </transition>
+
+    <ConfirmDialog
+      v-if="confirmDel"
+      title="Archive this dashboard?"
+      :target="d.name"
+      message="will be moved to the Archive, along with its widgets. You can restore it from there."
+      confirm-label="Archive"
+      @confirm="confirmDel = false; archiveDashboard(d)"
+      @cancel="confirmDel = false"
+    />
   </div>
 </template>
 

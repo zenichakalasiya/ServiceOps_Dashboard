@@ -84,17 +84,32 @@ const rankN = computed({
 const cfg = reactive(initCfg())
 function reset() { Object.assign(cfg, initCfg()) }
 
-// task 11: warn if a widget with this name already lives on a DIFFERENT dashboard
+/* Widget names must be unique across every dashboard.
+ *
+ * This fires on UPDATE as well as create — it used to bail out entirely when
+ * editing, so renaming a widget onto an existing name sailed through. The tile
+ * being edited is excluded by id (otherwise a widget would collide with itself),
+ * and the current board is checked too: two widgets with the same name on the
+ * SAME dashboard is the worst case, not an exemption. */
 const dupBoards = computed(() => {
   const n = cfg.name?.trim().toLowerCase()
-  if (!n || editing.value) return []
+  if (!n) return []
+  const selfId = props.duplicate ? null : props.existing?.id
   const names = new Set()
   store.dashboards.forEach((dash) => {
-    if (dash.id === props.d?.id || dash.archived) return
-    if ((dash.tiles || []).some((t) => (t.title || '').toLowerCase() === n)) names.add(dash.name)
+    if (dash.archived) return
+    const hit = (dash.tiles || []).some((t) => t.id !== selfId && (t.title || '').toLowerCase() === n)
+    if (hit) names.add(dash.id === props.d?.id ? `${dash.name} (this dashboard)` : dash.name)
   })
   return [...names]
 })
+// a duplicate name BLOCKS the save — "must be unique" is a rule, not a suggestion
+const nameTaken = computed(() => dupBoards.value.length > 0)
+const canSave = computed(() => !!cfg.name?.trim() && !nameTaken.value)
+const ctaHint = computed(() =>
+  !cfg.name?.trim() ? 'Give this widget a name'
+    : nameTaken.value ? 'That name is already taken — widget names must be unique'
+      : '')
 
 const previewTile = computed(() => {
   const title = cfg.name || `New ${curType.value.label}`
@@ -233,10 +248,10 @@ function save(place) {
               <div class="sec">
                 <div class="sec-h">{{ isShortcut ? 'Basic Shortcut Details' : 'Basic Widget Details' }}</div>
                 <div class="grid2">
-                  <div class="fld"><label>Name <i>*</i></label><input class="input" v-model="cfg.name" placeholder="Name" /></div>
+                  <div class="fld"><label>Name <i>*</i></label><input class="input" :class="{ bad: nameTaken }" v-model="cfg.name" placeholder="Name" /></div>
                   <div class="fld"><label>Module <i>*</i></label><Dropdown v-model="cfg.module" :options="store.modules" /></div>
                 </div>
-                <p v-if="dupBoards.length" class="dup-warn"><Icon name="alert" :size="13" /> A widget named “{{ cfg.name }}” already exists on {{ dupBoards.slice(0, 2).join(', ') }}<span v-if="dupBoards.length > 2"> +{{ dupBoards.length - 2 }} more</span>.</p>
+                <p v-if="dupBoards.length" class="dup-warn"><Icon name="alert" :size="13" /> <span>A widget named “{{ cfg.name }}” already exists on {{ dupBoards.slice(0, 2).join(', ') }}<span v-if="dupBoards.length > 2"> +{{ dupBoards.length - 2 }} more</span>. <b>Widget names must be unique</b> — pick another.</span></p>
                 <div class="grid2">
                   <div class="fld"><label>Technician Access Level <i>*</i></label><Dropdown v-model="cfg.techAccess" :options="store.owners" :multiple="true" placeholder="Select technicians" /></div>
                   <div class="fld"><label>Technician Group Access Level <i>*</i></label><Dropdown v-model="cfg.groupAccess" :options="GROUP_OPTS" placeholder="Select" /></div>
@@ -351,15 +366,16 @@ function save(place) {
               <button class="btn" @click="reset">Reset</button>
               <!-- Canvas duplicate → single Duplicate · Canvas edit → single Update ·
                    Library edit/clone + new create → both {prefix} and {prefix} & Add -->
+              <!-- every save path is blocked while the name collides -->
               <template v-if="duplicate">
-                <button class="btn btn-primary" @click="save(true)"><Icon name="copy" :size="16" /> Duplicate {{ ctaLabel }}</button>
+                <button class="btn btn-primary" :disabled="!canSave" :title="ctaHint" @click="save(true)"><Icon name="copy" :size="16" /> Duplicate {{ ctaLabel }}</button>
               </template>
               <template v-else-if="editing">
-                <button class="btn btn-primary" @click="save(false)"><Icon name="check" :size="16" /> Update {{ ctaLabel }}</button>
+                <button class="btn btn-primary" :disabled="!canSave" :title="ctaHint" @click="save(false)"><Icon name="check" :size="16" /> Update {{ ctaLabel }}</button>
               </template>
               <template v-else>
-                <button class="btn" @click="save(false)">{{ prefix }} {{ ctaLabel }}</button>
-                <button class="btn btn-primary" @click="save(true)"><Icon name="plus" :size="16" /> {{ prefix }} &amp; Add {{ ctaLabel }}</button>
+                <button class="btn" :disabled="!canSave" :title="ctaHint" @click="save(false)">{{ prefix }} {{ ctaLabel }}</button>
+                <button class="btn btn-primary" :disabled="!canSave" :title="ctaHint" @click="save(true)"><Icon name="plus" :size="16" /> {{ prefix }} &amp; Add {{ ctaLabel }}</button>
               </template>
             </footer>
           </aside>
@@ -423,8 +439,11 @@ function save(place) {
  * it belonged to the Technician fields it was jammed against.
  * align-items: flex-start keeps the icon at the top-left when the text wraps to
  * two lines, instead of the icon drifting to the vertical centre. */
-.dup-warn { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.45; color: var(--amber); background: var(--amber-soft); border-radius: 7px; padding: 8px 10px; margin: -6px 0 10px; }
+/* A duplicate name BLOCKS the save, so it reads as an error, not a suggestion. */
+.dup-warn { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.45; color: var(--red); background: var(--red-soft); border: 1px solid var(--red-soft); border-radius: 7px; padding: 8px 10px; margin: -6px 0 10px; }
 .dup-warn .ico { flex: none; margin-top: 1px; }   /* optical-align with the first text line */
+.dup-warn b { font-weight: 600; }
+.input.bad { border-color: var(--red); }
 .sec:last-child { border-bottom: none; margin-bottom: 0; }
 .sec-h { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
