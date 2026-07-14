@@ -384,7 +384,6 @@ function onWidgetCreated(id) {
 // param changes, so onMounted alone wouldn't fire for a freshly-created board.
 function loadBoard() {
   loadingBoard.value = true
-  selTileId.value = null
   recordView(d.value)
   setTimeout(() => {
     loadingBoard.value = false
@@ -436,19 +435,6 @@ function onKey(e) {
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-
-// ---- selectable tiles: click to select → floating action toolbar; click-away deselects ----
-const selTileId = ref(null)
-function onSelectTile(t) { selTileId.value = t.id }
-function onDocDown(e) {
-  if (e.target.closest('.cell.selected') || e.target.closest('.sel-bar') || e.target.closest('.tile-menu')) return
-  selTileId.value = null
-}
-watch(selTileId, (id) => {
-  if (id) setTimeout(() => document.addEventListener('mousedown', onDocDown), 0)
-  else document.removeEventListener('mousedown', onDocDown)
-})
-onBeforeUnmount(() => document.removeEventListener('mousedown', onDocDown))
 
 function onRemove(t) { removeTile(d.value, t); dirty.value = true }
 // Open the builder pre-filled with this tile, in edit mode (with live preview).
@@ -636,9 +622,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <div class="grid" ref="ugGridEl" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
             @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
             <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
-              :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id), selected: selTileId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
+              :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
-              <WidgetCard :tile="t" :edit="edit" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
@@ -668,9 +654,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           </header>
           <div v-if="!g.collapsed" class="grid" :style="gridStyle">
             <div v-for="t in tilesIn(g.id)" :key="t.id" :data-tile="t.id" class="cell"
-              :class="{ flash: highlightId === t.id, dragging: dragId === t.id, selected: selTileId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
+              :class="{ flash: highlightId === t.id, dragging: dragId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
-              <WidgetCard :tile="t" :edit="edit" :selected="selTileId === t.id" @select="onSelectTile" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
+              <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
               <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
@@ -824,9 +810,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 /* bottom-right resize grip (two diagonal lines), revealed on hover */
 .resize { position: absolute; right: 3px; bottom: 3px; width: 17px; height: 17px; z-index: 6; cursor: nwse-resize; opacity: 0; transition: opacity .14s; border-radius: 0 0 6px 0;
   background: linear-gradient(135deg, transparent 0 42%, var(--muted) 42% 52%, transparent 52% 66%, var(--muted) 66% 76%, transparent 76%); }
-.cell:hover .resize, .cell.selected .resize { opacity: .9; }
+.cell:hover .resize { opacity: .9; }
 .resize:hover { opacity: 1; }
-.cell.selected { overflow: visible; }
 /* staggered widget reveal after the loading skeleton */
 .revealing .cell { animation: cellReveal .5s cubic-bezier(.2,.8,.2,1) backwards; }
 .revealing .cell:nth-child(2) { animation-delay: .05s; }
