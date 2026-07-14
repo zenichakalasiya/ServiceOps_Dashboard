@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import WidgetBuilderModal from './WidgetBuilderModal.vue'
@@ -7,6 +8,7 @@ import { store, addTilesToDashboard, deleteLibTile, restoreLibTile, removeLibTil
 import { uid } from '../../data/mock.js'
 const props = defineProps({ d: Object, group: { type: String, default: null } })
 const emit = defineEmits(['close', 'created', 'newgroup'])
+const router = useRouter()
 function tagGroup(id) { if (props.group && id != null) { const t = props.d.tiles.find((x) => x.id === id); if (t) t.group = props.group } }
 
 const tab = ref('chart')              // chart | predefined | user | shared | trash
@@ -33,10 +35,29 @@ const filteredGroups = computed(() => GROUPS.map((g) => ({
 
 // ---- Reuse tabs: listing with actions ----
 const provMap = { predefined: 'predefined', user: 'user', shared: 'shared' }
-// widget count per module (task 4) — how many library tiles each module has
-const moduleCount = (m) => store.library.filter((l) => l.module === m && !l.trashed).length
-const moduleOptions = computed(() => [{ value: '', label: `All modules (${store.library.filter((l) => !l.trashed).length})` }, ...store.modules.map((m) => ({ value: m, label: `${m} (${moduleCount(m)})` }))])
 const isTrash = computed(() => tab.value === 'trash')
+
+/* Module counts must describe WHAT YOU WILL GET, so they are scoped to the tab and
+ * the type filter you already have on. They used to count the whole library, so
+ * "Request (20)" on the Created-by-me tab would open three rows — the badge and the
+ * result disagreed. A module with nothing in the current tab isn't offered at all;
+ * a filter that can only ever return nothing isn't a filter.
+ * "All modules" carries no count: it is the absence of a filter, not a bucket. */
+const moduleBase = computed(() => {
+  const arr = isTrash.value
+    ? store.library.filter((l) => l.trashed)
+    : store.library.filter((l) => l.prov === provMap[tab.value] && !l.trashed)
+  return fType.value ? arr.filter((l) => l.type === fType.value) : arr
+})
+const moduleCount = (m) => moduleBase.value.filter((l) => l.module === m).length
+const moduleOptions = computed(() => [
+  { value: '', label: 'All modules' },
+  ...store.modules.filter((m) => moduleCount(m) > 0).map((m) => ({ value: m, label: `${m} (${moduleCount(m)})` })),
+])
+// switching tab/type can retire the module you had picked — don't leave a dead filter on
+watch(moduleOptions, (opts) => {
+  if (fModule.value && !opts.some((o) => o.value === fModule.value)) fModule.value = ''
+})
 const trashCount = computed(() => store.library.filter((l) => l.trashed).length)
 const list = computed(() => {
   let arr = isTrash.value
@@ -136,10 +157,47 @@ function canDelete() { return tab.value === 'user' }
 function hasActions(l) { return canDuplicate(l) || canEdit(l) || canDelete(l) }
 
 const TYPE_LABEL = { kpi: 'KPI', chart: 'Widget', shortcut: 'Shortcut' }
-// task 5: which dashboards use this widget/KPI/shortcut → count + removable list
+
+/* ---- Where is this widget used? ------------------------------------------------
+ * The count sits on the widget's NAME, and hovering it lists the dashboards. From
+ * there you can jump straight to the widget on that board, or pull it off. This is
+ * the impact view a tenant-wide library needs: the point of the count is to answer
+ * "what will I break if I change this", and a number alone can't. */
 const usageOpen = ref(null)
+const usagePos = ref({ top: 0, left: 0 })
+let closeTimer = null
+
 function usageOf(l) { return libUsage(l) }
+function openUsage(l, e) {
+  clearTimeout(closeTimer)
+  const r = e.currentTarget.getBoundingClientRect()
+  const W = 250
+  usagePos.value = {
+    top: r.bottom + 6,
+    left: Math.max(8, Math.min(r.left - 8, window.innerWidth - W - 8)),
+  }
+  usageOpen.value = l.id
+}
+// a grace period, or the popover would vanish the moment the cursor left the badge
+// and there would be no way to reach the rows inside it
+function closeUsageSoon() { closeTimer = setTimeout(() => { usageOpen.value = null }, 180) }
+function keepUsage() { clearTimeout(closeTimer) }
+onBeforeUnmount(() => clearTimeout(closeTimer))
+
+const usageItem = computed(() => store.library.find((l) => l.id === usageOpen.value) || null)
+
 function removeFromDash(l, dash) { removeTileFromDashboard(dash, l); if (!usageOf(l).length) usageOpen.value = null }
+
+/* Jump to this widget where it lives. The tile is matched by title+type — the same
+ * identity the library uses everywhere else — and DashboardView focuses it once the
+ * board has finished its skeleton, so the scroll lands on a widget that exists. */
+function goToWidget(l, dash) {
+  usageOpen.value = null
+  store.ui.focusTile = { title: l.title, type: l.type }
+  emit('close')
+  if (dash.id === props.d.id) return    // already here — DashboardView's watcher picks it up
+  router.push(`/dashboard/${dash.id}`)
+}
 // short description shown in a left-pointing tooltip on hover of each library row
 function libDesc(l) {
   const kind = l.type === 'kpi' ? 'A headline KPI number' : l.type === 'shortcut' ? 'A record list / table' : 'A chart widget'
@@ -231,16 +289,19 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
               <input v-if="!isTrash" type="checkbox" class="lcb" :checked="isSel(l) || isPlaced(l)" :disabled="isPlaced(l)" @change="toggleSel(l)" />
               <span v-else class="trash-ic"><Icon name="trash" :size="15" /></span>
               <div class="lt-main">
-                <div class="lt-name-row"><span class="lt-name ellip">{{ l.title }}</span><span v-if="isPlaced(l)" class="placed-tag"><Icon name="check" :size="11" /> On dashboard</span></div>
-                <div class="lt-meta">
-                  {{ TYPE_LABEL[l.type] }} · {{ l.module }}
-                  <button v-if="!isTrash && usageOf(l).length" class="usage-btn" @click.stop="usageOpen = usageOpen === l.id ? null : l.id">· in {{ usageOf(l).length }} dashboard{{ usageOf(l).length > 1 ? 's' : '' }}</button>
-                  <div v-if="usageOpen === l.id" class="usage-back" @click.stop="usageOpen = null" />
-                  <div v-if="usageOpen === l.id" class="usage-pop" @click.stop>
-                    <div class="up-h">Placed on</div>
-                    <div v-for="dash in usageOf(l)" :key="dash.id" class="up-row"><span class="ellip">{{ dash.name }}</span><button class="up-rm" title="Remove from this dashboard" @click="removeFromDash(l, dash)"><Icon name="trash" :size="13" /></button></div>
-                  </div>
+                <div class="lt-name-row">
+                  <span class="lt-name ellip">{{ l.title }}</span>
+                  <!-- usage lives beside the NAME: it is a property of the widget, not
+                       of its module. Hover it to see where, click a row to go there. -->
+                  <span
+                    v-if="!isTrash && usageOf(l).length" class="use-badge"
+                    :class="{ on: usageOpen === l.id }"
+                    :title="`On ${usageOf(l).length} dashboard${usageOf(l).length > 1 ? 's' : ''}`"
+                    @mouseenter="openUsage(l, $event)" @mouseleave="closeUsageSoon" @click.stop
+                  >{{ usageOf(l).length }}</span>
+                  <span v-if="isPlaced(l)" class="placed-tag"><Icon name="check" :size="11" /> On dashboard</span>
                 </div>
+                <div class="lt-meta">{{ TYPE_LABEL[l.type] }} · {{ l.module }}</div>
               </div>
               <!-- Trash: Restore + Delete forever · other tabs: Duplicate / Edit / Delete -->
               <div v-if="isTrash" class="lt-acts always">
@@ -274,6 +335,28 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
     <WidgetBuilderModal v-if="builder" :d="d" :type="builder" @close="builder = null" @created="onCreated" @savedToLibrary="onSavedToLibrary" />
     <!-- Centered builder — duplicate/edit a library tile (Update returns a copy to the listing) -->
     <WidgetBuilderModal v-if="libBuilder" :d="d" :type="libBuilder.type" :libItem="libBuilder.item" @close="libBuilder = null" @librarySaved="onLibrarySaved" />
+
+    <!-- Where the widget is used. Teleported: the list scrolls, and an in-flow popover
+         would be clipped by its overflow. -->
+    <teleport to="body">
+      <div
+        v-if="usageItem" class="usage-pop"
+        :style="{ top: usagePos.top + 'px', left: usagePos.left + 'px' }"
+        @mouseenter="keepUsage" @mouseleave="closeUsageSoon"
+      >
+        <div class="up-h">Placed on {{ usageOf(usageItem).length }} dashboard{{ usageOf(usageItem).length > 1 ? 's' : '' }}</div>
+        <button
+          v-for="dash in usageOf(usageItem)" :key="dash.id" class="up-row"
+          :title="`Go to “${usageItem.title}” on ${dash.name}`"
+          @click="goToWidget(usageItem, dash)"
+        >
+          <Icon name="layout" :size="13" class="up-ic" />
+          <span class="ellip">{{ dash.name }}</span>
+          <span class="up-rm" title="Remove from this dashboard" @click.stop="removeFromDash(usageItem, dash)"><Icon name="trash" :size="13" /></span>
+        </button>
+        <p class="up-f">Click a dashboard to jump to this widget on it.</p>
+      </div>
+    </teleport>
 
     <!-- Row description tooltip — opens to the left of the hovered row, arrow points right -->
     <teleport to="body">
@@ -343,15 +426,22 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .lt-main { flex: 1; min-width: 0; }
 .lt-name-row { display: flex; align-items: center; gap: 7px; } .lt-name { font-weight: 500; font-size: 13.5px; }
 .lt-meta { position: relative; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-.usage-btn { border: none; background: transparent; color: var(--primary-700); font-size: 11.5px; font-weight: 600; padding: 0 2px; cursor: pointer; }
-.usage-btn:hover { text-decoration: underline; }
-.usage-back { position: fixed; inset: 0; z-index: 8; }
-.usage-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 9; min-width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--sh-pop); padding: 8px; }
+/* usage count — a pill on the widget's NAME */
+.use-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center;
+  background: var(--primary-soft); color: var(--primary-700); border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; line-height: 1; cursor: pointer; }
+.use-badge:hover, .use-badge.on { background: var(--primary); color: #fff; }
+
+.usage-pop { position: fixed; z-index: 160; width: 250px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--sh-pop); padding: 8px; }
 .up-h { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted-2); font-weight: 700; padding: 2px 6px 6px; }
-.up-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; color: var(--ink-2); }
-.up-row:hover { background: var(--surface-2); }
-.up-rm { width: 26px; height: 26px; border: none; background: transparent; color: var(--muted); border-radius: 6px; display: grid; place-items: center; flex: none; }
+.up-row { display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px; border: none; background: transparent; border-radius: 7px; font-size: 12.5px; color: var(--ink-2); text-align: left; cursor: pointer; }
+.up-row:hover { background: var(--primary-softer); color: var(--primary-700); }
+.up-ic { color: var(--muted-2); flex: none; }
+.up-row:hover .up-ic { color: var(--primary); }
+.up-row .ellip { flex: 1; min-width: 0; }
+.up-rm { width: 24px; height: 24px; color: var(--muted-2); border-radius: 6px; display: grid; place-items: center; flex: none; }
 .up-rm:hover { color: var(--red); background: var(--red-soft); }
+.up-f { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid var(--border); font-size: 10.5px; line-height: 1.4; color: var(--muted); }
 /* left-pointing description tooltip (teleported, fixed to viewport) */
 .lib-tip { position: fixed; z-index: 200; transform: translateY(-50%); width: 232px; background: #20223a; color: #fff; font-size: 11.5px; line-height: 1.45; padding: 8px 11px; border-radius: 8px; box-shadow: var(--sh-pop); pointer-events: none; text-align: left; }
 .lib-tip-arrow { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 6px solid transparent; border-left-color: #20223a; }

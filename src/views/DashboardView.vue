@@ -393,10 +393,38 @@ function loadBoard() {
       store.ui.pendingAddWidget = false; addToGroup.value = null
       setTimeout(() => (showAdd.value = true), 260)
     }
+    focusPendingTile()
   }, 600)
 }
 onMounted(loadBoard)
 watch(() => route.params.id, loadBoard)
+
+/* Someone asked to be taken to a specific widget — from the "used on N dashboards"
+ * badge in the Add-Widget library. The tile is matched by title+type, the same
+ * identity the library uses. Run AFTER the skeleton, or we'd scroll to a widget
+ * that isn't in the DOM yet. */
+function focusPendingTile() {
+  const f = store.ui.focusTile
+  if (!f) return
+  store.ui.focusTile = null
+  const t = (d.value?.tiles || []).find((x) => x.title === f.title && x.type === f.type)
+  if (!t) { toast(`“${f.title}” isn’t on this dashboard any more`, 'warn'); return }
+  nextTick(() => {
+    document.querySelector(`[data-tile="${t.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightId.value = t.id
+    setTimeout(() => { if (highlightId.value === t.id) highlightId.value = null }, 2200)
+  })
+}
+/* Jumping to a widget on the board you're ALREADY on never reloads, so the flag has
+ * to be watched as well as read on load. But only act when the tile is actually here:
+ * the flag is set before the route changes, so an unguarded watcher would fire while
+ * still on the old board, find nothing, and clear the flag before the target board
+ * ever got to consume it — which is exactly what it did. */
+watch(() => store.ui.focusTile, (f) => {
+  if (!f || loadingBoard.value) return
+  const here = (d.value?.tiles || []).some((x) => x.title === f.title && x.type === f.type)
+  if (here) focusPendingTile()
+})
 
 /* Manual refresh replays the whole entrance — skeleton, then the staggered reveal
  * with the charts drawing themselves in. An auto tick does not: it would strobe a

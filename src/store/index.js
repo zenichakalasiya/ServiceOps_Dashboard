@@ -12,7 +12,9 @@ export const store = reactive({
   categories: [...CATEGORIES],
   currentUser: 'Aarav Mehta',
   toasts: [],
-  ui: { createOpen: false, cloneTarget: null, editTarget: null, pendingAddWidget: false, theme: 'light', listingOpen: false, listingQuery: '', groupStyle: 1, listStyle: 1, legendStyle: 6 },
+  ui: { createOpen: false, cloneTarget: null, editTarget: null, pendingAddWidget: false, theme: 'light', listingOpen: false, listingQuery: '', groupStyle: 1, listStyle: 1, legendStyle: 6,
+    // { title, type } — a widget to scroll to and flash once the board has loaded
+    focusTile: null },
   // global view-time controls (per the rebuilt Time Filter + Auto-Refresh)
   timeFilter: { preset: 'last30', label: 'Last 30 days', from: null, to: null },
   autoRefresh: { interval: 'off', label: 'Off' },
