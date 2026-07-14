@@ -8,7 +8,7 @@
  * Rows stay the mock shape: columns = string[], rows = cell[][].
  * Cell rendering is delegated to the parent via the #cell slot.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import {
   useVueTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel,
 } from '@tanstack/vue-table'
@@ -19,21 +19,19 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   search: { type: String, default: '' },
   sortable: { type: Boolean, default: true },
-  filters: { type: Boolean, default: false },   // show the per-column filter row
+  /* { [columnIndex]: string[] } — driven by the shared FilterMenu in the tile
+   * header. Replaces the old per-column input row: one icon, two levels, and the
+   * same interaction as the Manage-all list. */
+  filterModel: { type: Object, default: () => ({}) },
   emptyText: { type: String, default: 'No records in this range' },
 })
-const emit = defineEmits(['filter-count'])
+const emit = defineEmits(['clear-filters'])
 
 const sorting = ref([])
-const columnFilters = ref([])
 
-/* A column with few distinct values (Priority, Status) filters by picking one;
- * anything else filters by typing. Free text is a substring match, a picked
- * value is exact — otherwise choosing "Open" would also match "Reopened". */
-const ENUM_MAX = 6
-const distinct = (i) => [...new Set(props.rows.map((r) => String(r[i] ?? '')))].filter(Boolean).sort()
-const optionsFor = computed(() =>
-  props.columns.map((_, i) => { const d = distinct(i); return d.length && d.length <= ENUM_MAX ? d : null }))
+// values within a column are OR; columns are AND
+const pickOne = (row, id, picked) =>
+  !picked?.length || picked.includes(String(row.getValue(id) ?? '').trim())
 
 const cols = computed(() =>
   props.columns.map((c, i) => ({
@@ -41,8 +39,14 @@ const cols = computed(() =>
     header: c,
     accessorFn: (row) => row[i],
     enableSorting: props.sortable,
-    filterFn: optionsFor.value[i] ? 'equalsString' : 'includesString',
+    filterFn: pickOne,
   })))
+
+// FilterMenu speaks {key: values[]}; TanStack wants [{id, value}]
+const columnFilters = computed(() =>
+  Object.entries(props.filterModel)
+    .filter(([, v]) => v?.length)
+    .map(([id, value]) => ({ id, value })))
 
 const table = useVueTable({
   get data() { return props.rows },
@@ -53,21 +57,12 @@ const table = useVueTable({
     get columnFilters() { return columnFilters.value },
   },
   onSortingChange: (u) => { sorting.value = typeof u === 'function' ? u(sorting.value) : u },
-  onColumnFiltersChange: (u) => { columnFilters.value = typeof u === 'function' ? u(columnFilters.value) : u },
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
   globalFilterFn: 'includesString',
   enableSortingRemoval: true, // asc → desc → unsorted, so the user can get back
 })
-
-const getFilter = (i) => table.getColumn(String(i))?.getFilterValue() ?? ''
-const setFilter = (i, v) => table.getColumn(String(i))?.setFilterValue(v || undefined)
-function clearFilters() { columnFilters.value = [] }
-
-// hiding the filter row must not leave invisible filters applied
-watch(() => props.filters, (on) => { if (!on) clearFilters() })
-watch(columnFilters, (f) => emit('filter-count', f.length), { deep: true })
 
 const rowModel = computed(() => table.getRowModel().rows)
 const isEmpty = computed(() => rowModel.value.length === 0)
@@ -97,16 +92,6 @@ const filtered = computed(() => columnFilters.value.length > 0)
         </th>
       </tr>
 
-      <!-- per-column filters: a picker where the column is an enum, a box otherwise -->
-      <tr v-if="filters" class="fltr">
-        <th v-for="(c, i) in columns" :key="c">
-          <select v-if="optionsFor[i]" :value="getFilter(i)" @change="setFilter(i, $event.target.value)">
-            <option value="">All</option>
-            <option v-for="o in optionsFor[i]" :key="o" :value="o">{{ o }}</option>
-          </select>
-          <input v-else :value="getFilter(i)" :placeholder="`Filter ${c.toLowerCase()}…`" @input="setFilter(i, $event.target.value)" />
-        </th>
-      </tr>
     </thead>
     <tbody>
       <tr v-for="row in rowModel" :key="row.id">
@@ -118,7 +103,7 @@ const filtered = computed(() => columnFilters.value.length > 0)
         <td :colspan="columns.length" class="nodata">
           <template v-if="filtered">
             No records match these filters
-            <button class="clr" @click="clearFilters">Clear filters</button>
+            <button class="clr" @click="emit('clear-filters')">Clear filters</button>
           </template>
           <template v-else>{{ search ? 'No records match your search' : emptyText }}</template>
         </td>
@@ -144,16 +129,6 @@ th.srt:hover .sc { opacity: .6; }
 .sc.vis { opacity: 1; color: var(--primary); }
 th.on { color: var(--ink); }
 
-/* filter row sits under the sticky header, and sticks with it */
-.fltr th { top: 25px; padding: 4px 5px 6px; text-transform: none; letter-spacing: 0; font-weight: 400; cursor: default; }
-.fltr input, .fltr select {
-  width: 100%; min-width: 0; height: 26px; padding: 0 6px;
-  border: 1px solid var(--border); border-radius: 5px;
-  background: var(--surface); color: var(--ink); font: inherit; font-size: 11.5px; outline: none;
-}
-.fltr select { cursor: pointer; }
-.fltr input::placeholder { color: var(--muted-2); }
-.fltr input:focus, .fltr select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .clr { display: block; margin: 8px auto 0; border: 1px solid var(--border); background: var(--surface); color: var(--primary-700); border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; }
 .clr:hover { background: var(--primary-soft); border-color: var(--primary); }
 </style>

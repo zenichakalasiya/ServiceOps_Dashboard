@@ -4,7 +4,9 @@ import Icon from '../ui/Icon.vue'
 import ChartTile from './ChartTile.vue'
 import DataTable from './DataTable.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
+import FilterMenu from '../ui/FilterMenu.vue'
 import { CHART_TYPES, whyDisabled } from '../../data/chartTypes.js'
+import { fieldsFrom } from '../../data/filters.js'
 import { toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean, selected: Boolean })
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin', 'select'])
@@ -84,9 +86,13 @@ function setKind(ct) {
 }
 const EXPORTS = ['PDF', 'PNG', 'JPEG', 'SVG', 'CSV']
 const searchOpen = ref(false)
-const filtersOpen = ref(false)
-const filterCount = ref(0)
 const tableSearch = ref('')
+/* Shortcut tables filter through the same two-level FilterMenu as the Manage-all
+ * list: one icon → the columns worth filtering on → their values, multi-select.
+ * The old per-column input row is gone — it made every column look filterable,
+ * including the ones (ID, Subject) where every value is unique. */
+const tableFilters = ref({})
+const filterFields = computed(() => fieldsFrom(props.tile.columns || [], props.tile.rows || []))
 const searchInput = ref(null)
 watch(searchOpen, (v) => { if (v) nextTick(() => searchInput.value?.focus()) })
 // row filtering + sorting now live in DataTable (TanStack); we only own the query
@@ -182,9 +188,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       </div>
       <div v-if="!tile.sel" class="right">
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
-        <button v-if="tile.type === 'shortcut'" class="ti fbtn" :class="{ on: filtersOpen }" @click="filtersOpen = !filtersOpen" :title="filtersOpen ? 'Hide column filters' : 'Filter by column'">
-          <Icon name="filter" :size="15" /><span v-if="filterCount" class="fdot">{{ filterCount }}</span>
-        </button>
+        <FilterMenu v-if="tile.type === 'shortcut' && filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter records" class="ti-fm" />
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
         <button v-if="!compact" class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
         <button v-if="!tiny && canEdit" class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
@@ -267,7 +271,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       </template>
 
       <template v-else-if="tile.type === 'chart'">
-        <ChartTile v-if="tile.chart" :chart="tile.chart" :legend="showLegend" :height="tile.h > 2 ? 360 : tile.h > 1 ? 170 : 120" />
+        <ChartTile v-if="tile.chart" :chart="tile.chart" :legend="showLegend" :data-labels="tile.dataLabels === true" :height="tile.h > 2 ? 360 : tile.h > 1 ? 170 : 120" />
       </template>
 
       <template v-else>
@@ -284,7 +288,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           </transition>
           <!-- scrollable table container (sticky header); click a header to sort -->
           <div class="stbl-scroll">
-            <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch" :filters="filtersOpen" @filter-count="filterCount = $event">
+            <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch" :filter-model="tableFilters" @clear-filters="tableFilters = {}">
               <template #cell="{ value }">
                 <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
                 <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
@@ -308,10 +312,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         <div class="present">
           <div class="phead"><b>{{ tile.title }}</b><button class="btn btn-icon" @click="present = false"><Icon name="x" :size="18" /></button></div>
           <div class="pbody">
-            <ChartTile v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :height="620" />
+            <ChartTile v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :data-labels="tile.dataLabels === true" :height="620" />
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
             <div v-else class="stbl big">
-              <DataTable :columns="tile.columns" :rows="tile.rows || []" filters>
+              <DataTable :columns="tile.columns" :rows="tile.rows || []">
                 <template #cell="{ value }">
                   <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
                   <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
@@ -399,8 +403,6 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .stbl-scroll { flex: 1; overflow: auto; min-height: 0; max-height: 200px; }
 /* filter row eats a row's worth of height — give it back so rows stay visible */
 .stbl-scroll:has(.fltr) { max-height: 236px; }
-.fbtn { position: relative; }
-.fdot { position: absolute; top: 1px; right: 1px; min-width: 13px; height: 13px; padding: 0 3px; display: grid; place-items: center; background: var(--primary); color: #fff; border-radius: 999px; font-size: 9px; font-weight: 700; line-height: 1; }
 /* table/th/td/.nodata chrome lives in DataTable.vue — scoped CSS cannot reach
    a child component's internals. Only the root <table> is styleable from here. */
 table { font-size: 12.5px; }

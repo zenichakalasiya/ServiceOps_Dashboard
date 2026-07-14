@@ -1,8 +1,10 @@
 <script setup>
 // Full-screen (TV) view of a single dashboard — Esc or ✕ to exit.
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
 import WidgetCard from './WidgetCard.vue'
+import TimeFilter from './TimeFilter.vue'
+import AutoRefresh from './AutoRefresh.vue'
 import { byId } from '../../store/index.js'
 const props = defineProps({ startId: String })
 const emit = defineEmits(['close'])
@@ -18,6 +20,13 @@ function cellStyle(t) {
   const w = Math.min(12, Math.max(2, t.w || 3)), h = Math.max(1, t.h || 1)
   return { gridColumn: `span ${w}`, minHeight: ((cur.value?.rowHeight ?? 140) + (h - 1) * 110) + 'px' }
 }
+
+/* A wallboard is the one place the numbers go unattended for hours — so the two
+ * view-time controls that say WHAT WINDOW you're looking at and WHEN IT LAST
+ * UPDATED are needed here more than anywhere, not less. They read the same global
+ * store state as the board, so the window survives entering and leaving present mode. */
+const spin = ref(false)
+function refreshAll() { spin.value = true; setTimeout(() => { spin.value = false }, 800) }
 </script>
 
 <template>
@@ -25,7 +34,13 @@ function cellStyle(t) {
     <div class="pm" :style="boardVars">
       <header class="pm-bar">
         <div class="pm-title"><Icon name="layout" :size="16" /><b>{{ cur?.name }}</b></div>
-        <button class="pm-exit" title="Exit (Esc)" @click="emit('close')"><Icon name="x" :size="20" /></button>
+        <div class="pm-ctl">
+          <TimeFilter />
+          <button class="pm-refresh" title="Refresh now" @click="refreshAll"><Icon name="refresh" :size="17" :class="{ spin }" /></button>
+          <AutoRefresh />
+          <span class="pm-sep" />
+          <button class="pm-exit" title="Exit (Esc)" @click="emit('close')"><Icon name="x" :size="20" /></button>
+        </div>
       </header>
       <div class="pm-body">
         <div v-if="cur && cur.tiles.length" class="pm-grid" :style="gridStyle">
@@ -42,6 +57,10 @@ function cellStyle(t) {
 .pm-bar { height: 60px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .pm-title { display: flex; align-items: center; gap: 10px; font-size: 17px; color: var(--ink); }
 .pm-title b { font-weight: 600; }
+.pm-ctl { display: flex; align-items: center; gap: 8px; }
+.pm-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+.pm-refresh { width: 36px; height: 36px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
+.pm-refresh:hover { background: var(--surface-2); color: var(--ink); }
 .pm-exit { width: 44px; height: 44px; border: none; background: transparent; color: var(--muted); border-radius: 12px; display: grid; place-items: center; }
 .pm-exit:hover { background: var(--red-soft); color: var(--red); }
 .pm-body { flex: 1; overflow: auto; padding: 22px 26px; }

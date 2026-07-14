@@ -55,7 +55,6 @@ const XAXIS_OPTS = ['Priority', 'Status', 'Team', 'Created date']
 const YFUNC_OPTS = ['Count Of', 'Sum Of', 'Average Of', 'Distinct Count']
 const YCOL_OPTS = ['Requests', 'Effort hours', 'Resolution time']
 const DATEF_OPTS = ['Created date', 'Updated date', 'Resolved date', 'Due date']
-const TOPN_OPTS = [{ value: '', label: 'Select' }, { value: '5', label: '5' }, { value: '10', label: '10' }, { value: '15', label: '15' }]
 
 // ServiceOps "Create Widget" fields. Prefilled from the existing tile when editing.
 function initCfg() {
@@ -65,12 +64,23 @@ function initCfg() {
     mode: ex?.sql ? 'query' : 'manual',   // Manual | Query Based
     xAxis: 'Priority', yFunc: 'Count Of', yColumn: 'Requests',
     assetType: '', dateFilter: 'Created date', description: ex?.info || '',
-    sortOrder: 'none', topN: '', excludeZero: false, sqlQuery: ex?.sql || '',
+    // Output shaping is a rank WINDOW, not a sort direction: "Top 10" / "Bottom 10".
+    // (None/Ascending/Descending said how to order the rows but never how many to
+    // keep, which is the question a long-tailed chart actually asks.)
+    rank: ex?.rank || 'top', rankN: ex?.rankN ?? 10,
+    excludeZero: false, sqlQuery: ex?.sql || '',
     sharedAccess: ex?.sharedAccess || 'view',   // access granted to people it's shared with
-    // legend is a saved property of the widget, not a view toggle. undefined = on.
+    // display properties, saved on the widget. undefined = on / off respectively.
     legend: ex?.legend !== false,
+    dataLabels: ex?.dataLabels === true,
   }
 }
+const isPie = computed(() => curType.value.kind === 'donut')
+const rankN = computed({
+  get: () => cfg.rankN,
+  // keep it a number and never let it reach 0 — a chart of nothing is not a view
+  set: (v) => { const n = parseInt(String(v).replace(/\D/g, ''), 10); cfg.rankN = Number.isFinite(n) && n > 0 ? n : '' },
+})
 const cfg = reactive(initCfg())
 function reset() { Object.assign(cfg, initCfg()) }
 
@@ -103,10 +113,22 @@ const previewTile = computed(() => {
       labels = donut ? ['P1', 'P2', 'P3', 'P4'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
       series = [{ name: cfg.yFunc, values: donut ? [18, 64, 120, 46] : [42, 51, 38, 60, 55] }]
     }
-    if (cfg.sortOrder === 'asc') series = series.map((s) => ({ ...s, values: [...s.values].sort((a, b) => a - b) }))
-    if (cfg.sortOrder === 'desc') series = series.map((s) => ({ ...s, values: [...s.values].sort((a, b) => b - a) }))
+    /* Apply the rank window. Single-series charts rank their *categories* (a pie
+     * ranks slices), so labels and values must be reordered together — sorting the
+     * values alone, as the old sortOrder did, silently detached each bar from its
+     * label. Multi-series charts are left alone: there is no single ranking. */
+    const n = Number(cfg.rankN) || 0
+    if (series.length === 1 && n > 0 && n < labels.length) {
+      const pairs = labels.map((l, i) => ({ l, v: series[0].values[i] }))
+      pairs.sort((a, b) => (cfg.rank === 'bottom' ? a.v - b.v : b.v - a.v))
+      const win = pairs.slice(0, n)
+      labels = win.map((p) => p.l)
+      series = [{ ...series[0], values: win.map((p) => p.v) }]
+    }
     const t = mkChart(title, { kind: curType.value.kind, labels, series }, cfg.description)
     t.legend = cfg.legend          // so the live preview reflects the toggle
+    t.dataLabels = cfg.dataLabels
+    t.rank = cfg.rank; t.rankN = cfg.rankN
     return t
   }
   return ex
@@ -139,7 +161,11 @@ function save(place) {
     t.title = cfg.name || t.title
     t.info = cfg.description
     t.type = curType.value.type
-    if (isChart.value) { t.chart = pv.chart; t.legend = cfg.legend; t.columns = undefined; t.rows = undefined; t.value = undefined }
+    if (isChart.value) {
+      t.chart = pv.chart
+      t.legend = cfg.legend; t.dataLabels = cfg.dataLabels; t.rank = cfg.rank; t.rankN = cfg.rankN
+      t.columns = undefined; t.rows = undefined; t.value = undefined
+    }
     else if (isShortcut.value) { t.columns = pv.columns; t.rows = pv.rows; t.sql = cfg.sqlQuery; t.chart = undefined }
     else if (isKpi.value) { t.value = pv.value; t.unit = pv.unit; t.chart = undefined; t.columns = undefined; t.rows = undefined }
     if (!isShortcut.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
@@ -188,7 +214,7 @@ function save(place) {
             <div class="pv-card">
               <div class="pv-canvas">
                 <div v-if="isKpi" class="pv-kpi">{{ previewTile.value }}<span v-if="previewTile.unit" class="u">{{ previewTile.unit }}</span><span class="d">▲ {{ previewTile.delta?.pct }}%</span></div>
-                <ChartTile v-else-if="isChart" :chart="previewTile.chart" :legend="cfg.legend" :height="320" />
+                <ChartTile v-else-if="isChart" :chart="previewTile.chart" :legend="cfg.legend" :data-labels="cfg.dataLabels" :height="320" />
                 <table v-else class="pv-tbl"><thead><tr><th v-for="c in previewTile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in previewTile.rows" :key="i"><td v-for="(c,j) in r" :key="j">{{ c }}</td></tr></tbody></table>
               </div>
             </div>
@@ -262,20 +288,6 @@ function save(place) {
                 <div class="fld"><label>Description</label><textarea class="input" rows="3" v-model="cfg.description" placeholder="Description" /></div>
               </div>
 
-              <!-- Display (charts, Manual mode only) -->
-              <div v-if="isChart && manualMode" class="sec">
-                <div class="sec-h">Display</div>
-                <div class="fld"><label>Sort Order</label>
-                  <div class="seg">
-                    <button class="seg-b" :class="{ on: cfg.sortOrder==='none' }" @click="cfg.sortOrder='none'">None</button>
-                    <button class="seg-b" :class="{ on: cfg.sortOrder==='asc' }" @click="cfg.sortOrder='asc'">Ascending</button>
-                    <button class="seg-b" :class="{ on: cfg.sortOrder==='desc' }" @click="cfg.sortOrder='desc'">Descending</button>
-                  </div>
-                </div>
-                <div class="fld"><label>Top N</label><Dropdown v-model="cfg.topN" :options="TOPN_OPTS" placeholder="Select" /></div>
-                <label class="toggle"><span>Exclude Zero Count Values</span><button class="sw" :class="{ on: cfg.excludeZero }" @click="cfg.excludeZero=!cfg.excludeZero"><i /></button></label>
-              </div>
-
               <!-- Conditions -->
               <div v-if="manualMode" class="sec">
                 <div class="sec-h">Conditions</div>
@@ -284,20 +296,47 @@ function save(place) {
               </div>
               </template>
 
-              <!-- Display — legend on/off. Shown for a predefined widget too: it's a
-                   display preference like a Highlight, not a change to the data, and
-                   with "Hide legend" gone from the ⋯ menu this is the only way to
-                   turn a predefined widget's legend off. -->
+              <!-- Display. The toggles show for a predefined widget too: they are
+                   display preferences like a Highlight, and with "Hide legend" gone
+                   from the ⋯ menu this is the only place left to turn one off. The
+                   rank window is data shaping, so it stays out of a predefined edit. -->
               <div v-if="isChart" class="sec">
                 <div class="sec-h">Display</div>
+
+                <div v-if="manualMode && !predefinedEdit" class="fld">
+                  <label>Show</label>
+                  <div class="rank-row">
+                    <div class="seg">
+                      <button class="seg-b" :class="{ on: cfg.rank === 'top' }" @click="cfg.rank = 'top'">Top N</button>
+                      <button class="seg-b" :class="{ on: cfg.rank === 'bottom' }" @click="cfg.rank = 'bottom'">Bottom N</button>
+                    </div>
+                    <input class="input rank-n" type="text" inputmode="numeric" v-model="rankN" placeholder="All" />
+                  </div>
+                  <p class="hint">
+                    The {{ cfg.rank === 'bottom' ? 'smallest' : 'largest' }}
+                    <b>{{ Number(cfg.rankN) || '—' }}</b> categories. Leave it blank to plot every one.
+                  </p>
+                </div>
+
                 <label class="tgl-row">
                   <span class="tgl-txt">
                     <b>Legend</b>
-                    <em>Show the key that names each series or slice.</em>
+                    <em>The key that names each series or slice.</em>
                   </span>
                   <button class="tgl" :class="{ on: cfg.legend }" role="switch" :aria-checked="cfg.legend"
                     @click.prevent="cfg.legend = !cfg.legend"><i /></button>
                 </label>
+
+                <label v-if="isPie" class="tgl-row">
+                  <span class="tgl-txt">
+                    <b>Data labels</b>
+                    <em>Print each slice’s value on the chart itself.</em>
+                  </span>
+                  <button class="tgl" :class="{ on: cfg.dataLabels }" role="switch" :aria-checked="cfg.dataLabels"
+                    @click.prevent="cfg.dataLabels = !cfg.dataLabels"><i /></button>
+                </label>
+
+                <label v-if="manualMode && !predefinedEdit" class="toggle"><span>Exclude Zero Count Values</span><button class="sw" :class="{ on: cfg.excludeZero }" @click="cfg.excludeZero=!cfg.excludeZero"><i /></button></label>
               </div>
 
               <!-- Highlights (also the only editable section for a predefined widget) -->
@@ -360,8 +399,14 @@ function save(place) {
 .config { width: 480px; flex: none; display: flex; flex-direction: column; min-height: 0; }
 .cfg-scroll { flex: 1; overflow: auto; padding: 18px 20px; }
 .sec { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
-/* Display → Legend toggle */
-.tgl-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; }
+/* Display → rank window (Top N / Bottom N + a free number field) */
+.rank-row { display: flex; align-items: center; gap: 8px; }
+.rank-row .seg { flex: 1; }
+.rank-n { width: 74px; flex: none; text-align: center; font-weight: 600; }
+
+/* Display → toggles */
+.tgl-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; margin-bottom: 12px; }
+.tgl-row:last-child { margin-bottom: 0; }
 .tgl-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tgl-txt b { font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
 .tgl-txt em { font-style: normal; font-size: 11.5px; color: var(--muted); line-height: 1.4; }

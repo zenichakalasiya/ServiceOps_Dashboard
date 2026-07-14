@@ -4,32 +4,82 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from '../components/ui/Icon.vue'
 import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
 import HistoryDialog from '../components/dashboard/HistoryDialog.vue'
+import FilterMenu from '../components/ui/FilterMenu.vue'
 import { store, manageable, archived, archiveDashboard, restoreDashboard, deleteForever, recordView,
-  togglePublished, moveDashboardsToCategory, archiveMany, markDefault, toggleFavorite } from '../store/index.js'
+  togglePublished, setPublished, moveDashboardsToCategory, archiveMany, markDefault, toggleFavorite } from '../store/index.js'
 import { ACCESS } from '../data/mock.js'
 const route = useRoute()
 const router = useRouter()
 
 const tab = ref('all')                 // all | mine | shared | archive
 const q = ref('')
-const fCategory = ref('')
-const fAccess = ref('')
-const fPublished = ref('')              // '' | pub | unpub
 const isArchive = computed(() => tab.value === 'archive')
 
-const rows = computed(() => {
+/* One filter icon, two levels — the same FilterMenu the Shortcut tables use.
+ * The three separate dropdowns are gone: each could hold only ONE value, so
+ * "Service Desk or NOC" was not expressible at all. Values within a field are OR,
+ * fields are AND. */
+const filters = ref({})
+const CAT = (d) => d.category || 'Uncategorized'
+const FIELD_OF = {
+  category: CAT,
+  access: (d) => ACCESS[d.access]?.label || d.access,
+  status: (d) => (d.enabled === false ? 'Unpublished' : 'Published'),
+  owner: (d) => d.owner,
+}
+const base = computed(() => {
   let arr = isArchive.value ? archived.value : manageable.value
   if (tab.value === 'mine') arr = arr.filter((d) => d.mine)
   if (tab.value === 'shared') arr = arr.filter((d) => d.sharedWithMe)
-  if (fCategory.value) arr = arr.filter((d) => (d.category || 'Uncategorized') === fCategory.value)
-  if (fAccess.value) arr = arr.filter((d) => d.access === fAccess.value)
-  if (fPublished.value === 'pub') arr = arr.filter((d) => d.enabled !== false)
-  if (fPublished.value === 'unpub') arr = arr.filter((d) => d.enabled === false)
-  const s = q.value.trim().toLowerCase()
-  if (s) arr = arr.filter((d) => d.name.toLowerCase().includes(s) || (d.owner || '').toLowerCase().includes(s))
   return arr
 })
-const catOpts = computed(() => ['', ...store.categories])
+// options come from what's actually in the tab — never offer a filter that matches nothing
+const opts = (fn) => [...new Set(base.value.map(fn))].filter(Boolean).sort()
+const filterFields = computed(() => [
+  { key: 'category', label: 'Category', options: opts(CAT) },
+  { key: 'access', label: 'Visibility', options: opts(FIELD_OF.access) },
+  { key: 'status', label: 'Status', options: opts(FIELD_OF.status) },
+  { key: 'owner', label: 'Owner', options: opts(FIELD_OF.owner) },
+])
+
+// ---- column sorting ----
+const sortKey = ref('')          // '' = the store's own order (drag-to-reorder wins)
+const sortDir = ref('asc')
+const SORT_OF = {
+  name: (d) => d.name.toLowerCase(),
+  category: CAT,
+  tech: (d) => (d.techAccess || []).length,
+  group: (d) => (d.groupAccess || []).length,
+  description: (d) => (d.description || '').toLowerCase(),
+  owner: (d) => (d.owner || '').toLowerCase(),
+  status: (d) => (d.enabled === false ? 0 : 1),
+  updated: (d) => new Date(d.updated).getTime(),
+}
+function sortBy(k) {
+  if (!SORT_OF[k]) return
+  if (sortKey.value === k) {
+    // asc → desc → off, so the user can always get back to the manual order
+    if (sortDir.value === 'asc') sortDir.value = 'desc'
+    else { sortKey.value = ''; sortDir.value = 'asc' }
+  } else { sortKey.value = k; sortDir.value = 'asc' }
+}
+const sortIcon = (k) => (sortKey.value !== k ? 'sort-asc' : sortDir.value === 'asc' ? 'sort-asc' : 'sort-desc')
+
+const rows = computed(() => {
+  let arr = base.value
+  for (const [key, picked] of Object.entries(filters.value)) {
+    if (!picked?.length) continue
+    const fn = FIELD_OF[key]
+    if (fn) arr = arr.filter((d) => picked.includes(fn(d)))
+  }
+  const s = q.value.trim().toLowerCase()
+  if (s) arr = arr.filter((d) => d.name.toLowerCase().includes(s) || (d.owner || '').toLowerCase().includes(s))
+  if (sortKey.value) {
+    const fn = SORT_OF[sortKey.value], dir = sortDir.value === 'asc' ? 1 : -1
+    arr = [...arr].sort((a, b) => { const x = fn(a), y = fn(b); return (x < y ? -1 : x > y ? 1 : 0) * dir })
+  }
+  return arr
+})
 
 // ---- column selection (task 8) ----
 const COLUMNS = [
@@ -58,6 +108,7 @@ const selDashboards = () => rows.value.filter((d) => sel.value.has(d.id))
 const bulkCatOpen = ref(false)
 function bulkArchive() { archiveMany(selDashboards()); sel.value = new Set() }
 function bulkMove(cat) { moveDashboardsToCategory(selDashboards(), cat); bulkCatOpen.value = false; sel.value = new Set() }
+function bulkPublish(on) { setPublished(selDashboards(), on); sel.value = new Set() }
 
 // ---- tech-access pills expand (task 7) ----
 const openTech = ref(null)
@@ -99,9 +150,7 @@ function onDrop(target) {
       </div>
       <div class="tr">
         <div class="srch"><Icon name="search" :size="14" class="muted" /><input v-model="q" placeholder="Search…" /></div>
-        <select v-if="!isArchive" v-model="fCategory" class="fsel"><option value="">All categories</option><option v-for="c in store.categories" :key="c" :value="c">{{ c }}</option></select>
-        <select v-if="!isArchive" v-model="fAccess" class="fsel"><option value="">Any access</option><option value="public">Public</option><option value="private">Private</option><option value="restricted">Restricted</option></select>
-        <select v-if="!isArchive" v-model="fPublished" class="fsel"><option value="">Any status</option><option value="pub">Published</option><option value="unpub">Unpublished</option></select>
+        <FilterMenu v-model="filters" :fields="filterFields" label="Filter" />
         <div class="cols-wrap">
           <button class="fsel colbtn" @click="openCols"><Icon name="rows" :size="14" /> Columns</button>
           <div v-if="colsOpen" class="cols-back" @click="colsOpen = false" />
@@ -126,6 +175,9 @@ function onDrop(target) {
             <button class="col-opt btn-like" @click="bulkMove('')">Uncategorized</button>
           </div>
         </div>
+        <!-- enable / disable the whole selection -->
+        <button v-if="!isArchive" class="btn btn-sm" title="Make these visible in listings" @click="bulkPublish(true)"><Icon name="eye" :size="14" /> Enable</button>
+        <button v-if="!isArchive" class="btn btn-sm" title="Hide these from listings" @click="bulkPublish(false)"><Icon name="lock" :size="14" /> Disable</button>
         <button class="btn btn-sm danger" @click="bulkArchive"><Icon name="archive" :size="14" /> Archive</button>
         <button class="btn btn-sm" @click="sel = new Set()">Clear</button>
       </div>
@@ -136,14 +188,14 @@ function onDrop(target) {
         <thead>
           <tr>
             <th class="c-chk"><input type="checkbox" :checked="allChecked" @change="toggleAll" /></th>
-            <th class="c-nm">Dashboard</th>
-            <th v-if="col('category')">Category</th>
-            <th v-if="col('tech')">Technician access</th>
-            <th v-if="col('group')">Group access</th>
-            <th v-if="col('description')">Description</th>
-            <th v-if="col('owner')">Owner</th>
-            <th v-if="col('status')">Status</th>
-            <th v-if="col('updated')">Updated</th>
+            <!-- click a header to sort: asc → desc → off, so the manual drag order is
+                 always reachable again. The caret only shows on hover or when active. -->
+            <th class="c-nm srt" :class="{ on: sortKey === 'name' }" @click="sortBy('name')">
+              <span class="th-in">Dashboard <Icon class="sc" :class="{ vis: sortKey === 'name' }" :name="sortIcon('name')" :size="13" /></span>
+            </th>
+            <th v-for="c in COLUMNS.filter((x) => col(x.key))" :key="c.key" class="srt" :class="{ on: sortKey === c.key }" @click="sortBy(c.key)">
+              <span class="th-in">{{ c.label }} <Icon class="sc" :class="{ vis: sortKey === c.key }" :name="sortIcon(c.key)" :size="13" /></span>
+            </th>
             <th class="c-act">Actions</th>
           </tr>
         </thead>
@@ -248,6 +300,15 @@ function onDrop(target) {
 .mtbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mtbl thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted-2); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .mtbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+/* sortable headers */
+.mtbl thead th.srt { cursor: pointer; user-select: none; }
+.mtbl thead th.srt:hover { color: var(--ink-2); }
+.mtbl thead th.on { color: var(--primary); }
+.th-in { display: inline-flex; align-items: center; gap: 3px; }
+.sc { opacity: 0; color: var(--muted-2); transition: opacity .12s; flex: none; }
+.mtbl thead th.srt:hover .sc { opacity: .6; }
+.sc.vis { opacity: 1; color: var(--primary); }
+
 .mtbl tbody tr:hover { background: var(--surface-2); }
 .mtbl tbody tr.sel { background: var(--primary-softer); }
 .mtbl tbody tr.dim { opacity: .55; }

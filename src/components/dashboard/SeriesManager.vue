@@ -12,7 +12,7 @@
  *
  * Search collapses to an icon so the list gets the vertical space instead.
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 
 const props = defineProps({
@@ -20,7 +20,11 @@ const props = defineProps({
   hidden: { type: Object, required: true },    // Set<key>
   total: { type: Number, required: true },     // pre-truncation denominator
   compact: { type: Boolean, default: false },
+  // only the All tab lists the whole set, so only there is searching it meaningful
+  searchable: { type: Boolean, default: true },
 })
+// leaving All collapses the search — a stale needle must not silently filter the list
+watch(() => props.searchable, (on) => { if (!on) closeSearch() })
 const emit = defineEmits(['toggle', 'reset', 'recolor'])
 
 const q = ref('')
@@ -59,7 +63,7 @@ const pct = (v) => ((v / props.total) * 100).toFixed(1)
 <template>
   <div class="sm" :class="{ compact }">
     <div class="sm-bar">
-      <template v-if="searchOpen">
+      <template v-if="searchOpen && searchable">
         <div class="sm-search">
           <Icon name="search" :size="13" class="mu" />
           <input ref="searchInput" v-model="q" placeholder="Search series…" @keydown.esc="closeSearch" />
@@ -67,7 +71,7 @@ const pct = (v) => ((v / props.total) * 100).toFixed(1)
         </div>
       </template>
       <template v-else>
-        <button class="si" title="Search series" @click="openSearch"><Icon name="search" :size="14" /></button>
+        <button v-if="searchable" class="si" title="Search series" @click="openSearch"><Icon name="search" :size="14" /></button>
         <button class="sh" :class="{ on: sortKey === 'name' }" @click="sortBy('name')">
           Series <Icon v-if="sortKey === 'name'" :name="sortDir === 'asc' ? 'sort-asc' : 'sort-desc'" :size="11" />
         </button>

@@ -44,6 +44,7 @@ const props = defineProps({
   chart: Object,
   height: { type: Number, default: 180 },
   legend: { type: Boolean, default: true },
+  dataLabels: { type: Boolean, default: false },   // print values on the slices themselves
 })
 
 /* Categorical palette: every adjacent pair must be separable at a 9px legend
@@ -243,7 +244,12 @@ const option = computed(() => {
         type: 'pie',
         radius: k === 'donut' ? ['52%', '78%'] : ['0%', '74%'],
         center: ['50%', '50%'],   // the legend is its own flex column, so the plot area is already narrowed
-        label: { show: false }, labelLine: { show: false },
+        // data labels sit *inside* the slice: leader lines outside would fight the
+        // side legend for the same strip of space
+        label: props.dataLabels
+          ? { show: true, position: 'inside', formatter: '{c}', fontSize: 10, fontFamily: t.font, color: '#fff', fontWeight: 600 }
+          : { show: false },
+        labelLine: { show: false },
         itemStyle: { borderColor: t.surface, borderWidth: 2 },
         emphasis: { focus: 'self', scale: true, scaleSize: 4 },
         blur: { itemStyle: { opacity: 0.18 } },
@@ -587,9 +593,13 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
             </div>
           </template>
 
-          <!-- the series that slice actually plots — click one to drop it from the chart -->
+          <!-- the series that slice actually plots — click one to drop it from the chart.
+               Search is offered only on the All tab: on Top/Bottom/Range/Coverage the
+               rank window has already narrowed the list, so searching it would hunt
+               through a set the filter chose rather than the data. -->
           <SeriesManager
             compact :entities="manageable" :hidden="hidden" :total="trueTotal"
+            :searchable="rankMode === 'all'"
             @toggle="toggle" @reset="resetSeries" @recolor="recolor"
           />
         </div>

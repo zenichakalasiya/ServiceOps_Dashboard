@@ -70,6 +70,22 @@ export function togglePublished(d) {
   if (d.enabled) toast(`Published “${d.name}” — it's visible again`, 'success')
   else toast(`Unpublished “${d.name}” — hidden from listings; shared people can no longer access it`, 'warn')
 }
+/* Bulk publish / unpublish. Reports what it actually did rather than what was
+ * selected — quietly doing nothing to the already-published ones would leave the
+ * user unsure whether the action fired at all. */
+export function setPublished(list, on) {
+  const changed = list.filter((d) => (d.enabled !== false) !== on)
+  changed.forEach((d) => { d.enabled = on })
+  if (!changed.length) { toast(`Already ${on ? 'published' : 'unpublished'}`, 'warn'); return }
+  const n = changed.length
+  toast(
+    on
+      ? `Published ${n} dashboard${n > 1 ? 's' : ''} — visible again`
+      : `Unpublished ${n} dashboard${n > 1 ? 's' : ''} — hidden from listings; shared people lose access`,
+    on ? 'success' : 'warn',
+  )
+}
+
 export function moveDashboardsToCategory(list, category) {
   list.forEach((d) => (d.category = category))
   toast(`Moved ${list.length} dashboard${list.length > 1 ? 's' : ''} to “${category || 'Uncategorized'}”`, 'success')

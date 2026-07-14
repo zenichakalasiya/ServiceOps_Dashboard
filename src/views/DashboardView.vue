@@ -497,11 +497,16 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         </div>
       </div>
       <div class="bh-right">
-        <div class="udr">
-          <button class="udr-b" :disabled="!canUndo" @click="undo"><Icon name="undo" :size="17" /><span class="udr-tip">Undo <kbd>Ctrl + Z</kbd></span></button>
-          <button class="udr-b" :disabled="!canRedo" @click="redo"><Icon name="redo" :size="17" /><span class="udr-tip">Redo <kbd>Ctrl + Y</kbd></span></button>
-        </div>
-        <span class="vsep" />
+        <!-- Undo/Redo appear only once there is something to undo. On an untouched
+             board they are two permanently-dead buttons taking up the space, so the
+             whole group (and its separator) is absent, not disabled. -->
+        <template v-if="canUndo || canRedo">
+          <div class="udr">
+            <button class="udr-b" :disabled="!canUndo" @click="undo"><Icon name="undo" :size="17" /><span class="udr-tip">Undo <kbd>Ctrl + Z</kbd></span></button>
+            <button class="udr-b" :disabled="!canRedo" @click="redo"><Icon name="redo" :size="17" /><span class="udr-tip">Redo <kbd>Ctrl + Y</kbd></span></button>
+          </div>
+          <span class="vsep" />
+        </template>
         <TimeFilter />
         <AutoRefresh />
         <span class="vsep" />
