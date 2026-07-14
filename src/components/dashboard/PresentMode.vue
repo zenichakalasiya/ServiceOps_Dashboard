@@ -1,6 +1,6 @@
 <script setup>
 // Full-screen (TV) view of a single dashboard — Esc or ✕ to exit.
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import Icon from '../ui/Icon.vue'
 import WidgetCard from './WidgetCard.vue'
 import TimeFilter from './TimeFilter.vue'
@@ -25,8 +25,6 @@ function cellStyle(t) {
  * view-time controls that say WHAT WINDOW you're looking at and WHEN IT LAST
  * UPDATED are needed here more than anywhere, not less. They read the same global
  * store state as the board, so the window survives entering and leaving present mode. */
-const spin = ref(false)
-function refreshAll() { spin.value = true; setTimeout(() => { spin.value = false }, 800) }
 </script>
 
 <template>
@@ -36,7 +34,8 @@ function refreshAll() { spin.value = true; setTimeout(() => { spin.value = false
         <div class="pm-title"><Icon name="layout" :size="16" /><b>{{ cur?.name }}</b></div>
         <div class="pm-ctl">
           <TimeFilter />
-          <button class="pm-refresh" title="Refresh now" @click="refreshAll"><Icon name="refresh" :size="17" :class="{ spin }" /></button>
+          <!-- AutoRefresh already carries its own refresh button AND the interval
+               dropdown — a second standalone refresh was just a duplicate icon. -->
           <AutoRefresh />
           <span class="pm-sep" />
           <button class="pm-exit" title="Exit (Esc)" @click="emit('close')"><Icon name="x" :size="20" /></button>
@@ -59,8 +58,6 @@ function refreshAll() { spin.value = true; setTimeout(() => { spin.value = false
 .pm-title b { font-weight: 600; }
 .pm-ctl { display: flex; align-items: center; gap: 8px; }
 .pm-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
-.pm-refresh { width: 36px; height: 36px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
-.pm-refresh:hover { background: var(--surface-2); color: var(--ink); }
 .pm-exit { width: 44px; height: 44px; border: none; background: transparent; color: var(--muted); border-radius: 12px; display: grid; place-items: center; }
 .pm-exit:hover { background: var(--red-soft); color: var(--red); }
 .pm-body { flex: 1; overflow: auto; padding: 22px 26px; }
