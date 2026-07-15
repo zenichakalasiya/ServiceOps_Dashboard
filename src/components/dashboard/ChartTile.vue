@@ -119,19 +119,13 @@ function resetSeries() { hidden.value = new Set() }
 function recolor({ key, color }) { overrides.value = { ...overrides.value, [key]: color } }
 
 /* --- mode 2: the rank window. "Top N" is one window onto a sorted list;
- * bottom / rank-range / coverage are the others. Range is what lets a user
- * reach the middle of the distribution at all. --- */
-const rankMode = ref('top')      // top | bottom | range | coverage | all
+ * bottom is the other. "All" drops the window entirely. --- */
+const rankMode = ref('top')      // top | bottom | all
 const rankN = ref(10)
-const rangeFrom = ref(11)
-const rangeTo_ = ref(20)
-const coverage = ref(90)
 
 const RANKS = [
   { id: 'top', label: 'Top N' },
   { id: 'bottom', label: 'Bottom N' },
-  { id: 'range', label: 'Custom range' },
-  { id: 'coverage', label: 'Coverage %' },
   { id: 'all', label: 'All' },
 ]
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : lo))
@@ -142,16 +136,6 @@ const windowed = computed(() => {
   if (!n) return s
   if (rankMode.value === 'all') return s
   if (rankMode.value === 'bottom') return s.slice(n - clamp(rankN.value, 1, n))
-  if (rankMode.value === 'range') {
-    const from = clamp(rangeFrom.value, 1, n)
-    return s.slice(from - 1, clamp(rangeTo_.value, from, n))
-  }
-  if (rankMode.value === 'coverage') {
-    const target = (clamp(coverage.value, 1, 100) / 100) * trueTotal.value
-    const out = []; let run = 0
-    for (const e of s) { out.push(e); run += e.value; if (run >= target) break }
-    return out
-  }
   return s.slice(0, clamp(rankN.value, 1, n))
 })
 const otherCount = computed(() => entities.value.length - windowed.value.length)
@@ -161,12 +145,10 @@ const censusLabel = computed(() => {
   const n = windowed.value.length, t = entities.value.length
   if (rankMode.value === 'all') return `All ${t}`
   if (rankMode.value === 'bottom') return `Bottom ${n} of ${t}`
-  if (rankMode.value === 'range') return `Rank ${clamp(rangeFrom.value, 1, t)}–${clamp(rangeTo_.value, 1, t)} of ${t}`
-  if (rankMode.value === 'coverage') return `${n} of ${t} · ${clamp(coverage.value, 1, 100)}% of volume`
   return `Top ${n} of ${t}`
 })
 // a new window is a new visible set — stale hidden keys would silently persist
-watch([rankMode, rankN, rangeFrom, rangeTo_, coverage], () => { hidden.value = new Set() })
+watch([rankMode, rankN], () => { hidden.value = new Set() })
 
 /* Modes that bound the series set to a rank window (Top/Bottom/Range/Coverage). */
 const rankModes = computed(() => mode.value === 2 || mode.value === 6)
@@ -398,7 +380,6 @@ const legendClickable = computed(() => rankModes.value || chipModes.value)
 const sideLegend = computed(() => sliceBased.value && props.legend)
 
 const ROW_H = 22          // one legend row, incl. gap — keep in step with .lg-side
-const PAGER_H = 26        // the ‹ 1/3 › strip, only rendered when it's needed
 const legendCol = ref(null)
 const colH = ref(0)
 const page = ref(0)
@@ -412,15 +393,13 @@ onMounted(() => {
 onBeforeUnmount(() => ro?.disconnect())
 
 const sideEntries = computed(() => manageable.value)
-/* How many rows fit. Measured twice: once assuming no pager, and if that already
- * needs one, again with the pager's height taken out — otherwise adding the pager
- * could push a row out and change the answer after the fact. */
+/* How many rows fit. The rank pill and pager both live in the footer, which is a
+ * sibling of the measured list — so colH already excludes them and the count is a
+ * straight divide, no reserving. */
 const perPage = computed(() => {
   const h = colH.value
   if (!h) return sideEntries.value.length || 1
-  const naive = Math.max(1, Math.floor(h / ROW_H))
-  if (naive >= sideEntries.value.length) return naive          // everything fits, no pager
-  return Math.max(1, Math.floor((h - PAGER_H) / ROW_H))
+  return Math.max(1, Math.floor(h / ROW_H))
 })
 const pageCount = computed(() => Math.max(1, Math.ceil(sideEntries.value.length / perPage.value)))
 const paged = computed(() => {
@@ -521,14 +500,6 @@ onBeforeUnmount(() => {
         <!-- Part-of-whole charts: legend to the RIGHT, one slice per line, paged to
              whatever the widget's height can hold. Taller widget → more per page. -->
         <aside v-if="sideLegend" class="legend-side">
-          <button
-            v-if="rankModes" ref="rankBtn" class="cs-chip side" :class="{ on: panelOpen }"
-            title="Choose which slice of the ranking to plot" @click.stop="togglePanel(rankBtn)"
-          >
-            <Icon name="filter" :size="12" /> {{ censusLabel }}
-            <Icon name="chevron-down" :size="13" />
-          </button>
-
           <div ref="legendCol" class="ls-list">
             <span
               v-for="e in paged" :key="e.key" class="lg lg-side"
@@ -543,12 +514,24 @@ onBeforeUnmount(() => {
             </span>
           </div>
 
-          <!-- only when the list genuinely doesn't fit -->
-          <div v-if="pageCount > 1" class="ls-pager">
-            <button :disabled="page === 0" title="Previous" @click="page--"><Icon name="chevron-left" :size="14" /></button>
-            <span>{{ page + 1 }} / {{ pageCount }}</span>
-            <button :disabled="page >= pageCount - 1" title="Next" @click="page++"><Icon name="chevron-right" :size="14" /></button>
-          </div>
+          <!-- The rank pill and the pager share one footer row, pinned to the bottom.
+               Keeping the pill out of the top gives the list an extra row, and pairing
+               it with the pager means the chrome costs one line, not two. -->
+          <footer v-if="rankModes || pageCount > 1" class="ls-foot">
+            <button
+              v-if="rankModes" ref="rankBtn" class="cs-chip side" :class="{ on: panelOpen }"
+              title="Choose which slice of the ranking to plot" @click.stop="togglePanel(rankBtn)"
+            >
+              <span class="cs-lbl">{{ censusLabel }}</span>
+              <Icon name="chevron-down" :size="13" />
+            </button>
+
+            <div v-if="pageCount > 1" class="ls-pager">
+              <button :disabled="page === 0" title="Previous" @click="page--"><Icon name="chevron-left" :size="14" /></button>
+              <span>{{ page + 1 }} / {{ pageCount }}</span>
+              <button :disabled="page >= pageCount - 1" title="Next" @click="page++"><Icon name="chevron-right" :size="14" /></button>
+            </div>
+          </footer>
         </aside>
       </div>
 
@@ -623,17 +606,6 @@ onBeforeUnmount(() => {
                 <input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rankN" />
                 <span>{{ rankMode === 'top' ? 'largest' : 'smallest' }} of {{ entities.length }}</span>
               </template>
-              <template v-else-if="rankMode === 'range'">
-                <label>Ranks</label>
-                <input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rangeFrom" />
-                <span class="rp-d">to</span>
-                <input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rangeTo_" />
-              </template>
-              <template v-else-if="rankMode === 'coverage'">
-                <label>Cover</label>
-                <input class="rp-n" type="number" min="1" max="100" v-model.number="coverage" />
-                <span>% of total volume</span>
-              </template>
               <template v-else>
                 <span class="rp-warn"><Icon name="alert" :size="13" /> Colour stops carrying meaning past about 10.</span>
               </template>
@@ -670,11 +642,17 @@ onBeforeUnmount(() => {
    name still shrinks and ellipses, which is what the min-width: 0 is for. */
 .ls-nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lg-side b { flex: none; margin-left: 2px; font-variant-numeric: tabular-nums; }
-.ls-pager { flex: none; display: flex; align-items: center; justify-content: center; gap: 4px; height: 22px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.ls-pager button { width: 20px; height: 20px; border: none; background: transparent; color: var(--muted); border-radius: 5px; display: grid; place-items: center; }
+/* Footer: pill on the left, pager on the right, on one line. It wraps only if the
+   two genuinely can't share the width — then it degrades to the old stacked look. */
+.ls-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ls-pager { flex: none; margin-left: auto; display: flex; align-items: center; justify-content: center; gap: 2px; height: 22px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ls-pager button { width: 18px; height: 18px; border: none; background: transparent; color: var(--muted); border-radius: 5px; display: grid; place-items: center; }
 .ls-pager button:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
 .ls-pager button:disabled { opacity: .3; cursor: not-allowed; }
-.cs-chip.side { align-self: stretch; justify-content: center; }
+/* The pill takes the row's spare width and its label ellipses rather than pushing
+   the pager off the line. */
+.cs-chip.side { flex: 1 1 auto; min-width: 0; justify-content: center; padding: 0 7px; gap: 3px; }
+.cs-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* The pill is the row's anchor: it must sit at the far left and stay there. So the
    row itself never wraps — only the chips inside .lg-wrap do. (With flex-wrap on
