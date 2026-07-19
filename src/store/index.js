@@ -13,6 +13,10 @@ export const store = reactive({
   currentUser: 'Aarav Mehta',
   toasts: [],
   ui: { createOpen: false, cloneTarget: null, editTarget: null, pendingAddWidget: false, theme: 'light', listingOpen: false, listingQuery: '', groupStyle: 1, listStyle: 1, legendStyle: 6,
+    // AI entry-point demo: which surface reveals the AI Summary/Assistant, and whether the panel is open.
+    // Entry ids live in src/data/aiEntries.js; one at a time, switched from the on-board demo bar.
+    // aiAsk lets any component (topbar, a widget) request the panel run an intent — the board forwards it.
+    aiEntry: 'card', aiPanelOpen: false, aiAsk: null,
     // { title, type } — a widget to scroll to and flash once the board has loaded
     focusTile: null },
   // global view-time controls (per the rebuilt Time Filter + Auto-Refresh)

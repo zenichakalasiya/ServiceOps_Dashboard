@@ -8,8 +8,11 @@ import FilterMenu from '../ui/FilterMenu.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { typesFor, isFrozen, frozenReason, whyDisabled } from '../../data/chartTypes.js'
 import { fieldsFrom } from '../../data/filters.js'
-import { toast } from '../../store/index.js'
+import { store, toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean })
+// Per-widget AI is an always-on default affordance (not a demo tab): ask the assistant
+// to explain this one tile. Deeper per-widget behaviour is intentionally deferred.
+function askAiWidget() { store.ui.aiAsk = { intent: 'explain', text: `Explain ${props.tile.title}` } }
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin'])
 
 // classify a table cell into a soft status/priority pill
@@ -188,6 +191,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         </span>
       </div>
       <div class="right">
+        <button v-if="!tiny" class="ti ai" @click.stop="askAiWidget" title="Ask AI about this widget"><Icon name="sparkles" :size="15" /></button>
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
         <FilterMenu v-if="tile.type === 'shortcut' && filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter records" class="ti-fm" />
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
@@ -369,6 +373,8 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ti { width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; }
 .ti:hover { background: var(--surface-2); color: var(--ink); }
 .ti.on { background: var(--primary-soft); color: var(--primary-700); }
+.ti.ai { color: var(--ai); }
+.ti.ai:hover { background: var(--ai-soft); color: var(--ai-ink); }
 .spin { animation: sp 0.75s linear infinite; } @keyframes sp { to { transform: rotate(360deg); } }
 .mwrap { position: relative; }
 .backdrop { position: fixed; inset: 0; z-index: 130; }

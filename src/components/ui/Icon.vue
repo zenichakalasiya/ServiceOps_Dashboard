@@ -14,7 +14,7 @@ const MAP = {
   share: 'share', link: 'link', copy: 'content_copy', edit: 'edit', trash: 'delete',
   archive: 'archive', restore: 'restore', 'dots-v': 'more_vert', 'dots-h': 'more_horiz',
   fullscreen: 'fullscreen', info: 'info', 'chevron-down': 'keyboard_arrow_down',
-  'chevron-right': 'chevron_right', 'chevron-left': 'chevron_left', grid: 'grid_view',
+  'chevron-right': 'chevron_right', 'chevron-left': 'chevron_left', 'chevron-up': 'keyboard_arrow_up', grid: 'grid_view',
   list: 'format_list_bulleted', check: 'check', x: 'close', eye: 'visibility', filter: 'filter_alt',
   kpi: 'numbers', 'chart-bar': 'bar_chart', 'chart-line': 'show_chart', 'chart-pie': 'pie_chart',
   table: 'table_chart', home: 'home', layout: 'dashboard', sparkles: 'auto_awesome',

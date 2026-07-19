@@ -14,6 +14,17 @@
   --red: #e0483d;    --red-soft: #fdecea;
   --blue: #3279be;   --blue-soft: #e7f0f9;
 
+  /* AI accent — the sparkle/summary branding (violet → magenta), kept distinct
+     from the product blue so "this is AI" reads at a glance. */
+  --ai: #8b5cf6;
+  --ai-2: #d9488f;
+  --ai-ink: #6d28d9;           /* AI text on light */
+  --ai-soft: #f2ecfe;          /* lavender surface */
+  --ai-softer: #f9f6ff;
+  --ai-border: #e7dcfb;
+  --ai-grad: linear-gradient(120deg, #8b5cf6 0%, #a855f7 45%, #d9488f 100%);
+  --ai-grad-soft: linear-gradient(120deg, #f7f2ff 0%, #fdf3fb 100%);
+
   /* Neutrals — ServiceOps token source */
   --bg: #f9fafb;               /* Light BG / Card Foreground */
   --surface: #ffffff;          /* White / Widget BG / Nav BG */
@@ -52,6 +63,16 @@
   --primary-softer: #0c2937;
 
   --green-soft: #133227; --amber-soft: #332811; --red-soft: #3a1f1d; --blue-soft: #122844;
+
+  /* AI accent — dark: lift the ink so violet reads on the dark surface */
+  --ai: #a78bfa;
+  --ai-2: #f472b6;
+  --ai-ink: #c4b5fd;
+  --ai-soft: #241f39;
+  --ai-softer: #1f1b2e;
+  --ai-border: #3a3358;
+  --ai-grad: linear-gradient(120deg, #a78bfa 0%, #c084fc 45%, #f472b6 100%);
+  --ai-grad-soft: linear-gradient(120deg, #211d33 0%, #2a1f30 100%);
 
   --bg: #14141c;
   --surface: #1d1d27;

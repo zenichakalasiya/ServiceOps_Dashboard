@@ -1,7 +1,10 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import { store, toast } from '../../store/index.js'
+const router = useRouter()
+const route = useRoute()
 // ServiceOps modules, mirrored from the live .185 module rail.
 const modules = [
   { key: 'dashboard', label: 'Dashboard', icon: 'layout', active: true },
@@ -38,6 +41,12 @@ function go(m) { if (!m.active) toast(`${m.label} is outside this dashboards pro
         <transition name="fade"><span v-if="hover === m.key" class="tip">{{ m.label }}</span></transition>
       </button>
     </div>
+    <!-- AI Capabilities showcase — pinned to the foot of the rail, sparkle-accented -->
+    <button class="mod ai" :class="{ active: route.path === '/ai' }"
+      @click="router.push('/ai')" @mouseenter="hover = 'ai'" @mouseleave="hover = ''">
+      <Icon name="sparkles" :size="19" />
+      <transition name="fade"><span v-if="hover === 'ai'" class="tip">AI Capabilities</span></transition>
+    </button>
   </nav>
 </template>
 
@@ -52,5 +61,9 @@ function go(m) { if (!m.active) toast(`${m.label} is outside this dashboards pro
 .mod { position: relative; width: 40px; height: 40px; border: none; background: transparent; color: var(--muted); border-radius: 10px; display: grid; place-items: center; }
 .mod:hover { background: var(--surface-2); color: var(--ink); }
 .mod.active { background: var(--primary-soft); color: var(--primary-700); }
+/* AI showcase entry — sits at the foot of the rail, sparkle-tinted */
+.mod.ai { margin-top: auto; color: var(--primary); }
+.mod.ai:hover { background: var(--primary-soft); color: var(--primary-700); }
+.mod.ai.active { background: var(--primary); color: #fff; }
 .tip { position: absolute; left: 48px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: #20223a; color: #fff; font-size: 12px; font-weight: 500; padding: 5px 9px; border-radius: 7px; box-shadow: var(--sh-pop); z-index: 90; }
 </style>

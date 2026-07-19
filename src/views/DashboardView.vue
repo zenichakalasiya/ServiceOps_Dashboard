@@ -14,6 +14,12 @@ import DownloadDialog from '../components/dashboard/DownloadDialog.vue'
 import SharePopover from '../components/dashboard/SharePopover.vue'
 import ShareDialog from '../components/dashboard/ShareDialog.vue'
 import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
+import AiSummaryCard from '../components/ai/AiSummaryCard.vue'
+import AiAssistant from '../components/ai/AiAssistant.vue'
+import { demoBoard } from '../data/aiDemo.js'
+import { routeIntent } from '../data/aiAssistant.js'
+import { facts as computeFacts } from '../data/aiEngine.js'
+import { AI_ENTRIES } from '../data/aiEntries.js'
 import { store, byId, recordView, toggleFavorite, removeTile, toast, rearrangeTiles } from '../store/index.js'
 import { uid } from '../data/mock.js'
 const route = useRoute()
@@ -120,6 +126,33 @@ const LSTYLES = [
 ]
 const showLegendDemo = false
 const ls = computed(() => store.ui.legendStyle)
+
+// ---- AI entry-point DEMO: nine ways to surface the AI Summary/Assistant, one at a time.
+// Every entry opens the same grounded assistant panel (or, for ①, expands the card). The
+// panel and card run off a stable demo board so the anomaly/summary story is always there.
+const AISTYLES = AI_ENTRIES
+const aiEntry = computed(() => store.ui.aiEntry)
+const aiBoard = demoBoard()
+const aiRole = ref('technician')
+const aiNudgeDismissed = ref(false)
+// The nudge is grounded: it names what the deterministic engine actually found on this board,
+// role-ranked, and shows the calm-board copy when nothing is off — never manufactured urgency.
+const aiAttention = computed(() => computeFacts(aiBoard, aiRole.value).filter((f) => f.severity === 'bad' || f.severity === 'warn'))
+const aiPanel = ref(null)
+function openAi() { store.ui.aiPanelOpen = true }
+function askAi(text) {
+  store.ui.aiPanelOpen = true
+  if (text) nextTick(() => aiPanel.value?.trigger(routeIntent(text), text))
+}
+function askTile(title) { store.ui.aiPanelOpen = true; nextTick(() => aiPanel.value?.trigger('explain', `Explain ${title}`)) }
+// switching the demo tab is a clean slate: close the panel and restore the nudge
+watch(aiEntry, () => { store.ui.aiPanelOpen = false; aiNudgeDismissed.value = false })
+// a widget or the topbar can request an intent from anywhere; forward it into the panel
+watch(() => store.ui.aiAsk, (a) => {
+  if (!a) return
+  store.ui.aiPanelOpen = true
+  nextTick(() => { aiPanel.value?.trigger(a.intent, a.text); store.ui.aiAsk = null })
+})
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
 const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
 const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here" between groups
@@ -558,6 +591,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <button class="btn ico-only" :class="{ on: showDownload }" @click.stop="showDownload = !showDownload" title="Download"><Icon name="download" :size="17" /></button>
           <DownloadDialog v-if="showDownload" :d="d" @close="showDownload = false" />
         </div>
+        <!-- ② toolbar entry — a compact sparkle beside ⋯, so it never competes with the top-bar Ask AI -->
+        <button v-if="aiEntry === 'toolbar'" class="btn ico-only ai-ico" @click="openAi()" title="Ask AI about this dashboard"><Icon name="sparkles" :size="17" /></button>
         <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" />
       </div>
     </header>
@@ -596,6 +631,41 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         </div>
         <span class="gsb-desc">{{ LSTYLES.find(s => s.id === ls)?.desc }}</span>
       </div>
+
+      <!-- DEMO: the nine AI entry points, one at a time. Purple = AI, per the ServiceOps branding. -->
+      <div v-if="!loadingBoard" class="gstyle-bar ai-bar">
+        <span class="gsb-label ai"><Icon name="sparkles" :size="14" /> AI entry</span>
+        <div class="gsb-seg">
+          <button v-for="s in AISTYLES" :key="s.id" class="gsb-b" :class="{ on: aiEntry === s.id }" :title="s.desc" @click="store.ui.aiEntry = s.id">
+            <span class="gsb-n">{{ s.n }}</span> {{ s.label }}
+          </button>
+        </div>
+        <span class="gsb-desc">{{ AISTYLES.find(s => s.id === aiEntry)?.desc }}<em v-if="AISTYLES.find(s => s.id === aiEntry)?.ref"> · {{ AISTYLES.find(s => s.id === aiEntry)?.ref }}</em></span>
+      </div>
+
+      <!-- AI entry surfaces (only one shows, driven by the tab above) -->
+      <template v-if="!loadingBoard && d.tiles.length">
+        <!-- ① pinned summary card (the ServiceOps reference) -->
+        <AiSummaryCard v-if="aiEntry === 'card'" :board="aiBoard" @ask="(i, t) => t ? askAi(t) : openAi()" />
+
+        <!-- ⑤ dismissible onboarding nudge — grounded in what the engine actually found -->
+        <div v-else-if="aiEntry === 'nudge' && !aiNudgeDismissed" class="ai-nudge">
+          <span class="an-spark"><Icon name="sparkles" :size="18" /></span>
+          <div class="an-txt">
+            <template v-if="aiAttention.length">
+              <b>AI already read this dashboard.</b>
+              It flagged {{ aiAttention.length }} thing{{ aiAttention.length > 1 ? 's' : '' }} that need attention — top of the list: “{{ aiAttention[0].text }}”.
+            </template>
+            <template v-else>
+              <b>New — AI on your dashboards.</b>
+              It ranks what needs attention, explains a spike, and builds a widget from one sentence.
+            </template>
+            <span class="an-sub"><Icon name="lock" :size="11" /> On-prem · grounded in your data — nothing leaves your server.</span>
+          </div>
+          <button class="an-try" @click="openAi()">{{ aiAttention.length ? 'Show me what needs attention' : 'Try it' }}</button>
+          <button class="an-x" title="Dismiss" @click="aiNudgeDismissed = true"><Icon name="x" :size="15" /></button>
+        </div>
+      </template>
 
       <!-- loading skeleton (P2·9) -->
       <div v-if="loadingBoard" class="grid">
@@ -751,10 +821,28 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <button v-if="gShowFabGroup" class="fab-opt" @click="fabMenu = false; addEmptyGroup()">
             <span class="fo-ic grp"><Icon name="new-group" :size="18" /></span> Empty Group
           </button>
+          <!-- ③ "Generate with AI" inside the Create menu (the Amplitude pattern) -->
+          <button v-if="aiEntry === 'addmenu'" class="fab-opt" @click="fabMenu = false; openAi()">
+            <span class="fo-ic ai"><Icon name="sparkles" :size="18" /></span> Generate with AI
+          </button>
+          <!-- ⑩ "Create a dashboard with AI" — describe a board, AI assembles it (Ask Zia / SpotterViz) -->
+          <button v-if="aiEntry === 'createai'" class="fab-opt" @click="fabMenu = false; openAi()">
+            <span class="fo-ic ai"><Icon name="sparkles" :size="18" /></span> Create dashboard with AI
+          </button>
         </div>
       </transition>
-      <button class="fab" :class="{ on: fabMenu }" @click="fabMenu = !fabMenu" title="Add"><Icon name="plus" :size="26" /></button>
+      <button class="fab" :class="{ on: fabMenu, 'ai-hint': (aiEntry === 'addmenu' || aiEntry === 'createai') && !fabMenu }" @click="fabMenu = !fabMenu" title="Add"><Icon name="plus" :size="26" /></button>
     </div>
+
+    <!-- the docked assistant panel — the shared destination every entry opens into -->
+    <teleport to="body">
+      <transition name="ai-slide">
+        <div v-if="store.ui.aiPanelOpen" class="ai-dock">
+          <AiAssistant ref="aiPanel" :board="aiBoard" :role="aiRole" :open="store.ui.aiPanelOpen"
+            @update:open="store.ui.aiPanelOpen = $event" @role="aiRole = $event" />
+        </div>
+      </transition>
+    </teleport>
 
     <AddWidgetModal v-if="showAdd" :d="d" :group="addToGroup" @close="showAdd = false; addToGroup = null" @created="onWidgetCreated" @newgroup="onNewGroup" />
     <WidgetBuilderModal v-if="editTile" :d="d" :type="typeForTile(editTile)" :existing="editTile" @close="editTile = null" @saved="onTileSaved" />
@@ -881,7 +969,40 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .gsb-b.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); font-weight: 600; }
 .gsb-n { font-size: 13px; }
 .gsb-desc { font-size: 12px; color: var(--muted-2); margin-left: auto; }
+.gsb-desc em { font-style: normal; color: var(--ai-ink); font-weight: 500; }
 @media (max-width: 720px) { .gsb-desc { display: none; } }
+
+/* ---- AI entry demo: bar tinted lavender so it reads as the AI control ---- */
+.ai-bar { border-color: var(--ai-border); background: var(--ai-softer); }
+.gsb-label.ai :deep(.ico), .ai-bar .gsb-label { color: var(--ai-ink); }
+.gsb-label.ai :deep(.ico) {
+  background: var(--ai-grad); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.ai-bar .gsb-b.on { color: var(--ai-ink); box-shadow: 0 0 0 1px var(--ai-border), var(--sh-sm); }
+
+/* ② toolbar icon — a compact sparkle beside ⋯ (icon-only, no "Ask AI" text) */
+.ai-ico.btn.ico-only { border-color: var(--ai-border); background: var(--ai-softer); color: var(--ai); }
+.ai-ico.btn.ico-only:hover { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
+
+/* ⑥ onboarding nudge */
+.ai-nudge { display: flex; align-items: center; gap: 12px; border: 1px solid var(--ai-border); border-radius: var(--r-lg); background: var(--ai-grad-soft); padding: 11px 14px; margin-bottom: 14px; }
+.an-spark { flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
+.an-txt { flex: 1; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.an-txt b { color: var(--ink); }
+.an-sub { display: flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+.an-sub :deep(.ico) { color: var(--ai); }
+.an-try { flex: none; height: 32px; padding: 0 15px; border: none; border-radius: var(--r-pill); background: var(--ai-grad); color: #fff; font-weight: 600; font-size: 12.5px; }
+.an-try:hover { filter: brightness(1.06); }
+.an-x { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
+.an-x:hover { background: var(--ai-soft); color: var(--ai-ink); }
+
+/* docked assistant panel */
+.ai-dock { position: fixed; top: var(--topbar-h); right: 0; width: 410px; max-width: 92vw; height: calc(100vh - var(--topbar-h)); z-index: 200; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--sh-lg); }
+.ai-slide-enter-active, .ai-slide-leave-active { transition: transform .22s ease, opacity .22s ease; }
+.ai-slide-enter-from, .ai-slide-leave-to { transform: translateX(24px); opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .ai-slide-enter-active, .ai-slide-leave-active { transition: none; } }
+.fo-ic.ai { background: var(--ai-grad); }
 .bg-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 /* ⑨ auto-group: segmented "Group by" control */
 .auto-seg { display: inline-flex; gap: 3px; background: var(--surface-2); padding: 3px; border-radius: 8px; border: 1px solid var(--border); }
@@ -941,6 +1062,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .fab:hover { background: var(--primary-600); transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 28px rgba(61,139,208,.5); }
 .fab:active { transform: translateY(0) scale(.98); }
 .fab.on { transform: rotate(45deg); }
+/* ③/⑩ live inside this menu — tint it AI-purple and pulse so the entry is findable */
+.fab.ai-hint { background: var(--ai-grad); box-shadow: 0 8px 22px rgba(139,92,246,.42); animation: fabpulse 2.2s ease-in-out infinite; }
+@keyframes fabpulse { 0%, 100% { box-shadow: 0 8px 22px rgba(139,92,246,.42), 0 0 0 0 rgba(139,92,246,.35); } 50% { box-shadow: 0 8px 22px rgba(139,92,246,.42), 0 0 0 9px rgba(139,92,246,0); } }
+@media (prefers-reduced-motion: reduce) { .fab.ai-hint { animation: none; } }
 .fab.on:hover { transform: rotate(45deg) translateY(-2px) scale(1.04); }
 /* slide-up menu above the FAB */
 .fab-menu { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
