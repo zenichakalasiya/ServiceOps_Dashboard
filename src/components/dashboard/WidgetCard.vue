@@ -10,9 +10,31 @@ import { typesFor, isFrozen, frozenReason, whyDisabled } from '../../data/chartT
 import { fieldsFrom } from '../../data/filters.js'
 import { store, toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean })
-// Per-widget AI is an always-on default affordance (not a demo tab): ask the assistant
-// to explain this one tile. Deeper per-widget behaviour is intentionally deferred.
-function askAiWidget() { store.ui.aiAsk = { intent: 'explain', text: `Explain ${props.tile.title}` } }
+// Per-widget AI (catalog section B): a hover sparkle opens a small menu of widget-scoped
+// actions; each routes into the shared assistant panel via store.ui.aiAsk. Forecast/alert
+// map to explain in this prototype (the panel has no dedicated forecast block yet).
+const aiBtn = ref(null)
+const aiMenu = ref(false)
+const aiMenuPos = ref({ top: 0, left: 0 })
+const WIDGET_AI = [
+  { label: 'Explain this', intent: 'explain', icon: 'bulb', t: (n) => `Explain ${n}` },
+  { label: 'Why did it change?', intent: 'explain', icon: 'trend', t: (n) => `Why did ${n} change?` },
+  { label: 'Show the records behind it', intent: 'drill', icon: 'table', t: (n) => `Show the records behind ${n}` },
+  { label: 'Break down by team / priority', intent: 'drill', icon: 'sitemap', t: (n) => `Break down ${n} by team` },
+  { label: 'Forecast the trend', intent: 'explain', icon: 'chart-line', t: (n) => `Forecast ${n}` },
+  { label: 'Alert me when this crosses X', intent: 'explain', icon: 'bell', t: (n) => `Alert me when ${n} crosses a threshold` },
+]
+function toggleAiMenu() {
+  if (aiMenu.value) { aiMenu.value = false; return }
+  const r = aiBtn.value?.getBoundingClientRect()
+  const W = 236
+  if (r) aiMenuPos.value = { top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) }
+  aiMenu.value = true
+}
+function askAiWidget(chip) {
+  store.ui.aiAsk = { intent: chip.intent, text: chip.t(props.tile.title) }
+  aiMenu.value = false
+}
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin'])
 
 // classify a table cell into a soft status/priority pill
@@ -202,7 +224,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         </span>
       </div>
       <div class="right">
-        <button v-if="!tiny" class="ti ai" @click.stop="askAiWidget" title="Ask AI about this widget"><Icon name="sparkles" :size="15" /></button>
+        <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiMenu }" @click.stop="toggleAiMenu" title="Ask AI about this widget"><Icon name="sparkles" :size="15" /></button>
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
         <FilterMenu v-if="tile.type === 'shortcut' && filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter records" class="ti-fm" />
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
@@ -213,6 +235,19 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         </div>
       </div>
     </header>
+
+    <!-- per-widget AI menu (catalog section B) — teleported so it overlays the card -->
+    <teleport to="body">
+      <div v-if="aiMenu" class="backdrop" @click="aiMenu = false" />
+      <transition name="pop">
+        <div v-if="aiMenu" class="menu tile-menu ai-menu" :style="{ top: aiMenuPos.top + 'px', left: aiMenuPos.left + 'px' }" @click.stop>
+          <div class="menu-label ai-lbl"><Icon name="sparkles" :size="13" /> Ask AI · {{ tile.title }}</div>
+          <button v-for="c in WIDGET_AI" :key="c.label" class="menu-item" @click="askAiWidget(c)">
+            <Icon :name="c.icon" :size="15" /> {{ c.label }}
+          </button>
+        </div>
+      </transition>
+    </teleport>
 
     <!-- info tooltip: teleported so it isn't clipped by the card's overflow -->
     <teleport to="body">
@@ -388,7 +423,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ti:hover { background: var(--surface-2); color: var(--ink); }
 .ti.on { background: var(--primary-soft); color: var(--primary-700); }
 .ti.ai { color: var(--ai); }
-.ti.ai:hover { background: var(--ai-soft); color: var(--ai-ink); }
+.ti.ai:hover, .ti.ai.on { background: var(--ai-soft); color: var(--ai-ink); }
+.ai-menu { min-width: 236px; }
+.ai-lbl { display: flex; align-items: center; gap: 6px; }
+.ai-lbl :deep(.ico) { color: var(--ai); }
 .spin { animation: sp 0.75s linear infinite; } @keyframes sp { to { transform: rotate(360deg); } }
 .mwrap { position: relative; }
 .backdrop { position: fixed; inset: 0; z-index: 130; }

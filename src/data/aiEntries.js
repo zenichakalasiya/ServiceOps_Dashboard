@@ -13,7 +13,7 @@
 // each tile, not a demo option. The prompt-bar and topbar-sparkle demos were cut.
 export const AI_ENTRIES = [
   { id: 'card', n: '①', label: 'Summary card', ref: 'ServiceOps reference',
-    desc: 'A pinned “AI Summary” card — collapsed by default, expands to the dashboard summary + data-aware deep-dive chips (“Why is [metric] up?” · “Show tickets about to breach” · “Ask about this dashboard”).' },
+    desc: 'A pinned “AI Summary” card — expands to the dashboard summary + the dashboard-level action set: a data-aware “Why is [metric] up?”, plus Show-about-to-breach, Prioritize, What-changed, Ask, and Draft-handover.' },
   { id: 'toolbar', n: '②', label: 'Toolbar icon', ref: 'Pipedrive · Stripe',
     desc: 'A compact sparkle icon beside the board’s ⋯ menu — opens the assistant without competing with the global top-bar “Ask AI”.' },
   { id: 'addmenu', n: '③', label: 'Generate widget', ref: 'Amplitude',

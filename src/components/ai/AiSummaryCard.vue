@@ -76,14 +76,20 @@ const topLabel = computed(() => {
   const down = /down|drop|below|dip/.test(s.text.toLowerCase())
   return `Why is ${s.chip} ${down ? 'down' : 'up'}?`
 })
-/* Dashboard-level chips. RCA on the flagged metric (data-aware) → predict breaches →
- * open-ended ask. On a calm board the RCA chip drops and "about to breach" leads. */
+/* The full DASHBOARD-level action set (catalog section A). The first chip is data-aware —
+ * it names whatever the engine flagged first ("Why is Overdue up?") and drops on a calm
+ * board. Each carries an explicit intent routed into the assistant panel; ✅ ones are
+ * grounded, 🔶 ones lean on the narrative summary (the panel has four block types, so the
+ * NL-narrative chips share the summary view in this prototype). */
 const cardChips = computed(() => {
   const s = topSignal.value
   const chips = []
   if (s) chips.push({ label: topLabel.value, intent: 'explain', text: topLabel.value, icon: 'bulb', primary: true })
   chips.push({ label: 'Show tickets about to breach', intent: 'drill', text: 'Show tickets breaching SLA today', icon: 'alert', primary: !s })
+  chips.push({ label: 'Prioritize my worklist', intent: 'drill', text: 'Prioritize my open P1 requests', icon: 'clipboard' })
+  chips.push({ label: 'What changed since last week?', intent: 'summary', text: 'What changed since last week?', icon: 'trend' })
   chips.push({ label: 'Ask about this dashboard', intent: 'open', text: '', icon: 'sparkles' })
+  chips.push({ label: 'Draft a shift handover', intent: 'summary', text: 'Draft a shift handover', icon: 'file-text' })
   return chips
 })
 </script>

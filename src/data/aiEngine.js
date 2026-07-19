@@ -142,19 +142,29 @@ export function applyChips(rows, columns, chips) {
   }))
 }
 
+// Record/drill-level next-best-actions (catalog section C). The last two — find-similar
+// and suggest-KB — are the ticket-level actions that used to sit (wrongly) on the
+// dashboard card; they belong HERE, once you've drilled into the records.
+const RESOLVE_ACTIONS = [
+  { id: 'similar', icon: 'copy', label: 'Find similar tickets', confirm: 'Pull resolved look-alikes and the fixes that worked?', danger: false },
+  { id: 'kb', icon: 'file-text', label: 'Suggest resolution / KB', confirm: 'Surface the likely root cause and steps from resolved tickets?', danger: false },
+]
 function actionsFor(fact) {
   if (fact.kind === 'breach') return [
     { id: 'reassign', icon: 'team', label: 'Reassign stalled P1s to on-call', confirm: 'Reassign the stalled P1 requests to the on-call technician?' },
     { id: 'escalate', icon: 'trend', label: 'Escalate all to Major Incident', confirm: 'Escalate these P1 requests to the Major Incident process?' },
     { id: 'notify', icon: 'mail', label: 'Notify affected stakeholders', confirm: 'Send a status note to the affected stakeholders?', danger: false },
+    ...RESOLVE_ACTIONS,
   ]
   if (fact.kind === 'anomaly') return [
     { id: 'problem', icon: 'alert', label: 'Open a problem record for the spike', confirm: 'Open a problem record to investigate this spike?' },
     { id: 'escalate', icon: 'trend', label: 'Escalate to the shift lead', confirm: 'Escalate this anomaly to the current shift lead?' },
     { id: 'snooze', icon: 'clock', label: 'Snooze this anomaly for 24h', confirm: 'Snooze this anomaly alert for 24 hours?', danger: false },
+    ...RESOLVE_ACTIONS,
   ]
   return [
     { id: 'review', icon: 'eye', label: 'Review in the source module', confirm: 'Open this insight in its source module?', danger: false },
+    ...RESOLVE_ACTIONS,
   ]
 }
 
