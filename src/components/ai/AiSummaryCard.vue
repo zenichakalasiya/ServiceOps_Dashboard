@@ -8,12 +8,16 @@
  * and the suggested next actions. Grounded: the composition is computed from the
  * board's own tiles (no LLM invents it); a real model would only rephrase it.
  *
- * `Investigate with AI` opens the full assistant panel; the card emits `ask`.
+ * The action chips are DASHBOARD-level and DATA-AWARE (the Monday/Tableau pattern):
+ * the deep-dive chip names the metric the engine actually flagged ("Why is Overdue
+ * up?"), so the card offers the investigation that's relevant to THIS board today.
+ * Ticket-level actions (find similar / suggest KB) belong on a record, not here —
+ * they moved to the drill view. Each chip emits `ask(intent, text)` → the panel.
  */
 import { ref, computed } from 'vue'
 import Icon from '../ui/Icon.vue'
 import { facts as computeFacts } from '../../data/aiEngine.js'
-import { store, toast } from '../../store/index.js'
+import { store } from '../../store/index.js'
 
 const props = defineProps({
   board: { type: Object, required: true },
@@ -58,8 +62,30 @@ function refresh() {
   refreshing.value = true
   setTimeout(() => (refreshing.value = false), 900)
 }
-function investigate() { emit('ask', 'summary') }
-function mock(label) { toast(`${label} — AI action (prototype)`, 'success') }
+
+/* Data-aware deep-dive: the top chip investigates whatever the engine flagged first
+ * (an anomaly/delta metric preferred over the breach worklist), so its label reads
+ * "Why is Overdue up?" on a board where Overdue spiked. */
+const topSignal = computed(() => {
+  const f = computeFacts(props.board)
+  return f.find((x) => x.kind === 'anomaly') || f.find((x) => x.kind === 'delta') || f[0] || null
+})
+const topLabel = computed(() => {
+  const s = topSignal.value
+  if (!s) return ''
+  const down = /down|drop|below|dip/.test(s.text.toLowerCase())
+  return `Why is ${s.chip} ${down ? 'down' : 'up'}?`
+})
+/* Dashboard-level chips. RCA on the flagged metric (data-aware) → predict breaches →
+ * open-ended ask. On a calm board the RCA chip drops and "about to breach" leads. */
+const cardChips = computed(() => {
+  const s = topSignal.value
+  const chips = []
+  if (s) chips.push({ label: topLabel.value, intent: 'explain', text: topLabel.value, icon: 'bulb', primary: true })
+  chips.push({ label: 'Show tickets about to breach', intent: 'drill', text: 'Show tickets breaching SLA today', icon: 'alert', primary: !s })
+  chips.push({ label: 'Ask about this dashboard', intent: 'open', text: '', icon: 'sparkles' })
+  return chips
+})
 </script>
 
 <template>
@@ -92,9 +118,9 @@ function mock(label) { toast(`${label} — AI action (prototype)`, 'success') }
         </div>
 
         <div class="ac-acts">
-          <button class="ac-cta primary" @click="investigate"><Icon name="sparkles" :size="15" /> Investigate with AI</button>
-          <button class="ac-cta" @click="mock('Find similar tickets')"><Icon name="search" :size="15" /> Find similar tickets</button>
-          <button class="ac-cta" @click="mock('Suggest KB')"><Icon name="file-text" :size="15" /> Suggest KB</button>
+          <button v-for="c in cardChips" :key="c.label" class="ac-cta" :class="{ primary: c.primary }" @click="emit('ask', c.intent, c.text)">
+            <Icon :name="c.icon" :size="15" /> {{ c.label }}
+          </button>
         </div>
       </div>
     </transition>

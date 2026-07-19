@@ -13,7 +13,7 @@ import { ref, nextTick, watch, onMounted } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, ROLES, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { toast } from '../../store/index.js'
 
@@ -120,12 +120,6 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
         <div><div class="ah-t">AI Assistant</div><div class="ah-sub">{{ board.name }} · {{ board.tiles.length }} widgets</div></div>
       </div>
       <button class="x" @click="emit('update:open', false)"><Icon name="x" :size="17" /></button>
-    </div>
-    <div class="ah2">
-      <div class="role-seg">
-        <button v-for="r in ROLES" :key="r.key" class="rseg" :class="{ on: role === r.key }" @click="emit('role', r.key)">{{ r.label.split(' ')[0] }}</button>
-      </div>
-      <span class="conf" :class="confidence(board)"><Icon name="verified" :size="12" /> {{ confidence(board) }} confidence</span>
     </div>
 
     <!-- thread -->
@@ -250,19 +244,13 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
 
 <style scoped>
 .asst { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.ah { display: flex; align-items: center; justify-content: space-between; padding: 13px 14px 10px; }
+.ah { display: flex; align-items: center; justify-content: space-between; padding: 13px 14px; border-bottom: 1px solid var(--border); }
 .ah-l { display: flex; gap: 10px; align-items: center; }
 .spk { width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
 .ah-t { font-weight: 600; font-size: 15px; }
 .ah-sub { font-size: 11.5px; color: var(--muted); }
 .x { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 3px; border-radius: 7px; }
 .x:hover { background: var(--surface-2); color: var(--ink); }
-.ah2 { display: flex; align-items: center; justify-content: space-between; padding: 0 14px 11px; border-bottom: 1px solid var(--border); }
-.role-seg { display: inline-flex; gap: 2px; background: var(--surface-2); padding: 2px; border-radius: var(--r-pill); }
-.rseg { height: 24px; padding: 0 10px; border: none; background: transparent; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 500; color: var(--muted); }
-.rseg.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); }
-.conf { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; }
-.conf.high { color: var(--green); } .conf.medium { color: var(--amber); } .conf.low { color: var(--muted); }
 
 .ab { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
 .blk { animation: rise .2s ease both; }

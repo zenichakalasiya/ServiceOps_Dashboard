@@ -17,7 +17,6 @@ import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
 import AiSummaryCard from '../components/ai/AiSummaryCard.vue'
 import AiAssistant from '../components/ai/AiAssistant.vue'
 import { demoBoard } from '../data/aiDemo.js'
-import { routeIntent } from '../data/aiAssistant.js'
 import { facts as computeFacts } from '../data/aiEngine.js'
 import { AI_ENTRIES } from '../data/aiEntries.js'
 import { store, byId, recordView, toggleFavorite, removeTile, toast, rearrangeTiles } from '../store/index.js'
@@ -140,9 +139,11 @@ const aiNudgeDismissed = ref(false)
 const aiAttention = computed(() => computeFacts(aiBoard, aiRole.value).filter((f) => f.severity === 'bad' || f.severity === 'warn'))
 const aiPanel = ref(null)
 function openAi() { store.ui.aiPanelOpen = true }
-function askAi(text) {
+// The card chips carry an explicit intent (explain / drill / open) + a natural-language
+// label, so we run it directly rather than re-parsing the text.
+function onCardAsk(intent, text) {
   store.ui.aiPanelOpen = true
-  if (text) nextTick(() => aiPanel.value?.trigger(routeIntent(text), text))
+  if (intent && intent !== 'open') nextTick(() => aiPanel.value?.trigger(intent, text))
 }
 function askTile(title) { store.ui.aiPanelOpen = true; nextTick(() => aiPanel.value?.trigger('explain', `Explain ${title}`)) }
 // switching the demo tab is a clean slate: close the panel and restore the nudge
@@ -646,7 +647,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       <!-- AI entry surfaces (only one shows, driven by the tab above) -->
       <template v-if="!loadingBoard && d.tiles.length">
         <!-- ① pinned summary card (the ServiceOps reference) -->
-        <AiSummaryCard v-if="aiEntry === 'card'" :board="aiBoard" @ask="(i, t) => t ? askAi(t) : openAi()" />
+        <AiSummaryCard v-if="aiEntry === 'card'" :board="aiBoard" @ask="onCardAsk" />
 
         <!-- ⑤ dismissible onboarding nudge — grounded in what the engine actually found -->
         <div v-else-if="aiEntry === 'nudge' && !aiNudgeDismissed" class="ai-nudge">

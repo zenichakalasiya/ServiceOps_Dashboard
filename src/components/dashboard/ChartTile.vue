@@ -42,6 +42,10 @@ use([CanvasRenderer, BarChart, LineChart, PieChart, FunnelChart, GridComponent, 
 
 const props = defineProps({
   chart: Object,
+  // An explicit px height. The tile MEASURES its body and passes the live value so the
+  // chart tracks the real widget size and the side legend paginates to the space actually
+  // available. ECharts needs a definite (pixel) height — a flex-filled height does not
+  // propagate to its canvas through the nested flex levels.
   height: { type: Number, default: 180 },
   legend: { type: Boolean, default: true },
   dataLabels: { type: Boolean, default: false },   // print values on the slices themselves
@@ -644,9 +648,12 @@ onBeforeUnmount(() => {
 .lg-side b { flex: none; margin-left: 2px; font-variant-numeric: tabular-nums; }
 /* Footer: pill on the left, pager on the right, on one line. It wraps only if the
    two genuinely can't share the width — then it degrades to the old stacked look. */
-.ls-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.ls-pager { flex: none; margin-left: auto; display: flex; align-items: center; justify-content: center; gap: 2px; height: 22px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.ls-pager button { width: 18px; height: 18px; border: none; background: transparent; color: var(--muted); border-radius: 5px; display: grid; place-items: center; }
+/* Pill + pager share ONE line and never wrap: the pager keeps its size and the pill
+   shrinks (its label ellipsing) so the two always sit beside each other, even when the
+   widget is narrowed. */
+.ls-foot { flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+.ls-pager { flex: none; display: flex; align-items: center; justify-content: center; gap: 1px; height: 22px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ls-pager button { width: 16px; height: 16px; border: none; background: transparent; color: var(--muted); border-radius: 5px; display: grid; place-items: center; }
 .ls-pager button:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
 .ls-pager button:disabled { opacity: .3; cursor: not-allowed; }
 /* The pill takes the row's spare width and its label ellipses rather than pushing

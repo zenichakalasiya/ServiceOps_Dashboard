@@ -117,11 +117,22 @@ function showInfo() {
 // Measure the real rendered width so actions collapse as the tile is resized smaller,
 // not just by column count. compact → Full screen into ⋯; tiny → Refresh + Edit + Full screen all into ⋯.
 const cardEl = ref(null)
+const bodyEl = ref(null)
 const cardW = ref(9999)
+// The chart is given the body's real height (not a fixed px band) so it tracks the
+// widget size and the side legend paginates to whatever vertical space is available.
+// Seed from tile.h so ECharts inits with a sane height; the observer refines it.
+const chartH = ref(props.tile.h > 2 ? 340 : props.tile.h > 1 ? 168 : 120)
 let ro
 onMounted(() => {
-  ro = new ResizeObserver((entries) => { cardW.value = entries[0].contentRect.width })
+  ro = new ResizeObserver((entries) => {
+    for (const e of entries) {
+      if (e.target === cardEl.value) cardW.value = e.contentRect.width
+      else if (e.target === bodyEl.value) { const h = Math.round(e.contentRect.height); if (h > 0) chartH.value = h }
+    }
+  })
   if (cardEl.value) ro.observe(cardEl.value)
+  if (bodyEl.value) ro.observe(bodyEl.value)
 })
 onBeforeUnmount(() => ro?.disconnect())
 const compact = computed(() => cardW.value < 340)
@@ -260,7 +271,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
     </teleport>
 
     <!-- Body -->
-    <div class="tbody">
+    <div ref="bodyEl" class="tbody">
       <div v-if="loading" class="loading">
         <div class="skeleton" style="height:60%;width:80%" />
         <div class="skeleton" style="height:14px;width:50%;margin-top:10px" />
@@ -282,7 +293,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       </template>
 
       <template v-else-if="tile.type === 'chart'">
-        <ChartTile v-if="tile.chart" :chart="tile.chart" :legend="showLegend" :data-labels="tile.dataLabels === true" :height="tile.h > 2 ? 360 : tile.h > 1 ? 170 : 120" />
+        <ChartTile v-if="tile.chart" :chart="tile.chart" :legend="showLegend" :data-labels="tile.dataLabels === true" :height="chartH" />
       </template>
 
       <template v-else>
@@ -352,7 +363,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 </template>
 
 <style scoped>
-.tile { display: flex; flex-direction: column; overflow: hidden; min-height: 130px; }
+/* Fill the grid cell (which sizes the footprint via min-height) so the body — and a
+   fill-height chart inside it — get a real height to distribute. Without this the tile
+   collapses to its header once the chart stops carrying a fixed pixel height. */
+.tile { display: flex; flex-direction: column; overflow: hidden; min-height: 130px; flex: 1; }
 .thead { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 2px 12px; gap: 8px; }
 .left { display: flex; align-items: center; gap: 6px; min-width: 0; }
 /* 6-dot drag handle — appears on hover, before the title */
