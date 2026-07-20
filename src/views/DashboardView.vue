@@ -951,7 +951,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .an-x:hover { background: var(--ai-soft); color: var(--ai-ink); }
 
 /* docked assistant panel */
-.ai-dock { position: fixed; top: var(--topbar-h); right: 0; width: 410px; max-width: 92vw; height: calc(100vh - var(--topbar-h)); z-index: 200; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--sh-lg); }
+.ai-dock { position: fixed; top: var(--topbar-h); right: 0; width: 480px; max-width: 94vw; height: calc(100vh - var(--topbar-h)); z-index: 200; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--sh-lg); }
 .ai-slide-enter-active, .ai-slide-leave-active { transition: transform .22s ease, opacity .22s ease; }
 .ai-slide-enter-from, .ai-slide-leave-to { transform: translateX(24px); opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .ai-slide-enter-active, .ai-slide-leave-active { transition: none; } }

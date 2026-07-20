@@ -153,6 +153,37 @@ export function dashboardNarrative(board, role = 'technician') {
   return parts.join(' ')
 }
 
+// dashboardSummaryPoints — the written summary as grouped, relatable bullet points
+// (the ClickUp-Brain style): "what this covers" + "how it reads right now".
+export function dashboardSummaryPoints(board, role = 'technician') {
+  const t = board.tiles || []
+  const kpis = t.filter((x) => x.type === 'kpi')
+  const charts = t.filter((x) => x.type === 'chart')
+  const shorts = t.filter((x) => x.type === 'shortcut')
+  const names = (arr, n = 3) => {
+    const s = arr.map((x) => x.title).slice(0, n)
+    const e = arr.length - s.length
+    return s.join(', ') + (e > 0 ? ` and ${e} more` : '')
+  }
+  const fs = facts(board, role)
+  const bad = fs.filter((f) => f.severity === 'bad')
+  const warn = fs.filter((f) => f.severity === 'warn')
+  const covers = [
+    kpis.length && `${kpis.length} headline KPIs — ${names(kpis)}`,
+    charts.length && `${charts.length} charts trending ${names(charts, 2)}`,
+    shorts.length && `A worklist: ${names(shorts, 1)}`,
+  ].filter(Boolean)
+  const state = []
+  if (bad.length) state.push(`${bad.length} thing${bad.length > 1 ? 's' : ''} need action now — top of the list is ${bad[0].chip}`)
+  if (warn.length) state.push(`${warn.length} more worth watching: ${warn.map((f) => f.chip).slice(0, 2).join(', ')}`)
+  if (!fs.length) state.push('Everything is within its normal range')
+  state.push(bad.length ? 'Most of the pressure is on SLA and overdue work' : 'Overall the board is steady')
+  return [
+    { title: 'What this dashboard covers', points: covers },
+    { title: 'How it reads right now', points: state },
+  ]
+}
+
 // ---------------------------------------------------------------------------
 // widgetBrief — a tiny grounded summary + two type-specific suggestive actions for a
 // single tile, shown on hover of its AI sparkle. Works on any real tile (KPI / chart /

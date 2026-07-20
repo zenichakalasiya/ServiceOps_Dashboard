@@ -13,7 +13,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, changesSinceLastVisit, dashboardNarrative, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
@@ -60,10 +60,18 @@ function pushChanges() {
 // Summarize / Ask: a visible analyzing/thinking state, then a WRITTEN prose summary.
 // Mutate the REACTIVE array element (not the raw object we pushed) so the reveal re-renders.
 function pushAnalyzing() {
-  thread.value.push({ id: ++bid, kind: 'analyzing', phase: 'thinking', narrative: '' })
+  thread.value.push({ id: ++bid, kind: 'analyzing', phase: 'thinking', points: [] })
   const b = thread.value[thread.value.length - 1]
   scrollDown()
-  setTimeout(() => { b.phase = 'done'; b.narrative = dashboardNarrative(props.board, props.role); scrollDown() }, 1700)
+  setTimeout(() => { b.phase = 'done'; b.points = dashboardSummaryPoints(props.board, props.role); scrollDown() }, 1700)
+}
+// a short templated reply for actions we don't fully simulate (edit / schedule)
+function pushNote(text) {
+  const edit = /edit|change|rename|group|type/i.test(text)
+  const reply = edit
+    ? 'You can edit any widget from its ⋯ menu — chart type, filters or grouping. Tell me which widget and what to change, and I’ll walk you through it.'
+    : 'I can set that up — scheduled digests and threshold alerts run on-prem. Confirm the cadence (daily / weekly) and I’ll draft it.'
+  thread.value.push({ id: ++bid, kind: 'note', text: reply }); scrollDown()
 }
 // ---- P4 conversational CREATE flow (Generate with AI) ----
 const draft = ref({})
@@ -119,7 +127,89 @@ function dispatch(intent, text) {
   else if (intent === 'changes') pushChanges()
   else if (intent === 'analyzing') pushAnalyzing()
   else if (intent === 'createstart') pushCreateStart()
+  else if (intent === 'note') pushNote(text)
 }
+
+// ---- contextual Follow ups (change with the block / what the user asked) ----
+const CREATE_FLOW_KINDS = ['create-start', 'cd-name', 'cd-cat', 'cd-vis', 'cd-confirm', 'cd-done', 'cw-dash', 'cw-desc', 'cw-preview']
+function isAnswer(b) {
+  if (b.kind === 'user' || CREATE_FLOW_KINDS.includes(b.kind)) return false
+  if (b.kind === 'analyzing') return b.phase === 'done'
+  return true
+}
+function followUpsFor(b) {
+  const k = b.kind
+  if (k === 'analyzing' || k === 'summary') return [
+    { label: 'Prioritize what needs attention', intent: 'drill' },
+    { label: 'What changed since last visit', intent: 'changes' },
+    { label: 'Create a widget for SLA breaches by team', intent: 'create' },
+  ]
+  if (k === 'changes') return [
+    { label: 'Show the new P1 requests', intent: 'drill' },
+    { label: 'Why did Overdue rise?', intent: 'explain' },
+    { label: 'Turn this into a recovery plan', intent: 'drill' },
+  ]
+  if (k === 'explain') return [
+    { label: `Show the records behind ${b.tile?.title || 'this'}`, intent: 'drill' },
+    { label: 'Investigate the top offenders', intent: 'drill' },
+    { label: 'Create an alert for this metric', intent: 'note' },
+  ]
+  if (k === 'drill') return [
+    { label: 'Draft a status update', intent: 'summary' },
+    { label: 'What changed since last visit', intent: 'changes' },
+    { label: 'Schedule a follow-up check', intent: 'note' },
+  ]
+  if (k === 'widget') return [
+    { label: 'Add another widget', intent: 'create' },
+    { label: 'Create a dashboard for this', intent: 'createstart' },
+  ]
+  if (k === 'note') return [
+    { label: 'Summarize this dashboard', intent: 'analyzing' },
+    { label: 'What needs attention', intent: 'summary' },
+  ]
+  return [{ label: 'What needs attention', intent: 'summary' }, { label: 'What changed since last visit', intent: 'changes' }]
+}
+
+// ---- action bar (Find / Create / Edit / Analyze / Prioritize / Schedule) ----
+const ACTIONS = [
+  { key: 'find', label: 'Find', icon: 'search', prompts: [
+    { label: 'Find tickets breaching SLA today', intent: 'drill' },
+    { label: 'Find the P1 requests assigned to me', intent: 'drill' },
+    { label: 'Search this dashboard for Overdue', intent: 'explain' },
+    { label: 'Find what changed since last visit', intent: 'changes' },
+  ] },
+  { key: 'create', label: 'Create', icon: 'plus', prompts: [
+    { label: 'Create a widget for SLA breaches by team', intent: 'create' },
+    { label: 'Create a backlog trend chart', intent: 'create' },
+    { label: 'Create a new dashboard', intent: 'createstart' },
+    { label: 'Generate a widget from a description', intent: 'createstart' },
+  ] },
+  { key: 'edit', label: 'Edit', icon: 'edit', prompts: [
+    { label: 'Change a chart’s type to line', intent: 'note' },
+    { label: 'Group the KPI widgets together', intent: 'note' },
+    { label: 'Edit the dashboard time filter', intent: 'note' },
+  ] },
+  { key: 'analyze', label: 'Analyze', icon: 'auto-graph', prompts: [
+    { label: 'Analyze what needs attention', intent: 'summary' },
+    { label: 'Why did Overdue spike?', intent: 'explain' },
+    { label: 'What changed since last visit', intent: 'changes' },
+    { label: 'Summarize this dashboard', intent: 'analyzing' },
+  ] },
+  { key: 'prioritize', label: 'Prioritize', icon: 'flag', prompts: [
+    { label: 'Prioritize the P1s breaching today', intent: 'drill' },
+    { label: 'Rank overdue tickets by impact', intent: 'drill' },
+    { label: 'What should I work on first?', intent: 'summary' },
+  ] },
+  { key: 'schedule', label: 'Schedule', icon: 'calendar2', prompts: [
+    { label: 'Schedule a daily summary email', intent: 'note' },
+    { label: 'Block time to clear overdue work', intent: 'note' },
+    { label: 'Alert me when P1 backlog exceeds 10', intent: 'note' },
+  ] },
+]
+const actionOpen = ref(null)
+const activeAction = computed(() => ACTIONS.find((a) => a.key === actionOpen.value) || null)
+function toggleAction(k) { actionOpen.value = actionOpen.value === k ? null : k }
+function runPrompt(p) { actionOpen.value = null; pushUser(p.label); dispatch(p.intent, p.label) }
 
 // ---- interactions ----
 function submit() {
@@ -226,10 +316,6 @@ watch(() => props.role, () => {
             </div>
             <div v-if="!b.facts.length" class="calm"><Icon name="check" :size="16" /> Nothing unusual — all {{ board.tiles.length }} widgets are within range.</div>
           </div>
-          <div class="na-h">Suggested next actions</div>
-          <div class="chipsrow na-row">
-            <button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button>
-          </div>
         </template>
 
         <!-- What changed since last visit -->
@@ -244,11 +330,6 @@ watch(() => props.role, () => {
                 <div v-if="it.note" class="chg-note">{{ it.note }}</div>
               </div>
             </div>
-          </div>
-          <div class="na-h">Suggested next actions</div>
-          <div class="chipsrow na-row">
-            <button class="sg" @click="suggest({ intent: 'drill', label: 'Show the new P1 requests' })">Show the new P1 requests</button>
-            <button class="sg" @click="suggest({ intent: 'explain', label: 'Why did Overdue rise?' })">Why did Overdue rise?</button>
           </div>
         </template>
 
@@ -266,10 +347,12 @@ watch(() => props.role, () => {
             </div>
           </template>
           <template v-else>
+            <div class="reasoning"><span class="rz-dot" /> Reasoning · read {{ board.tiles.length }} widgets and ranked what matters</div>
             <div class="blk-h"><Icon name="sparkles" :size="14" /> Dashboard summary</div>
-            <p class="say narr">{{ b.narrative }}</p>
-            <div class="na-h">Suggested next actions</div>
-            <div class="chipsrow na-row"><button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button></div>
+            <div v-for="(g, gi) in b.points" :key="gi" class="sum-grp">
+              <div class="sum-gt">{{ g.title }}</div>
+              <ul class="sum-list"><li v-for="(p, pi) in g.points" :key="pi">{{ p }}</li></ul>
+            </div>
           </template>
         </template>
 
@@ -447,11 +530,40 @@ watch(() => props.role, () => {
           </button>
           <button v-if="b.added && draft.dash" class="mini-cta" @click="openBoard(draft.dash)">Open the dashboard <Icon name="open-in" :size="13" /></button>
         </template>
+
+        <!-- short templated reply (edit / schedule) -->
+        <template v-else-if="b.kind === 'note'">
+          <div class="blk-h"><Icon name="sparkles" :size="14" /> ServiceOps AI</div>
+          <p class="say">{{ b.text }}</p>
+        </template>
+
+        <!-- contextual Follow ups (change with the answer) -->
+        <div v-if="isAnswer(b)" class="fu-sec">
+          <div class="fu-h">Follow ups</div>
+          <div class="fu-list">
+            <button v-for="f in followUpsFor(b)" :key="f.label" class="fu" @click="suggest(f)">
+              <Icon name="chevron-right" :size="14" class="fu-arrow" /> <span>{{ f.label }}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- message input (chat style) -->
+    <!-- action bar + popup, then the chat input -->
     <div class="af">
+      <div class="actionbar">
+        <button v-for="a in ACTIONS" :key="a.key" class="actchip" :class="{ on: actionOpen === a.key }" @click="toggleAction(a.key)">
+          <Icon :name="a.icon" :size="14" /> {{ a.label }}
+        </button>
+      </div>
+      <transition name="pop">
+        <div v-if="activeAction" class="actpop">
+          <div class="actpop-h"><Icon :name="activeAction.icon" :size="14" /> {{ activeAction.label }}<button class="apx" @click="actionOpen = null"><Icon name="x" :size="14" /></button></div>
+          <button v-for="p in activeAction.prompts" :key="p.label" class="actprompt" @click="runPrompt(p)">
+            <Icon :name="activeAction.icon" :size="14" /> {{ p.label }}
+          </button>
+        </div>
+      </transition>
       <div class="inbox">
         <button class="attach" title="Attach"><Icon name="attach" :size="16" /></button>
         <input v-model="input" placeholder="Type your message…" @keyup.enter="submit" />
@@ -604,8 +716,42 @@ tr:last-child td { border-bottom: none; }
 .pick:hover { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
 .pick.new { color: var(--ai-ink); border-style: dashed; }
 .sg.on { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
+/* reasoning line */
+.reasoning { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+.rz-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ai-grad); flex: none; }
+/* grouped summary points */
+.sum-grp { margin-bottom: 12px; }
+.sum-gt { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+.sum-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sum-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.sum-list li::before { content: ''; position: absolute; left: 3px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--ai); }
+/* contextual Follow ups (ClickUp-style vertical rows) */
+.fu-sec { margin-top: 12px; }
+.fu-h { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.fu-list { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.fu { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); padding: 8px 14px; font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.fu .fu-arrow { color: var(--muted-2); transform: rotate(0deg); flex: none; }
+.fu:hover { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
+.fu:hover .fu-arrow { color: var(--ai); }
 /* footer input */
 .af { border-top: 1px solid var(--border); padding: 10px 14px 12px; }
+/* action bar */
+.actionbar { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 9px; scrollbar-width: none; }
+.actionbar::-webkit-scrollbar { display: none; }
+.actchip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); font-size: 12px; font-weight: 600; color: var(--ink-2); flex: none; }
+.actchip :deep(.ico) { color: var(--muted); }
+.actchip:hover { border-color: var(--ai); color: var(--ai-ink); }
+.actchip:hover :deep(.ico), .actchip.on :deep(.ico) { color: var(--ai); }
+.actchip.on { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
+.actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
+.actpop-h { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 4px 6px 8px; }
+.actpop-h :deep(.ico) { color: var(--ai); }
+.apx { margin-left: auto; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 2px; border-radius: 5px; }
+.apx:hover { background: var(--surface-2); color: var(--ink); }
+.actprompt { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; border: none; background: transparent; border-radius: 7px; padding: 8px 8px; font-size: 12.5px; color: var(--ink); }
+.actprompt :deep(.ico) { color: var(--muted-2); flex: none; }
+.actprompt:hover { background: var(--ai-softer); color: var(--ai-ink); }
+.actprompt:hover :deep(.ico) { color: var(--ai); }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .sg { border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
 .sg:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); }
