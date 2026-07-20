@@ -191,24 +191,16 @@ export function dashboardSummaryPoints(board, role = 'technician') {
 // ---------------------------------------------------------------------------
 export function widgetBrief(tile) {
   const t = tile || {}
+  const u = t.unit || ''
   if (t.type === 'kpi') {
     const a = anomalyFor(t)
-    const base = `${t.title} is ${t.value}${t.unit || ''}`
-    const wow = t.delta ? `, ${t.delta.dir} ${t.delta.pct}% vs last week` : ''
-    const summary = a
-      ? `${base} — ${a.pctVsMean > 0 ? 'well above' : 'well below'} its ~${a.mean}${t.unit || ''} average (${a.pctVsMean > 0 ? '+' : ''}${a.pctVsMean}%). A clear outlier worth a look.`
-      : t.status === 'bad' ? `${base}${wow} — flagged as needing attention.`
-        : t.status === 'warn' ? `${base}${wow} — worth keeping an eye on.`
-          : t.delta ? `${base}${wow} — within its normal range.`
-            : `${base}.`
-    const statusLabel = t.status === 'bad' ? 'Needs attention' : t.status === 'warn' ? 'Watch' : t.status === 'good' ? 'Healthy' : '—'
-    const details = [
-      { label: 'Value', value: `${t.value}${t.unit || ''}` },
-      t.delta && { label: 'WoW change', value: `${t.delta.dir === 'up' ? '▲' : t.delta.dir === 'down' ? '▼' : ''} ${t.delta.pct}%` },
-      { label: 'Status', value: statusLabel },
-      a && { label: 'vs average', value: `${a.pctVsMean > 0 ? '+' : ''}${a.pctVsMean}% (≈${a.mean}${t.unit || ''})` },
-    ].filter(Boolean)
-    return { summary, details, actions: [
+    const wow = t.delta ? ` and is ${t.delta.dir} ${t.delta.pct}% week-over-week` : ''
+    const parts = [`${t.title} is ${t.value}${u}${wow}.`]
+    if (a) parts.push(`That's ${a.pctVsMean > 0 ? 'well above' : 'well below'} its usual ~${a.mean}${u} (${a.pctVsMean > 0 ? '+' : ''}${a.pctVsMean}%) — a clear outlier, roughly ${Math.abs(a.z)}× the normal week-to-week swing, so it's worth a look now.`)
+    else if (t.status === 'bad') parts.push(`It's flagged as needing attention, so it's the kind of number to act on rather than watch.`)
+    else if (t.status === 'warn') parts.push(`It's sitting just outside the comfortable range — not alarming yet, but worth keeping an eye on.`)
+    else if (t.delta) parts.push(`That keeps it within its normal range, so nothing here needs action right now.`)
+    return { summary: parts.join(' '), actions: [
       { label: 'Why did it change?', intent: 'explain', text: `Why did ${t.title} change?` },
       { label: 'Show the records', intent: 'drill', text: `Show the records behind ${t.title}` },
     ] }
@@ -217,49 +209,80 @@ export function widgetBrief(tile) {
     const rows = t.rows || []
     const cols = t.columns || []
     const prIdx = cols.indexOf('Priority')
-    const p1 = prIdx >= 0 ? rows.filter((r) => /p1/i.test(r[prIdx] || '')).length : 0
-    const summary = `${rows.length} record${rows.length === 1 ? '' : 's'}${p1 ? ` · ${p1} are P1` : ''}. ${p1 ? 'The highest-priority work is at the top.' : 'Sorted by most recent.'}`
-    const byPr = {}
-    if (prIdx >= 0) rows.forEach((r) => { const p = (r[prIdx] || '').toUpperCase().trim(); if (p) byPr[p] = (byPr[p] || 0) + 1 })
-    const prStr = Object.entries(byPr).map(([k, v]) => `${k}×${v}`).join(', ')
-    const details = [
-      { label: 'Records', value: String(rows.length) },
-      prStr && { label: 'By priority', value: prStr },
-      { label: 'Columns', value: cols.join(', ') },
-    ].filter(Boolean)
-    return { summary, details, actions: [
+    const stIdx = cols.indexOf('Status')
+    const p1 = prIdx >= 0 ? rows.filter((r) => /p1|urgent/i.test(r[prIdx] || '')).length : 0
+    const open = stIdx >= 0 ? rows.filter((r) => /open|new/i.test(r[stIdx] || '')).length : 0
+    const parts = [`This list holds ${rows.length} record${rows.length === 1 ? '' : 's'}.`]
+    if (p1) parts.push(`${p1} ${p1 === 1 ? 'is' : 'are'} top-priority${open ? ` and ${open} still ${open === 1 ? 'sits' : 'sit'} unactioned` : ''}, so the highest-priority work is already at the top.`)
+    else if (open) parts.push(`${open} ${open === 1 ? 'is' : 'are'} still open, sorted with the most recent first.`)
+    else parts.push('Everything here is in hand — nothing is flagged as urgent.')
+    return { summary: parts.join(' '), actions: [
       { label: 'Prioritize these', intent: 'drill', text: `Prioritize ${t.title}` },
       { label: 'Find similar tickets', intent: 'drill', text: `Find tickets similar to those in ${t.title}` },
     ] }
   }
-  // chart — list every series' data, or every slice's value + share (capped for very wide charts)
+  // chart — a WRITTEN summary of the shape of the data, not a copy of the legend
   const ch = t.chart || {}
   const series = ch.series || []
   const labels = ch.labels || []
-  let summary
-  let details = []
-  if (['pie', 'donut'].includes(ch.kind)) {
-    const vals = series[0]?.values || []
-    const total = vals.reduce((a, b) => a + b, 0) || 1
-    const maxI = vals.indexOf(Math.max(...vals))
-    summary = `${labels[maxI] || 'The top slice'} leads at ${Math.round((vals[maxI] / total) * 100)}% across ${vals.length} categories.`
-    details = labels.slice(0, 6).map((l, i) => ({ label: l, value: `${vals[i]} · ${Math.round((vals[i] / total) * 100)}%` }))
-    if (labels.length > 6) details.push({ label: `+${labels.length - 6} more`, value: '' })
-  } else if (series.length >= 2) {
-    summary = `${series[0].name} vs ${series[1].name} across ${labels.length} points — the gap is the story.`
-    if (labels.length) details.push({ label: 'Categories', value: labels.join(', ') })
-    series.forEach((s) => details.push({ label: s.name, value: (s.values || []).join(', ') }))
-  } else if (series[0]) {
-    const v = series[0].values || []
-    const trend = v.length > 1 ? (v[v.length - 1] >= v[0] ? 'rising' : 'falling') : 'flat'
-    summary = `${series[0].name} is ${trend} over ${v.length} points.`
-    if (labels.length) details.push({ label: 'Points', value: labels.join(', ') })
-    details.push({ label: series[0].name, value: v.join(', ') })
-  } else summary = `${t.title}.`
-  return { summary, details, actions: [
+  const summary = chartSummary(ch, series, labels)
+  return { summary, actions: [
     { label: 'Explain the trend', intent: 'explain', text: `Explain the trend in ${t.title}` },
     { label: 'Break it down', intent: 'drill', text: `Break down ${t.title} by category` },
   ] }
+}
+
+// chartSummary — turn a chart's numbers into 2–3 plain-language sentences (leader + share +
+// concentration for part-to-whole; trend + peak for time series; the gap for multi-series).
+function chartSummary(ch, series, labels) {
+  const fmt = (n) => (Math.round(n * 10) / 10).toLocaleString()
+  // part-to-whole (pie / donut): who leads, by how much, and how concentrated it is
+  if (['pie', 'donut', 'funnel', 'pyramid'].includes(ch.kind)) {
+    const vals = series[0]?.values || []
+    const total = vals.reduce((a, b) => a + b, 0)
+    if (!total) return 'No data in range for this breakdown yet.'
+    const idx = vals.map((v, i) => i).sort((a, b) => vals[b] - vals[a])
+    const pct = (i) => Math.round((vals[i] / total) * 100)
+    const lead = idx[0], second = idx[1]
+    const topK = Math.min(3, idx.length)
+    const cum = idx.slice(0, topK).reduce((s, i) => s + vals[i], 0)
+    const cumPct = Math.round((cum / total) * 100)
+    const parts = [`${labels[lead] || 'The top category'} leads at ${pct(lead)}% (${fmt(vals[lead])} of ${fmt(total)})${second != null && vals[second] ? `, with ${labels[second]} next at ${pct(second)}%` : ''}.`]
+    if (idx.length > 3) parts.push(`The top ${topK} of ${idx.length} account for ${cumPct}% — ${cumPct >= 75 ? 'the rest is a long, thin tail' : 'the spread is fairly even'}.`)
+    return parts.join(' ')
+  }
+  // multi-series bar/line: contrast the two series by total, and name the widest gap
+  if (series.length >= 2) {
+    const tot = (s) => (s.values || []).reduce((a, b) => a + b, 0)
+    const a = series[0], b = series[1]
+    const ta = tot(a), tb = tot(b)
+    const hi = ta >= tb ? a : b, lo = ta >= tb ? b : a
+    const diffPct = tb + ta ? Math.round((Math.abs(ta - tb) / Math.max(ta, tb)) * 100) : 0
+    let gapAt = 0, gapVal = -1
+    labels.forEach((_, i) => { const g = Math.abs((a.values?.[i] || 0) - (b.values?.[i] || 0)); if (g > gapVal) { gapVal = g; gapAt = i } })
+    const parts = [`Across ${labels.length} points, ${hi.name} runs ${diffPct}% ${diffPct ? 'ahead of' : 'level with'} ${lo.name} overall.`]
+    if (gapVal > 0 && labels[gapAt]) parts.push(`The gap is widest at ${labels[gapAt]} (${fmt(a.values?.[gapAt] || 0)} vs ${fmt(b.values?.[gapAt] || 0)}).`)
+    if (series.length > 2) parts.push(`${series.length} series in all.`)
+    return parts.join(' ')
+  }
+  // single series
+  const s = series[0]
+  if (!s) return 'No data in range for this widget yet.'
+  const v = s.values || []
+  const total = v.reduce((a, b) => a + b, 0)
+  if (!total) return 'No data in range for this widget yet.'
+  const maxI = v.indexOf(Math.max(...v))
+  // categorical bars → leader + concentration; time-like line/area → trend + peak
+  const temporal = ['line', 'area'].includes(ch.kind)
+  if (temporal) {
+    const first = v[0], last = v[v.length - 1]
+    const dir = last > first ? 'risen' : last < first ? 'fallen' : 'held flat'
+    const chg = first ? Math.round(((last - first) / first) * 100) : 0
+    return `${s.name} has ${dir}${dir !== 'held flat' ? ` ${Math.abs(chg)}%` : ''} over ${v.length} points, from ${fmt(first)} to ${fmt(last)}, peaking at ${fmt(v[maxI])}${labels[maxI] ? ` (${labels[maxI]})` : ''}.`
+  }
+  const topPct = Math.round((v[maxI] / total) * 100)
+  const nonZero = v.filter((x) => x > 0).length
+  return `${labels[maxI] || 'The top category'} is highest at ${fmt(v[maxI])} (${topPct}% of ${fmt(total)}) across ${labels.length} categories${nonZero < labels.length ? `, though only ${nonZero} have any activity` : ''}.`
 }
 
 // ---------------------------------------------------------------------------

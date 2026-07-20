@@ -245,9 +245,6 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         >
           <div class="wai-h"><span class="wai-spark"><Icon name="sparkles" :size="14" /></span> AI summary · <span class="ellip">{{ tile.title }}</span></div>
           <p class="wai-sum">{{ brief.summary }}</p>
-          <div v-if="brief.details && brief.details.length" class="wai-data">
-            <div v-for="(d, i) in brief.details" :key="i" class="wai-d"><span class="wd-k">{{ d.label }}</span><b class="wd-v">{{ d.value }}</b></div>
-          </div>
           <div class="wai-acts">
             <button v-for="a in brief.actions" :key="a.label" class="wai-a" @click="runWidgetAction(a)">{{ a.label }}</button>
           </div>
@@ -440,12 +437,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .wai-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .wai-h .ellip { color: var(--ai-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wai-spark { width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
-.wai-sum { margin: 9px 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
-/* every field's data */
-.wai-data { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; margin-bottom: 11px; background: var(--ai-softer); border: 1px solid var(--ai-border); border-radius: 8px; }
-.wai-d { display: flex; gap: 10px; align-items: baseline; font-size: 11.5px; }
-.wd-k { flex: none; min-width: 74px; color: var(--muted); }
-.wd-v { flex: 1; min-width: 0; color: var(--ink); font-weight: 600; text-align: right; word-break: break-word; }
+.wai-sum { margin: 10px 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 /* two actions, side by side */
 .wai-acts { display: flex; flex-direction: row; gap: 6px; }
 .wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--ai-border); border-radius: 8px; background: var(--ai-softer); color: var(--ai-ink); font-weight: 600; font-size: 11.5px; text-align: center; }
