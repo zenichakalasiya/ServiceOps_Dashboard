@@ -242,10 +242,11 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         >
           <div class="wai-h"><span class="wai-spark"><Icon name="sparkles" :size="14" /></span> AI summary · <span class="ellip">{{ tile.title }}</span></div>
           <p class="wai-sum">{{ brief.summary }}</p>
+          <div v-if="brief.details && brief.details.length" class="wai-data">
+            <div v-for="(d, i) in brief.details" :key="i" class="wai-d"><span class="wd-k">{{ d.label }}</span><b class="wd-v">{{ d.value }}</b></div>
+          </div>
           <div class="wai-acts">
-            <button v-for="a in brief.actions" :key="a.label" class="wai-a" @click="runWidgetAction(a)">
-              {{ a.label }} <Icon name="open-in" :size="13" />
-            </button>
+            <button v-for="a in brief.actions" :key="a.label" class="wai-a" @click="runWidgetAction(a)">{{ a.label }}</button>
           </div>
         </div>
       </transition>
@@ -427,15 +428,20 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ti.ai { color: var(--ai); }
 .ti.ai:hover, .ti.ai.on { background: var(--ai-soft); color: var(--ai-ink); }
 /* per-widget hover mini-summary card */
-.wai-card { position: fixed; z-index: 260; width: 288px; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
+.wai-card { position: fixed; z-index: 260; width: 320px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
 .wai-card.up { transform: translateY(-100%); }
 .wai-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .wai-h .ellip { color: var(--ai-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wai-spark { width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
-.wai-sum { margin: 9px 0 11px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
-.wai-acts { display: flex; flex-direction: column; gap: 6px; }
-.wai-a { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--ai-border); border-radius: 8px; background: var(--ai-softer); color: var(--ai-ink); font-weight: 600; font-size: 12px; }
-.wai-a :deep(.ico) { color: var(--ai); }
+.wai-sum { margin: 9px 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+/* every field's data */
+.wai-data { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; margin-bottom: 11px; background: var(--ai-softer); border: 1px solid var(--ai-border); border-radius: 8px; }
+.wai-d { display: flex; gap: 10px; align-items: baseline; font-size: 11.5px; }
+.wd-k { flex: none; min-width: 74px; color: var(--muted); }
+.wd-v { flex: 1; min-width: 0; color: var(--ink); font-weight: 600; text-align: right; word-break: break-word; }
+/* two actions, side by side */
+.wai-acts { display: flex; flex-direction: row; gap: 6px; }
+.wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--ai-border); border-radius: 8px; background: var(--ai-softer); color: var(--ai-ink); font-weight: 600; font-size: 11.5px; text-align: center; }
 .wai-a:hover { background: var(--ai-soft); border-color: var(--ai); }
 .wai-enter-active, .wai-leave-active { transition: opacity .14s ease; }
 .wai-enter-from, .wai-leave-to { opacity: 0; }

@@ -549,14 +549,9 @@ watch(() => props.role, () => {
       </div>
     </div>
 
-    <!-- action bar + popup, then the chat input -->
+    <!-- action bar + popup (opens ABOVE the chips), then the chat input -->
     <div class="af">
-      <div class="actionbar">
-        <button v-for="a in ACTIONS" :key="a.key" class="actchip" :class="{ on: actionOpen === a.key }" @click="toggleAction(a.key)">
-          <Icon :name="a.icon" :size="14" /> {{ a.label }}
-        </button>
-      </div>
-      <transition name="pop">
+      <transition name="actpop">
         <div v-if="activeAction" class="actpop">
           <div class="actpop-h"><Icon :name="activeAction.icon" :size="14" /> {{ activeAction.label }}<button class="apx" @click="actionOpen = null"><Icon name="x" :size="14" /></button></div>
           <button v-for="p in activeAction.prompts" :key="p.label" class="actprompt" @click="runPrompt(p)">
@@ -564,6 +559,11 @@ watch(() => props.role, () => {
           </button>
         </div>
       </transition>
+      <div class="actionbar">
+        <button v-for="a in ACTIONS" :key="a.key" class="actchip" :class="{ on: actionOpen === a.key }" @click="toggleAction(a.key)">
+          <Icon :name="a.icon" :size="14" /> {{ a.label }}
+        </button>
+      </div>
       <div class="inbox">
         <button class="attach" title="Attach"><Icon name="attach" :size="16" /></button>
         <input v-model="input" placeholder="Type your message…" @keyup.enter="submit" />
@@ -744,6 +744,8 @@ tr:last-child td { border-bottom: none; }
 .actchip:hover :deep(.ico), .actchip.on :deep(.ico) { color: var(--ai); }
 .actchip.on { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
 .actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
+.actpop-enter-active, .actpop-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.actpop-enter-from, .actpop-leave-to { opacity: 0; transform: translateY(8px); }
 .actpop-h { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 4px 6px 8px; }
 .actpop-h :deep(.ico) { color: var(--ai); }
 .apx { margin-left: auto; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 2px; border-radius: 5px; }

@@ -201,38 +201,62 @@ export function widgetBrief(tile) {
         : t.status === 'warn' ? `${base}${wow} — worth keeping an eye on.`
           : t.delta ? `${base}${wow} — within its normal range.`
             : `${base}.`
-    return { summary, actions: [
+    const statusLabel = t.status === 'bad' ? 'Needs attention' : t.status === 'warn' ? 'Watch' : t.status === 'good' ? 'Healthy' : '—'
+    const details = [
+      { label: 'Value', value: `${t.value}${t.unit || ''}` },
+      t.delta && { label: 'WoW change', value: `${t.delta.dir === 'up' ? '▲' : t.delta.dir === 'down' ? '▼' : ''} ${t.delta.pct}%` },
+      { label: 'Status', value: statusLabel },
+      a && { label: 'vs average', value: `${a.pctVsMean > 0 ? '+' : ''}${a.pctVsMean}% (≈${a.mean}${t.unit || ''})` },
+    ].filter(Boolean)
+    return { summary, details, actions: [
       { label: 'Why did it change?', intent: 'explain', text: `Why did ${t.title} change?` },
       { label: 'Show the records', intent: 'drill', text: `Show the records behind ${t.title}` },
     ] }
   }
   if (t.type === 'shortcut') {
     const rows = t.rows || []
-    const prIdx = (t.columns || []).indexOf('Priority')
+    const cols = t.columns || []
+    const prIdx = cols.indexOf('Priority')
     const p1 = prIdx >= 0 ? rows.filter((r) => /p1/i.test(r[prIdx] || '')).length : 0
     const summary = `${rows.length} record${rows.length === 1 ? '' : 's'}${p1 ? ` · ${p1} are P1` : ''}. ${p1 ? 'The highest-priority work is at the top.' : 'Sorted by most recent.'}`
-    return { summary, actions: [
+    const byPr = {}
+    if (prIdx >= 0) rows.forEach((r) => { const p = (r[prIdx] || '').toUpperCase().trim(); if (p) byPr[p] = (byPr[p] || 0) + 1 })
+    const prStr = Object.entries(byPr).map(([k, v]) => `${k}×${v}`).join(', ')
+    const details = [
+      { label: 'Records', value: String(rows.length) },
+      prStr && { label: 'By priority', value: prStr },
+      { label: 'Columns', value: cols.join(', ') },
+    ].filter(Boolean)
+    return { summary, details, actions: [
       { label: 'Prioritize these', intent: 'drill', text: `Prioritize ${t.title}` },
       { label: 'Find similar tickets', intent: 'drill', text: `Find tickets similar to those in ${t.title}` },
     ] }
   }
-  // chart
+  // chart — list every series' data, or every slice's value + share (capped for very wide charts)
   const ch = t.chart || {}
   const series = ch.series || []
+  const labels = ch.labels || []
   let summary
+  let details = []
   if (['pie', 'donut'].includes(ch.kind)) {
     const vals = series[0]?.values || []
     const total = vals.reduce((a, b) => a + b, 0) || 1
     const maxI = vals.indexOf(Math.max(...vals))
-    summary = `${ch.labels?.[maxI] || 'The top slice'} leads at ${Math.round((vals[maxI] / total) * 100)}% across ${vals.length} categories.`
+    summary = `${labels[maxI] || 'The top slice'} leads at ${Math.round((vals[maxI] / total) * 100)}% across ${vals.length} categories.`
+    details = labels.slice(0, 6).map((l, i) => ({ label: l, value: `${vals[i]} · ${Math.round((vals[i] / total) * 100)}%` }))
+    if (labels.length > 6) details.push({ label: `+${labels.length - 6} more`, value: '' })
   } else if (series.length >= 2) {
-    summary = `${series[0].name} vs ${series[1].name} across ${(ch.labels || []).length} points — the gap is the story.`
+    summary = `${series[0].name} vs ${series[1].name} across ${labels.length} points — the gap is the story.`
+    if (labels.length) details.push({ label: 'Categories', value: labels.join(', ') })
+    series.forEach((s) => details.push({ label: s.name, value: (s.values || []).join(', ') }))
   } else if (series[0]) {
     const v = series[0].values || []
     const trend = v.length > 1 ? (v[v.length - 1] >= v[0] ? 'rising' : 'falling') : 'flat'
     summary = `${series[0].name} is ${trend} over ${v.length} points.`
+    if (labels.length) details.push({ label: 'Points', value: labels.join(', ') })
+    details.push({ label: series[0].name, value: v.join(', ') })
   } else summary = `${t.title}.`
-  return { summary, actions: [
+  return { summary, details, actions: [
     { label: 'Explain the trend', intent: 'explain', text: `Explain the trend in ${t.title}` },
     { label: 'Break it down', intent: 'drill', text: `Break down ${t.title} by category` },
   ] }
