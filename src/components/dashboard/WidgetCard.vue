@@ -31,6 +31,9 @@ function openAiHover() {
 function closeAiHoverSoon() { clearTimeout(aiTimer); aiTimer = setTimeout(() => { aiHover.value = false }, 160) }
 function keepAiHover() { clearTimeout(aiTimer) }
 function runWidgetAction(a) { store.ui.aiAsk = { intent: a.intent, text: a.text }; aiHover.value = false }
+// When the tile is too small to show the header AI sparkle, its AI action rides inside the
+// ⋯ menu with the rest — clicking it opens the ServiceOps AI panel with this widget's context.
+function askWidgetAi() { menu.value = false; const a = brief.value.actions[0]; if (a) store.ui.aiAsk = { intent: a.intent, text: a.text } }
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin'])
 
 // classify a table cell into a soft status/priority pill
@@ -267,6 +270,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false; typeOpen = false" />
       <transition name="pop">
         <div v-if="menu" ref="menuEl" class="menu tile-menu" :class="{ 'sub-right': !subLeft }" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+          <template v-if="tiny">
+            <button class="menu-item ai" @click="askWidgetAi"><Icon name="sparkles" :size="15" /> Ask AI about this widget</button>
+            <div class="menu-sep" />
+          </template>
           <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
           <button v-if="tiny && canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
@@ -450,6 +457,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .backdrop { position: fixed; inset: 0; z-index: 130; }
 /* teleported menu — fixed to viewport, above the card so it is never clipped */
 .tile-menu { position: fixed; z-index: 140; min-width: 190px; }
+/* AI action, when it has collapsed into the ⋯ menu on a small tile */
+.menu-item.ai { color: var(--ai-ink); }
+.menu-item.ai :deep(.ico) { color: var(--ai); }
+.menu-item.ai:hover { background: var(--ai-softer); }
 .menu-item.sub { justify-content: space-between; position: relative; }
 .mi-l { display: flex; align-items: center; gap: 10px; }
 .mi-c { color: var(--muted); }

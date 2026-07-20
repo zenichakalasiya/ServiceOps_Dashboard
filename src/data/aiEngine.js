@@ -336,6 +336,60 @@ function actionsFor(fact) {
   ]
 }
 
+// drillNarrative — the WRITTEN, plain-language answer for an "Investigate" (replaces the
+// records table). Grounded: it counts the same rows the table would have shown and phrases
+// them — how many, the priority/status split, which records are closest to breaching, and
+// (for an anomaly) the z-score reasoning folded in. Degrades to a short line when a fact has
+// no worklist behind it. Returns an array of sentences so the UI can render them as prose.
+export function drillNarrative(board, fact) {
+  const wl = board.tiles.find((t) => t.type === 'shortcut')
+  const anomaly = fact.kind === 'anomaly' ? anomalyFor(board.tiles.find((t) => t.id === fact.tileId)) : null
+  const out = []
+
+  // Lead with the "why" when this is an anomaly, so Investigate also answers Explain.
+  if (anomaly) out.push(anomaly.text)
+
+  if (!wl) {
+    out.push('There is no record list behind this metric to open, so act on it from its source module.')
+    return out
+  }
+  const cols = wl.columns
+  const iOf = (c) => cols.indexOf(c)
+  const prIdx = iOf('Priority'), stIdx = iOf('Status'), dueIdx = iOf('Due'), subjIdx = iOf('Subject'), reqIdx = iOf('Requester')
+  const rows = wl.rows
+
+  // Scope the rows the same way the table would have (by fact kind).
+  let scoped = rows
+  if (fact.kind === 'breach') scoped = rows.filter((r) => /p1/i.test(r[prIdx] || ''))
+  const dueToday = dueIdx >= 0 ? scoped.filter((r) => /today/i.test(r[dueIdx] || '')) : []
+  const p1 = prIdx >= 0 ? scoped.filter((r) => /p1/i.test(r[prIdx] || '')).length : 0
+  const inProg = stIdx >= 0 ? scoped.filter((r) => /in progress/i.test(r[stIdx] || '')).length : 0
+  const open = stIdx >= 0 ? scoped.filter((r) => /^open$/i.test((r[stIdx] || '').trim())).length : 0
+
+  // Sentence 1 — the shape of the record set.
+  const parts = [`${scoped.length} record${scoped.length === 1 ? '' : 's'} sit behind this in “${wl.title}”`]
+  if (p1) parts.push(`${p1} at P1`)
+  if (dueToday.length) parts.push(`${dueToday.length} due today`)
+  out.push(parts.join(', ') + '.')
+
+  // Sentence 2 — name the ones closest to breaching (the actionable detail).
+  const top = (dueToday.length ? dueToday : scoped).slice(0, 2).map((r) => {
+    const s = subjIdx >= 0 ? r[subjIdx] : 'a request'
+    const who = reqIdx >= 0 && r[reqIdx] ? ` (${r[reqIdx]})` : ''
+    return `${s}${who}`
+  })
+  if (top.length) out.push(`${dueToday.length ? 'Closest to breach' : 'Top of the list'}: ${top.join(' and ')}.`)
+
+  // Sentence 3 — the status split, so it reads like a briefing not a dump.
+  if (inProg || open) {
+    const bits = []
+    if (inProg) bits.push(`${inProg} already in progress`)
+    if (open) bits.push(`${open} still unactioned`)
+    out.push(bits.join(', ') + ' — ' + (inProg >= open ? 'work is under way but not finished.' : 'most have not been picked up yet.'))
+  }
+  return out
+}
+
 export function drillFor(board, fact) {
   const wl = board.tiles.find((t) => t.type === 'shortcut')
   const columns = wl ? wl.columns : []

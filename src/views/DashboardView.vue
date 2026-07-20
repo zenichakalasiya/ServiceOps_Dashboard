@@ -142,6 +142,20 @@ watch(() => store.ui.aiAsk, (a) => {
   store.ui.aiPanelOpen = true
   nextTick(() => { aiPanel.value?.trigger(a.intent, a.text); store.ui.aiAsk = null })
 })
+// The AI panel "spotlights" a widget by title while it narrates an Investigate — scroll to
+// the matching tile on THIS board and flash it, so the answer points at the real widget
+// instead of a table. Match by title (the demo board mirrors the live one).
+watch(() => store.ui.aiHighlight, (title) => {
+  if (!title) return
+  const t = (d.value?.tiles || []).find((x) => x.title === title)
+  store.ui.aiHighlight = null
+  if (!t) return
+  nextTick(() => {
+    document.querySelector(`[data-tile="${t.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightId.value = t.id
+    setTimeout(() => { if (highlightId.value === t.id) highlightId.value = null }, 2600)
+  })
+})
 const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
 const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
 const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here" between groups

@@ -13,7 +13,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
@@ -42,10 +42,18 @@ function pushExplain(text) {
   thread.value.push({ id: ++bid, kind: 'explain', tile, anomaly: anomalyFor(tile) })
   scrollDown()
 }
-function pushDrill(text) {
-  const fact = factFromText(props.board, text)
+// Spotlight the real tile on the dashboard (scroll + flash) instead of dumping a table.
+function highlightWidget(fact) {
+  const t = fact && props.board.tiles.find((x) => x.id === fact.tileId)
+  store.ui.aiHighlight = t ? t.title : null
+}
+function pushDrill(text, factObj) {
+  const fact = factObj || factFromText(props.board, text)
   const drill = drillFor(props.board, fact)
-  thread.value.push({ id: ++bid, kind: 'drill', fact, drill, chips: [...drill.chips] })
+  const widget = props.board.tiles.find((x) => x.id === fact.tileId)?.title || drill.sourceTitle
+  highlightWidget(fact)
+  // Investigate now answers in WRITTEN prose + 3 suggested actions — no records table.
+  thread.value.push({ id: ++bid, kind: 'drill', fact, widget, narrative: drillNarrative(props.board, fact), actions: drill.actions.slice(0, 3) })
   scrollDown()
 }
 function pushWidget(text) {
@@ -219,12 +227,11 @@ function submit() {
   dispatch(routeIntent(text), text)
 }
 function suggest(s) { pushUser(s.label); dispatch(s.intent, s.label) }
-function investigate(fact) { pushUser(`Investigate: ${fact.chip}`); pushDrill(fact.kind === 'anomaly' ? 'overdue anomaly' : 'breach') }
-function explainFact(fact) { pushUser(`Explain: ${fact.chip}`); pushExplain(fact.chip) }
+// One action per fact: Investigate → spotlight the widget + a written briefing + 3 actions
+// (the "why" is folded into the narrative, so a separate Explain link is no longer needed).
+function investigate(fact) { pushUser(`Investigate: ${fact.chip}`); pushDrill(fact.chip, fact) }
 
-// drill block: editable chips + records + actions
-function recordsFor(b) { return applyChips(b.drill.baseRows, b.drill.columns, b.chips) }
-function removeDrillChip(b, i) { if (!b.chips[i].locked) b.chips.splice(i, 1) }
+// drill block: written narrative + up to 3 actions (no records table)
 function runAction() { const a = pending.value.action; pending.value = null; toast(`${a.label} — done`, a.danger === false ? 'success' : 'warn') }
 
 // widget block: editable chips + type + add
@@ -241,13 +248,6 @@ function spark(a) {
   return { W, H, line: 'M' + h.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' L'), last: { x: x(h.length - 1), y: y(a.value) }, meanY: y(a.mean) }
 }
 const dotClass = (s) => (s === 'bad' ? 'bad' : s === 'warn' ? 'warn' : 'info')
-function pillClass(v) {
-  const s = String(v).toLowerCase().trim()
-  if (['open', 'pending', 'new'].includes(s)) return 'pill pill-blue'
-  if (['in progress', 'active', 'on hold'].includes(s)) return 'pill pill-amber'
-  if (['resolved', 'closed', 'done'].includes(s)) return 'pill pill-green'
-  const m = s.match(/^p([1-4])$/); return m ? 'pill pill-p' + m[1] : ''
-}
 
 // external trigger — no auto-summary; the panel opens to the greeting empty state.
 function trigger(intent, label) {
@@ -309,7 +309,6 @@ watch(() => props.role, () => {
                 <div class="ftext">{{ f.text }}</div>
                 <div class="fmeta">
                   <span class="cite"><Icon name="chart-bar" :size="11" /> {{ f.chip }}</span>
-                  <button class="lnk" @click="explainFact(f)">Explain</button>
                   <button class="lnk" @click="investigate(f)">Investigate →</button>
                 </div>
               </div>
@@ -373,32 +372,14 @@ watch(() => props.role, () => {
           <button class="mini-cta" @click="investigate({ kind: 'anomaly', chip: b.tile.title })">Investigate <Icon name="chevron-right" :size="13" /></button>
         </template>
 
-        <!-- P2 drill -->
+        <!-- P2 drill — written briefing + spotlight the widget + 3 suggested actions (no table) -->
         <template v-else-if="b.kind === 'drill'">
           <div class="blk-h"><Icon name="insights" :size="14" /> {{ b.fact.text }}</div>
-          <div class="sub-h">Scope <span class="muted">editable</span></div>
-          <div class="chips">
-            <span v-for="(c, i) in b.chips" :key="i" class="dchip" :class="{ locked: c.locked }">
-              <b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}
-              <button v-if="!c.locked" class="cx" @click="removeDrillChip(b, i)"><Icon name="x" :size="11" /></button>
-              <Icon v-else name="lock" :size="10" class="cl" />
-            </span>
-          </div>
-          <p v-if="b.drill.tierNote" class="tier"><Icon name="info" :size="11" /> {{ b.drill.tierNote }}</p>
-          <div class="sub-h">{{ recordsFor(b).length }} record{{ recordsFor(b).length === 1 ? '' : 's' }} <span class="muted">from “{{ b.drill.sourceTitle }}”</span></div>
-          <div class="rtbl">
-            <table><thead><tr><th v-for="c in b.drill.columns" :key="c">{{ c }}</th></tr></thead>
-              <tbody><tr v-for="(r, i) in recordsFor(b)" :key="i"><td v-for="(cell, j) in r" :key="j">
-                <span v-if="pillClass(cell)" :class="pillClass(cell)">{{ cell }}</span>
-                <span v-else-if="/^[A-Z]{2,4}-\d/.test(String(cell))" class="idl">{{ cell }}</span>
-                <template v-else>{{ cell }}</template>
-              </td></tr>
-              <tr v-if="!recordsFor(b).length"><td :colspan="b.drill.columns.length" class="none">No records match this scope.</td></tr></tbody>
-            </table>
-          </div>
+          <div v-if="b.widget" class="spot"><Icon name="target" :size="12" /> Spotlighted <b>“{{ b.widget }}”</b> on the dashboard</div>
+          <p v-for="(line, i) in b.narrative" :key="i" class="say">{{ line }}</p>
           <div class="sub-h">Suggested actions <span class="muted">confirmed, never automatic</span></div>
           <div class="acts">
-            <button v-for="a in b.drill.actions" :key="a.id" class="act" @click="pending = { block: b, action: a }">
+            <button v-for="a in b.actions" :key="a.id" class="act" @click="pending = { block: b, action: a }">
               <span class="aic"><Icon :name="a.icon" :size="14" /></span><span class="al">{{ a.label }}</span><Icon name="chevron-right" :size="14" class="ac" />
             </button>
           </div>
@@ -642,7 +623,12 @@ watch(() => props.role, () => {
 .an-step:nth-child(2) .asd { animation-delay: .3s; } .an-step:nth-child(3) .asd { animation-delay: .6s; }
 @media (prefers-reduced-motion: reduce) { .an-orb, .an-dots i, .asd { animation: none; } }
 /* explain */
-.say { margin: 0 0 9px; font-size: 12.5px; line-height: 1.45; }
+.say { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.say:first-of-type { color: var(--ink); }
+/* "spotlighted a widget on the board" note — the written answer points AT the tile */
+.spot { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 11.5px; color: var(--ai-ink); background: var(--ai-softer); border: 1px solid var(--ai-border); border-radius: var(--r-pill); padding: 4px 11px; }
+.spot :deep(.ico) { color: var(--ai); }
+.spot b { font-weight: 600; }
 .spark svg { width: 100%; height: 42px; display: block; margin-bottom: 8px; }
 .sl { fill: none; stroke: var(--muted-2); stroke-width: 1.5; }
 .mean { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 3 3; }

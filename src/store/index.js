@@ -17,6 +17,9 @@ export const store = reactive({
     // Entry ids live in src/data/aiEntries.js; one at a time, switched from the on-board demo bar.
     // aiAsk lets any component (topbar, a widget) request the panel run an intent — the board forwards it.
     aiEntry: 'card', aiPanelOpen: false, aiAsk: null,
+    // a widget TITLE the AI panel asked the board to spotlight (scroll + flash) while it
+    // narrates the answer — so "investigate" points at the real tile instead of a table.
+    aiHighlight: null,
     // { title, type } — a widget to scroll to and flash once the board has loaded
     focusTile: null },
   // global view-time controls (per the rebuilt Time Filter + Auto-Refresh)

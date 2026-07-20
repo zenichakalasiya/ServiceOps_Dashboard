@@ -36,6 +36,7 @@ const MAP = {
   'chart-pyramid': 'change_history', 'chart-hbar': 'align_horizontal_left',
   'open-in': 'arrow_forward', chat: 'chat_bubble', 'auto-graph': 'auto_graph', bolt: 'bolt',
   send: 'send', attach: 'attach_file', brain: 'neurology', flag: 'flag', research: 'travel_explore',
+  target: 'center_focus_strong', insights: 'insights',
 }
 const FILLED = new Set(['star-fill'])
 
