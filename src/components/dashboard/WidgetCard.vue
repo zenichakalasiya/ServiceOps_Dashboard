@@ -8,33 +8,29 @@ import FilterMenu from '../ui/FilterMenu.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { typesFor, isFrozen, frozenReason, whyDisabled } from '../../data/chartTypes.js'
 import { fieldsFrom } from '../../data/filters.js'
+import { widgetBrief } from '../../data/aiEngine.js'
 import { store, toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean })
-// Per-widget AI (catalog section B): a hover sparkle opens a small menu of widget-scoped
-// actions; each routes into the shared assistant panel via store.ui.aiAsk. Forecast/alert
-// map to explain in this prototype (the panel has no dedicated forecast block yet).
+// Per-widget AI: HOVER the sparkle → a mini AI summary card of this widget with two
+// type-specific suggestive actions; clicking one opens the ServiceOps AI panel and
+// generates the contextual answer for that widget (via store.ui.aiAsk).
 const aiBtn = ref(null)
-const aiMenu = ref(false)
-const aiMenuPos = ref({ top: 0, left: 0 })
-const WIDGET_AI = [
-  { label: 'Explain this', intent: 'explain', icon: 'bulb', t: (n) => `Explain ${n}` },
-  { label: 'Why did it change?', intent: 'explain', icon: 'trend', t: (n) => `Why did ${n} change?` },
-  { label: 'Show the records behind it', intent: 'drill', icon: 'table', t: (n) => `Show the records behind ${n}` },
-  { label: 'Break down by team / priority', intent: 'drill', icon: 'sitemap', t: (n) => `Break down ${n} by team` },
-  { label: 'Forecast the trend', intent: 'explain', icon: 'chart-line', t: (n) => `Forecast ${n}` },
-  { label: 'Alert me when this crosses X', intent: 'explain', icon: 'bell', t: (n) => `Alert me when ${n} crosses a threshold` },
-]
-function toggleAiMenu() {
-  if (aiMenu.value) { aiMenu.value = false; return }
-  const r = aiBtn.value?.getBoundingClientRect()
-  const W = 236
-  if (r) aiMenuPos.value = { top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) }
-  aiMenu.value = true
+const aiHover = ref(false)
+const aiPos = ref({ top: 0, left: 0, flip: false })
+const CARD_W = 288
+const brief = computed(() => widgetBrief(props.tile))
+let aiTimer = null
+function openAiHover() {
+  clearTimeout(aiTimer)
+  const r = aiBtn.value?.getBoundingClientRect(); if (!r) return
+  const left = Math.max(8, Math.min(r.right - CARD_W, window.innerWidth - CARD_W - 8))
+  const flip = r.bottom + 150 > window.innerHeight     // not enough room below → open upward
+  aiPos.value = { top: flip ? r.top - 8 : r.bottom + 8, left, flip }
+  aiHover.value = true
 }
-function askAiWidget(chip) {
-  store.ui.aiAsk = { intent: chip.intent, text: chip.t(props.tile.title) }
-  aiMenu.value = false
-}
+function closeAiHoverSoon() { clearTimeout(aiTimer); aiTimer = setTimeout(() => { aiHover.value = false }, 160) }
+function keepAiHover() { clearTimeout(aiTimer) }
+function runWidgetAction(a) { store.ui.aiAsk = { intent: a.intent, text: a.text }; aiHover.value = false }
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin'])
 
 // classify a table cell into a soft status/priority pill
@@ -224,7 +220,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         </span>
       </div>
       <div class="right">
-        <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiMenu }" @click.stop="toggleAiMenu" title="Ask AI about this widget"><Icon name="sparkles" :size="15" /></button>
+        <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
         <FilterMenu v-if="tile.type === 'shortcut' && filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter records" class="ti-fm" />
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
@@ -236,15 +232,21 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       </div>
     </header>
 
-    <!-- per-widget AI menu (catalog section B) — teleported so it overlays the card -->
+    <!-- per-widget AI: hover mini-summary card, teleported so it overlays the board -->
     <teleport to="body">
-      <div v-if="aiMenu" class="backdrop" @click="aiMenu = false" />
-      <transition name="pop">
-        <div v-if="aiMenu" class="menu tile-menu ai-menu" :style="{ top: aiMenuPos.top + 'px', left: aiMenuPos.left + 'px' }" @click.stop>
-          <div class="menu-label ai-lbl"><Icon name="sparkles" :size="13" /> Ask AI · {{ tile.title }}</div>
-          <button v-for="c in WIDGET_AI" :key="c.label" class="menu-item" @click="askAiWidget(c)">
-            <Icon :name="c.icon" :size="15" /> {{ c.label }}
-          </button>
+      <transition name="wai">
+        <div
+          v-if="aiHover" class="wai-card" :class="{ up: aiPos.flip }"
+          :style="{ top: aiPos.top + 'px', left: aiPos.left + 'px' }"
+          @mouseenter="keepAiHover" @mouseleave="closeAiHoverSoon"
+        >
+          <div class="wai-h"><span class="wai-spark"><Icon name="sparkles" :size="14" /></span> AI summary · <span class="ellip">{{ tile.title }}</span></div>
+          <p class="wai-sum">{{ brief.summary }}</p>
+          <div class="wai-acts">
+            <button v-for="a in brief.actions" :key="a.label" class="wai-a" @click="runWidgetAction(a)">
+              {{ a.label }} <Icon name="open-in" :size="13" />
+            </button>
+          </div>
         </div>
       </transition>
     </teleport>
@@ -424,9 +426,19 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ti.on { background: var(--primary-soft); color: var(--primary-700); }
 .ti.ai { color: var(--ai); }
 .ti.ai:hover, .ti.ai.on { background: var(--ai-soft); color: var(--ai-ink); }
-.ai-menu { min-width: 236px; }
-.ai-lbl { display: flex; align-items: center; gap: 6px; }
-.ai-lbl :deep(.ico) { color: var(--ai); }
+/* per-widget hover mini-summary card */
+.wai-card { position: fixed; z-index: 260; width: 288px; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
+.wai-card.up { transform: translateY(-100%); }
+.wai-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.wai-h .ellip { color: var(--ai-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wai-spark { width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
+.wai-sum { margin: 9px 0 11px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.wai-acts { display: flex; flex-direction: column; gap: 6px; }
+.wai-a { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; height: 32px; padding: 0 11px; border: 1px solid var(--ai-border); border-radius: 8px; background: var(--ai-softer); color: var(--ai-ink); font-weight: 600; font-size: 12px; }
+.wai-a :deep(.ico) { color: var(--ai); }
+.wai-a:hover { background: var(--ai-soft); border-color: var(--ai); }
+.wai-enter-active, .wai-leave-active { transition: opacity .14s ease; }
+.wai-enter-from, .wai-leave-to { opacity: 0; }
 .spin { animation: sp 0.75s linear infinite; } @keyframes sp { to { transform: rotate(360deg); } }
 .mwrap { position: relative; }
 .backdrop { position: fixed; inset: 0; z-index: 130; }

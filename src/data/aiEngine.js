@@ -126,6 +126,60 @@ export function confidence(board) {
 export const FRESHNESS = 'just now'
 
 // ---------------------------------------------------------------------------
+// widgetBrief — a tiny grounded summary + two type-specific suggestive actions for a
+// single tile, shown on hover of its AI sparkle. Works on any real tile (KPI / chart /
+// shortcut), degrading gracefully when history/delta aren't present.
+// ---------------------------------------------------------------------------
+export function widgetBrief(tile) {
+  const t = tile || {}
+  if (t.type === 'kpi') {
+    const a = anomalyFor(t)
+    const base = `${t.title} is ${t.value}${t.unit || ''}`
+    const wow = t.delta ? `, ${t.delta.dir} ${t.delta.pct}% vs last week` : ''
+    const summary = a
+      ? `${base} — ${a.pctVsMean > 0 ? 'well above' : 'well below'} its ~${a.mean}${t.unit || ''} average (${a.pctVsMean > 0 ? '+' : ''}${a.pctVsMean}%). A clear outlier worth a look.`
+      : t.status === 'bad' ? `${base}${wow} — flagged as needing attention.`
+        : t.status === 'warn' ? `${base}${wow} — worth keeping an eye on.`
+          : t.delta ? `${base}${wow} — within its normal range.`
+            : `${base}.`
+    return { summary, actions: [
+      { label: 'Why did it change?', intent: 'explain', text: `Why did ${t.title} change?` },
+      { label: 'Show the records', intent: 'drill', text: `Show the records behind ${t.title}` },
+    ] }
+  }
+  if (t.type === 'shortcut') {
+    const rows = t.rows || []
+    const prIdx = (t.columns || []).indexOf('Priority')
+    const p1 = prIdx >= 0 ? rows.filter((r) => /p1/i.test(r[prIdx] || '')).length : 0
+    const summary = `${rows.length} record${rows.length === 1 ? '' : 's'}${p1 ? ` · ${p1} are P1` : ''}. ${p1 ? 'The highest-priority work is at the top.' : 'Sorted by most recent.'}`
+    return { summary, actions: [
+      { label: 'Prioritize these', intent: 'drill', text: `Prioritize ${t.title}` },
+      { label: 'Find similar tickets', intent: 'drill', text: `Find tickets similar to those in ${t.title}` },
+    ] }
+  }
+  // chart
+  const ch = t.chart || {}
+  const series = ch.series || []
+  let summary
+  if (['pie', 'donut'].includes(ch.kind)) {
+    const vals = series[0]?.values || []
+    const total = vals.reduce((a, b) => a + b, 0) || 1
+    const maxI = vals.indexOf(Math.max(...vals))
+    summary = `${ch.labels?.[maxI] || 'The top slice'} leads at ${Math.round((vals[maxI] / total) * 100)}% across ${vals.length} categories.`
+  } else if (series.length >= 2) {
+    summary = `${series[0].name} vs ${series[1].name} across ${(ch.labels || []).length} points — the gap is the story.`
+  } else if (series[0]) {
+    const v = series[0].values || []
+    const trend = v.length > 1 ? (v[v.length - 1] >= v[0] ? 'rising' : 'falling') : 'flat'
+    summary = `${series[0].name} is ${trend} over ${v.length} points.`
+  } else summary = `${t.title}.`
+  return { summary, actions: [
+    { label: 'Explain the trend', intent: 'explain', text: `Explain the trend in ${t.title}` },
+    { label: 'Break it down', intent: 'drill', text: `Break down ${t.title} by category` },
+  ] }
+}
+
+// ---------------------------------------------------------------------------
 // "What changed since your last visit" — grounded in each KPI's own delta + status,
 // plus a worklist change. A fixed last-visit label keeps the demo honest without a clock.
 // This is the ITSM flow: a technician returning to their board sees, at a glance, which
