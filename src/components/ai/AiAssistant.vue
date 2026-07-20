@@ -31,15 +31,67 @@ let bid = 0
 
 function scrollDown() { nextTick(() => { if (bodyEl.value) bodyEl.value.scrollTop = bodyEl.value.scrollHeight }) }
 
-// ---- block builders ----
-function pushSummary() {
-  thread.value.push({ id: ++bid, kind: 'summary', facts: computeFacts(props.board, props.role), conf: confidence(props.board) })
-  scrollDown()
+// ============================================================================
+//  A realistic AI feel — every answer THINKS before it speaks, then the content
+//  arrives progressively (streamed prose, revealed items) instead of appearing
+//  all at once. The numbers are still deterministic (aiEngine); only the *timing
+//  and delivery* are dramatised, exactly what a grounded on-prem model would do.
+// ============================================================================
+const prefersReduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+// grounded reasoning steps — narrate what the engine actually does for each intent
+const THINK_STEPS = {
+  summary: (n) => [`Reading ${n} widgets on this board`, 'Checking SLA, backlog and anomaly signals', 'Ranking what matters for your role'],
+  drill: () => ['Finding the widget behind this signal', 'Pulling the records that match', 'Ranking them by urgency', 'Writing a plain-language briefing'],
+  explain: () => ['Fetching this metric’s recent history', 'Computing the z-score against its baseline', 'Deciding whether it’s a real anomaly'],
+  changes: () => ['Loading your last-visit snapshot', 'Diffing every metric since then', 'Sorting by what moved the most'],
+  analyzing: (n) => [`Reading ${n} widgets`, 'Checking SLA, backlog and anomaly signals', 'Composing a plain-language summary'],
 }
+const THINK_LABEL = { summary: 'Analyzing what needs attention', drill: 'Investigating', explain: 'Explaining this metric', changes: 'Comparing with your last visit', analyzing: 'Analyzing this dashboard' }
+const thinkLabel = (b) => THINK_LABEL[b.kind] || 'Thinking'
+// only the reasoning steps that have started (so transition-group animates each in)
+const shownSteps = (b) => (b.steps || []).filter((s) => s.state !== 'pending')
+
+// step through the reasoning steps (pending → active → done), then run onDone
+function runThinking(b, steps, onDone) {
+  b.phase = 'thinking'
+  b.steps = steps.map((t) => ({ text: t, state: 'pending' }))
+  if (prefersReduced) { b.steps.forEach((s) => (s.state = 'done')); b.phase = 'done'; onDone && onDone(); scrollDown(); return }
+  let i = 0
+  const tick = () => {
+    if (i >= b.steps.length) { b.phase = 'done'; scrollDown(); onDone && onDone(); return }
+    b.steps[i].state = 'active'; scrollDown()
+    setTimeout(() => { b.steps[i].state = 'done'; i += 1; setTimeout(tick, 130) }, 360 + Math.random() * 240)
+  }
+  setTimeout(tick, 240)
+}
+// reveal a string word-by-word into b[key]
+function streamText(b, key, text, done) {
+  if (prefersReduced) { b[key] = text; done && done(); return }
+  const words = String(text).split(' ')
+  b[key] = ''; let i = 0
+  const step = () => {
+    if (i >= words.length) { done && done(); return }
+    b[key] += (i ? ' ' : '') + words[i]; i += 1; scrollDown()
+    setTimeout(step, 22 + Math.random() * 44)
+  }
+  step()
+}
+// tick a reveal counter b[key] from 0 → total (staggered list reveal)
+function revealItems(b, key, total, delay, done) {
+  b[key] = 0
+  if (prefersReduced) { b[key] = total; done && done(); return }
+  const step = () => {
+    if (b[key] >= total) { done && done(); return }
+    b[key] += 1; scrollDown(); setTimeout(step, delay)
+  }
+  setTimeout(step, 140)
+}
+
+// ---- block builders ----
 function pushUser(text) { thread.value.push({ id: ++bid, kind: 'user', text }); scrollDown() }
-function pushExplain(text) {
-  const tile = tileFromText(props.board, text)
-  thread.value.push({ id: ++bid, kind: 'explain', tile, anomaly: anomalyFor(tile) })
+function pushWidget(text) {
+  const spec = specFromText(text)
+  thread.value.push({ id: ++bid, kind: 'widget', spec, recommendedKind: spec.kind, added: false })
   scrollDown()
 }
 // Spotlight the real tile on the dashboard (scroll + flash) instead of dumping a table.
@@ -47,31 +99,65 @@ function highlightWidget(fact) {
   const t = fact && props.board.tiles.find((x) => x.id === fact.tileId)
   store.ui.aiHighlight = t ? t.title : null
 }
+
+// P1 — what needs attention: think, then reveal each fact one at a time
+function pushSummary() {
+  const b = push('summary', { phase: 'thinking', facts: [], conf: 'high', shown: 0, settled: false })
+  runThinking(b, THINK_STEPS.summary(props.board.tiles.length), () => {
+    b.facts = computeFacts(props.board, props.role)
+    b.conf = confidence(props.board)
+    revealItems(b, 'shown', b.facts.length, 200, () => { b.settled = true })
+  })
+}
+// P3 — explain: think, then STREAM the verdict, then reveal the sparkline/how/CTA
+function pushExplain(text) {
+  const tile = tileFromText(props.board, text)
+  const b = push('explain', { phase: 'thinking', tile, anomaly: anomalyFor(tile), shownText: '', showExtras: false, settled: false })
+  runThinking(b, THINK_STEPS.explain(), () => {
+    highlightWidget({ tileId: tile.id })
+    const full = b.anomaly ? b.anomaly.text
+      : `${tile.title} is ${tile.value}${tile.unit || ''}${tile.delta ? `, ${tile.delta.dir} ${tile.delta.pct}% vs last week` : ''} — within its normal range, not an anomaly.`
+    streamText(b, 'shownText', full, () => { setTimeout(() => { b.showExtras = true; b.settled = true; scrollDown() }, 200) })
+  })
+}
+// P2 — investigate: think, spotlight the widget, STREAM the briefing line-by-line, reveal actions
 function pushDrill(text, factObj) {
   const fact = factObj || factFromText(props.board, text)
-  const drill = drillFor(props.board, fact)
-  const widget = props.board.tiles.find((x) => x.id === fact.tileId)?.title || drill.sourceTitle
-  highlightWidget(fact)
-  // Investigate now answers in WRITTEN prose + 3 suggested actions — no records table.
-  thread.value.push({ id: ++bid, kind: 'drill', fact, widget, narrative: drillNarrative(props.board, fact), actions: drill.actions.slice(0, 3) })
-  scrollDown()
+  const b = push('drill', { phase: 'thinking', fact, widget: '', showSpot: false, shownLines: [], cur: '', lines: [], actions: [], shownActions: 0, settled: false })
+  runThinking(b, THINK_STEPS.drill(), () => {
+    const drill = drillFor(props.board, fact)
+    b.widget = props.board.tiles.find((x) => x.id === fact.tileId)?.title || drill.sourceTitle
+    b.actions = drill.actions.slice(0, 3)
+    b.lines = drillNarrative(props.board, fact)
+    highlightWidget(fact)
+    setTimeout(() => { b.showSpot = true; scrollDown(); streamLines(b, 0) }, 240)
+  })
 }
-function pushWidget(text) {
-  const spec = specFromText(text)
-  thread.value.push({ id: ++bid, kind: 'widget', spec, recommendedKind: spec.kind, added: false })
-  scrollDown()
+function streamLines(b, idx) {
+  if (idx >= b.lines.length) {
+    setTimeout(() => { b.showSpot = b.showSpot; revealItems(b, 'shownActions', b.actions.length, 150, () => { b.settled = true }) }, 220)
+    return
+  }
+  streamText(b, 'cur', b.lines[idx], () => {
+    b.shownLines.push(b.lines[idx]); b.cur = ''
+    setTimeout(() => streamLines(b, idx + 1), 150)
+  })
 }
+// what changed: think, then reveal the change cards one at a time
 function pushChanges() {
-  thread.value.push({ id: ++bid, kind: 'changes', data: changesSinceLastVisit(props.board) })
-  scrollDown()
+  const b = push('changes', { phase: 'thinking', data: null, shown: 0, settled: false })
+  runThinking(b, THINK_STEPS.changes(), () => {
+    b.data = changesSinceLastVisit(props.board)
+    revealItems(b, 'shown', b.data.items.length, 160, () => { b.settled = true })
+  })
 }
-// Summarize / Ask: a visible analyzing/thinking state, then a WRITTEN prose summary.
-// Mutate the REACTIVE array element (not the raw object we pushed) so the reveal re-renders.
+// Summarize / Ask: think, then the grouped written summary
 function pushAnalyzing() {
-  thread.value.push({ id: ++bid, kind: 'analyzing', phase: 'thinking', points: [] })
-  const b = thread.value[thread.value.length - 1]
-  scrollDown()
-  setTimeout(() => { b.phase = 'done'; b.points = dashboardSummaryPoints(props.board, props.role); scrollDown() }, 1700)
+  const b = push('analyzing', { phase: 'thinking', points: [], settled: false })
+  runThinking(b, THINK_STEPS.analyzing(props.board.tiles.length), () => {
+    b.points = dashboardSummaryPoints(props.board, props.role)
+    b.settled = true
+  })
 }
 // a short templated reply for actions we don't fully simulate (edit / schedule)
 function pushNote(text) {
@@ -142,7 +228,8 @@ function dispatch(intent, text) {
 const CREATE_FLOW_KINDS = ['create-start', 'cd-name', 'cd-cat', 'cd-vis', 'cd-confirm', 'cd-done', 'cw-dash', 'cw-desc', 'cw-preview']
 function isAnswer(b) {
   if (b.kind === 'user' || CREATE_FLOW_KINDS.includes(b.kind)) return false
-  if (b.kind === 'analyzing') return b.phase === 'done'
+  if (b.phase && b.phase !== 'done') return false   // still thinking
+  if (b.settled === false) return false              // still streaming/revealing
   return true
 }
 function followUpsFor(b) {
@@ -299,91 +386,115 @@ watch(() => props.role, () => {
         <!-- user echo -->
         <div v-if="b.kind === 'user'" class="user"><span>{{ b.text }}</span></div>
 
-        <!-- P1 summary -->
-        <template v-else-if="b.kind === 'summary'">
-          <div class="blk-h"><Icon name="sparkles" :size="14" /> What needs attention <span class="updated">updated {{ FRESHNESS }}</span></div>
-          <div class="facts">
-            <div v-for="f in b.facts" :key="f.id" class="fact" @mouseenter="emit('cite', f.tileId)" @mouseleave="emit('cite', null)">
-              <span class="dot" :class="dotClass(f.severity)" />
-              <div class="fb">
-                <div class="ftext">{{ f.text }}</div>
-                <div class="fmeta">
-                  <span class="cite"><Icon name="chart-bar" :size="11" /> {{ f.chip }}</span>
-                  <button class="lnk" @click="investigate(f)">Investigate →</button>
+        <!-- SHARED thinking phase — any answer block still reasoning -->
+        <template v-else-if="b.phase === 'thinking'">
+          <div class="think">
+            <span class="think-orb"><Icon name="sparkles" :size="15" /></span>
+            <div class="think-main">
+              <div class="think-t">{{ thinkLabel(b) }}<span class="think-dots"><i /><i /><i /></span></div>
+              <transition-group name="tstep" tag="div" class="think-steps">
+                <div v-for="s in shownSteps(b)" :key="s.text" class="tstep" :class="s.state">
+                  <span class="tstep-ic">
+                    <Icon v-if="s.state === 'done'" name="check" :size="12" />
+                    <span v-else class="tspin" />
+                  </span>
+                  <span class="tstep-x">{{ s.text }}</span>
                 </div>
-              </div>
+              </transition-group>
             </div>
-            <div v-if="!b.facts.length" class="calm"><Icon name="check" :size="16" /> Nothing unusual — all {{ board.tiles.length }} widgets are within range.</div>
           </div>
         </template>
 
-        <!-- What changed since last visit — light-tinted cards, one per moved metric -->
+        <!-- P1 summary — facts revealed one at a time -->
+        <template v-else-if="b.kind === 'summary'">
+          <div class="reasoning"><span class="rz-dot" /> Reasoned in {{ b.steps ? b.steps.length : 3 }} steps · ranked for your role</div>
+          <div class="blk-h"><Icon name="sparkles" :size="14" /> What needs attention <span class="updated">updated {{ FRESHNESS }}</span></div>
+          <div class="facts">
+            <template v-for="(f, fi) in b.facts" :key="f.id">
+              <div v-if="fi < b.shown" class="fact reveal" @mouseenter="emit('cite', f.tileId)" @mouseleave="emit('cite', null)">
+                <span class="dot" :class="dotClass(f.severity)" />
+                <div class="fb">
+                  <div class="ftext">{{ f.text }}</div>
+                  <div class="fmeta">
+                    <span class="cite"><Icon name="chart-bar" :size="11" /> {{ f.chip }}</span>
+                    <button class="lnk" @click="investigate(f)">Investigate →</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div v-if="b.settled && !b.facts.length" class="calm"><Icon name="check" :size="16" /> Nothing unusual — all {{ board.tiles.length }} widgets are within range.</div>
+          </div>
+        </template>
+
+        <!-- What changed since last visit — compact cards revealed one at a time -->
         <template v-else-if="b.kind === 'changes'">
+          <div class="reasoning"><span class="rz-dot" /> Diffed every metric against your last visit</div>
           <div class="blk-h"><Icon name="history" :size="14" /> What changed since your last visit</div>
           <div class="lastvisit"><Icon name="clock" :size="12" /> Last visit: {{ b.data.lastVisit }}</div>
           <div class="chg-grid">
-            <div v-for="(it, i) in b.data.items" :key="i" class="chgc" :class="[it.severity, { hasnote: it.note }]" :title="it.note || null">
-              <div class="chgc-top">
-                <span class="chgc-ico" :class="it.dir"><Icon :name="it.dir === 'down' ? 'sort-desc' : 'sort-asc'" :size="13" /></span>
-                <span class="chgc-delta" :class="it.dir">{{ it.delta }}</span>
+            <template v-for="(it, i) in b.data.items" :key="i">
+              <div v-if="i < b.shown" class="chgc reveal" :class="[it.severity, { hasnote: it.note }]" :title="it.note || null">
+                <div class="chgc-top">
+                  <span class="chgc-ico" :class="it.dir"><Icon :name="it.dir === 'down' ? 'sort-desc' : 'sort-asc'" :size="13" /></span>
+                  <span class="chgc-delta" :class="it.dir">{{ it.delta }}</span>
+                </div>
+                <div class="chgc-name">{{ it.widget }}</div>
+                <div class="chgc-val">Now <b>{{ it.value }}</b></div>
               </div>
-              <div class="chgc-name">{{ it.widget }}</div>
-              <div class="chgc-val">Now <b>{{ it.value }}</b></div>
-            </div>
+            </template>
           </div>
         </template>
 
-        <!-- Summarize / Ask about this dashboard — analyzing → written summary -->
+        <!-- Summarize / Ask about this dashboard — written summary (post-thinking) -->
         <template v-else-if="b.kind === 'analyzing'">
-          <template v-if="b.phase === 'thinking'">
-            <div class="an-loading">
-              <span class="an-orb"><Icon name="sparkles" :size="16" /></span>
-              <span class="an-txt">Analyzing this dashboard<span class="an-dots"><i /><i /><i /></span></span>
-            </div>
-            <div class="an-steps">
-              <div class="an-step"><span class="asd" /> Reading {{ board.tiles.length }} widgets</div>
-              <div class="an-step"><span class="asd" /> Checking SLA, backlog and anomaly signals</div>
-              <div class="an-step"><span class="asd" /> Writing a plain-language summary</div>
-            </div>
-          </template>
-          <template v-else>
-            <div class="reasoning"><span class="rz-dot" /> Reasoning · read {{ board.tiles.length }} widgets and ranked what matters</div>
-            <div class="blk-h"><Icon name="sparkles" :size="14" /> Dashboard summary</div>
-            <div v-for="(g, gi) in b.points" :key="gi" class="sum-grp">
-              <div class="sum-gt">{{ g.title }}</div>
-              <ul class="sum-list"><li v-for="(p, pi) in g.points" :key="pi">{{ p }}</li></ul>
-            </div>
-          </template>
+          <div class="reasoning"><span class="rz-dot" /> Read {{ board.tiles.length }} widgets and ranked what matters</div>
+          <div class="blk-h"><Icon name="sparkles" :size="14" /> Dashboard summary</div>
+          <div v-for="(g, gi) in b.points" :key="gi" class="sum-grp">
+            <div class="sum-gt">{{ g.title }}</div>
+            <ul class="sum-list"><li v-for="(p, pi) in g.points" :key="pi">{{ p }}</li></ul>
+          </div>
         </template>
 
-        <!-- P3 explain -->
+        <!-- P3 explain — the verdict streams in, then the sparkline/how/CTA reveal -->
         <template v-else-if="b.kind === 'explain'">
+          <div class="reasoning"><span class="rz-dot" /> {{ b.anomaly ? 'Compared it against its own recent history' : 'Checked it against its normal range' }}</div>
           <div class="blk-h" :class="b.anomaly ? b.anomaly.severity : ''">
             <Icon :name="b.anomaly ? 'alert' : 'info'" :size="14" /> {{ b.tile.title }}
           </div>
-          <p class="say">{{ b.anomaly ? b.anomaly.text : `${b.tile.title} is ${b.tile.value}${b.tile.unit || ''}${b.tile.delta ? `, ${b.tile.delta.dir} ${b.tile.delta.pct}% vs last week` : ''} — within its normal range, not an anomaly.` }}</p>
-          <div v-if="b.anomaly" class="spark">
-            <svg :viewBox="`0 0 ${spark(b.anomaly).W} ${spark(b.anomaly).H}`" preserveAspectRatio="none">
-              <line :x1="0" :x2="spark(b.anomaly).W" :y1="spark(b.anomaly).meanY" :y2="spark(b.anomaly).meanY" class="mean" />
-              <path :d="spark(b.anomaly).line" class="sl" />
-              <circle :cx="spark(b.anomaly).last.x" :cy="spark(b.anomaly).last.y" r="3.2" :class="'pt ' + b.anomaly.severity" />
-            </svg>
-          </div>
-          <details v-if="b.anomaly" class="how"><summary><Icon name="info" :size="12" /> How was this calculated?</summary><div>{{ b.anomaly.how }}</div></details>
-          <button class="mini-cta" @click="investigate({ kind: 'anomaly', chip: b.tile.title })">Investigate <Icon name="chevron-right" :size="13" /></button>
+          <p class="say">{{ b.shownText }}<span v-if="!b.showExtras" class="caret" /></p>
+          <transition name="reveal">
+            <div v-if="b.showExtras">
+              <div v-if="b.anomaly" class="spark">
+                <svg :viewBox="`0 0 ${spark(b.anomaly).W} ${spark(b.anomaly).H}`" preserveAspectRatio="none">
+                  <line :x1="0" :x2="spark(b.anomaly).W" :y1="spark(b.anomaly).meanY" :y2="spark(b.anomaly).meanY" class="mean" />
+                  <path :d="spark(b.anomaly).line" class="sl" />
+                  <circle :cx="spark(b.anomaly).last.x" :cy="spark(b.anomaly).last.y" r="3.2" :class="'pt ' + b.anomaly.severity" />
+                </svg>
+              </div>
+              <details v-if="b.anomaly" class="how"><summary><Icon name="info" :size="12" /> How was this calculated?</summary><div>{{ b.anomaly.how }}</div></details>
+              <button class="mini-cta" @click="investigate({ kind: 'anomaly', chip: b.tile.title })">Investigate <Icon name="chevron-right" :size="13" /></button>
+            </div>
+          </transition>
         </template>
 
-        <!-- P2 drill — written briefing + spotlight the widget + 3 suggested actions (no table) -->
+        <!-- P2 drill — spotlight, then the briefing streams line-by-line, then actions reveal -->
         <template v-else-if="b.kind === 'drill'">
           <div class="blk-h"><Icon name="insights" :size="14" /> {{ b.fact.text }}</div>
-          <div v-if="b.widget" class="spot"><Icon name="target" :size="12" /> Spotlighted <b>“{{ b.widget }}”</b> on the dashboard</div>
-          <p v-for="(line, i) in b.narrative" :key="i" class="say">{{ line }}</p>
-          <div class="sub-h">Suggested actions <span class="muted">confirmed, never automatic</span></div>
-          <div class="acts">
-            <button v-for="a in b.actions" :key="a.id" class="act" @click="pending = { block: b, action: a }">
-              <span class="aic"><Icon :name="a.icon" :size="14" /></span><span class="al">{{ a.label }}</span><Icon name="chevron-right" :size="14" class="ac" />
-            </button>
-          </div>
+          <transition name="reveal">
+            <div v-if="b.showSpot && b.widget" class="spot"><Icon name="target" :size="12" /> Spotlighted <b>“{{ b.widget }}”</b> on the dashboard</div>
+          </transition>
+          <p v-for="(line, i) in b.shownLines" :key="i" class="say">{{ line }}</p>
+          <p v-if="b.cur" class="say">{{ b.cur }}<span class="caret" /></p>
+          <template v-if="b.shownActions > 0">
+            <div class="sub-h">Suggested actions <span class="muted">confirmed, never automatic</span></div>
+            <div class="acts">
+              <template v-for="(a, ai) in b.actions" :key="a.id">
+                <button v-if="ai < b.shownActions" class="act reveal" @click="pending = { block: b, action: a }">
+                  <span class="aic"><Icon :name="a.icon" :size="14" /></span><span class="al">{{ a.label }}</span><Icon name="chevron-right" :size="14" class="ac" />
+                </button>
+              </template>
+            </div>
+          </template>
         </template>
 
         <!-- P4 build -->
@@ -613,21 +724,32 @@ watch(() => props.role, () => {
 .chgc-val b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* a faint marker that a hover note exists */
 .chgc.hasnote .chgc-val::after { content: "ⓘ"; color: var(--muted-2); font-weight: 400; margin-left: 5px; font-size: 10.5px; }
-/* ask → analyzing (renamed so it can't collide with the .blk.analyzing wrapper class) */
-.an-loading { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; }
-.narr { font-size: 13px; line-height: 1.6; color: var(--ink-2); }
-.an-orb { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; animation: orbpulse 1.2s ease-in-out infinite; }
-@keyframes orbpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.4); } 50% { box-shadow: 0 0 0 7px rgba(139,92,246,0); } }
-.an-txt { font-size: 13px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: baseline; }
-.an-dots { display: inline-flex; gap: 2px; margin-left: 3px; }
-.an-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--ai); align-self: flex-end; margin-bottom: 3px; animation: andot 1.2s infinite; }
-.an-dots i:nth-child(2) { animation-delay: .2s; } .an-dots i:nth-child(3) { animation-delay: .4s; }
+/* ===== realistic "thinking" phase — pulsing orb + reasoning steps ===== */
+.think { display: flex; gap: 11px; padding: 4px 0 6px; }
+.think-orb { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; animation: orbpulse 1.3s ease-in-out infinite; }
+@keyframes orbpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.42); } 50% { box-shadow: 0 0 0 8px rgba(139,92,246,0); } }
+.think-main { flex: 1; min-width: 0; padding-top: 2px; }
+.think-t { font-size: 13px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: baseline; }
+.think-dots { display: inline-flex; gap: 3px; margin-left: 5px; align-self: flex-end; margin-bottom: 4px; }
+.think-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--ai); animation: andot 1.2s infinite; }
+.think-dots i:nth-child(2) { animation-delay: .2s; } .think-dots i:nth-child(3) { animation-delay: .4s; }
 @keyframes andot { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
-.an-steps { display: flex; flex-direction: column; gap: 8px; }
-.an-step { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-.asd { width: 6px; height: 6px; border-radius: 50%; background: var(--ai); flex: none; animation: andot 1.4s infinite; }
-.an-step:nth-child(2) .asd { animation-delay: .3s; } .an-step:nth-child(3) .asd { animation-delay: .6s; }
-@media (prefers-reduced-motion: reduce) { .an-orb, .an-dots i, .asd { animation: none; } }
+.think-steps { display: flex; flex-direction: column; gap: 7px; margin-top: 9px; }
+.tstep { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.tstep.active { color: var(--ink-2); } .tstep.done { color: var(--ink-2); }
+.tstep-ic { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+.tstep.done .tstep-ic { color: var(--green); }
+.tspin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ai-soft); border-top-color: var(--ai); animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.tstep-enter-active { transition: opacity .25s ease, transform .25s ease; }
+.tstep-enter-from { opacity: 0; transform: translateY(4px); }
+/* streaming caret + progressive reveal */
+.caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--ai); border-radius: 1px; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+.reveal { animation: rise .28s ease both; }
+.reveal-enter-active { transition: opacity .28s ease, transform .28s ease; }
+.reveal-enter-from { opacity: 0; transform: translateY(6px); }
+@media (prefers-reduced-motion: reduce) { .think-orb, .think-dots i, .tspin, .caret, .reveal { animation: none; } }
 /* explain */
 .say { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
 .say:first-of-type { color: var(--ink); }
