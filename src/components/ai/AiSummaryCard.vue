@@ -69,13 +69,14 @@ const CTAS = [
 
 .ac-ctas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
 .ac-cta {
-  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px;
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
   border: 1px solid var(--ai-border); border-radius: var(--r-pill);
-  background: var(--surface); color: var(--ai-ink); font-weight: 600; font-size: 12.5px;
+  background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 12.5px;
 }
 .ac-cta :deep(.ico) { color: var(--ai); }
 .ac-cta:hover { border-color: var(--ai); background: var(--ai-soft); }
-.ac-cta.primary { border-color: transparent; box-shadow: 0 0 0 1.5px var(--ai) inset; }
+/* the primary CTA reads as the outlined "Show AI Summary" from the reference */
+.ac-cta.primary { border-color: var(--ai); background: var(--surface); box-shadow: 0 0 0 1px var(--ai) inset; }
 .ac-cta.primary:hover { background: var(--ai-soft); }
 
 @media (max-width: 860px) { .ac-ctas { width: 100%; } }

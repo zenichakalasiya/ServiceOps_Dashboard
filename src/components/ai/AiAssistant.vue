@@ -9,7 +9,7 @@
  * computes; this only narrates), with editable chips, citations, "how calculated",
  * confidence, thumbs, and the on-prem/no-LLM note.
  */
-import { ref, nextTick, watch, onMounted } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
@@ -159,21 +159,26 @@ function pillClass(v) {
   const m = s.match(/^p([1-4])$/); return m ? 'pill pill-p' + m[1] : ''
 }
 
-// external trigger (the showcase capability cards drive a specific mode)
+// external trigger — no auto-summary; the panel opens to the greeting empty state.
 function trigger(intent, label) {
-  if (!thread.value.length) pushSummary()
   pushUser(label)
   dispatch(intent, label)
 }
 defineExpose({ trigger })
 
-// open with a proactive summary; re-rank the (first) summary when role changes
-watch(() => props.open, (v) => { if (v && !thread.value.length) pushSummary() })
+// The empty-state greeting + starter CTAs (dashboard context — mirrors the ticket chat).
+const firstName = computed(() => (store.currentUser || 'there').split(' ')[0])
+const EMPTY_CTAS = [
+  { label: 'Summarize this dashboard', intent: 'summary', icon: 'bulb' },
+  { label: 'What changed since last visit', intent: 'changes', icon: 'history' },
+  { label: 'Analyze what needs attention', intent: 'analyzing', icon: 'auto-graph' },
+  { label: 'Generate a widget', intent: 'createstart', icon: 'wand' },
+]
+
 watch(() => props.role, () => {
   const s = thread.value.find((b) => b.kind === 'summary')
   if (s) s.facts = computeFacts(props.board, props.role)
 })
-onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
 </script>
 
 <template>
@@ -188,6 +193,18 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
 
     <!-- thread -->
     <div ref="bodyEl" class="ab">
+      <!-- greeting empty state (mirrors the ServiceOps ticket chat) -->
+      <div v-if="!thread.length" class="empty-ai">
+        <span class="ea-orb"><Icon name="sparkles" :size="26" /></span>
+        <h3>Hello {{ firstName }}, how can we help?</h3>
+        <p>Ask ServiceOps AI anything about this dashboard, or get help with insights, changes and building widgets.</p>
+        <div class="ea-ctas">
+          <button v-for="c in EMPTY_CTAS" :key="c.label" class="ea-cta" @click="suggest(c)">
+            <Icon :name="c.icon" :size="16" /> <span>{{ c.label }}</span>
+          </button>
+        </div>
+      </div>
+
       <div v-for="b in thread" :key="b.id" class="blk" :class="b.kind">
         <!-- user echo -->
         <div v-if="b.kind === 'user'" class="user"><span>{{ b.text }}</span></div>
@@ -209,8 +226,8 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
             </div>
             <div v-if="!b.facts.length" class="calm"><Icon name="check" :size="16" /> Nothing unusual — all {{ board.tiles.length }} widgets are within range.</div>
           </div>
-          <div class="sub-h">What next</div>
-          <div class="chipsrow">
+          <div class="na-h">Suggested next actions</div>
+          <div class="chipsrow na-row">
             <button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button>
           </div>
         </template>
@@ -228,8 +245,8 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
               </div>
             </div>
           </div>
-          <div class="sub-h">What next</div>
-          <div class="chipsrow">
+          <div class="na-h">Suggested next actions</div>
+          <div class="chipsrow na-row">
             <button class="sg" @click="suggest({ intent: 'drill', label: 'Show the new P1 requests' })">Show the new P1 requests</button>
             <button class="sg" @click="suggest({ intent: 'explain', label: 'Why did Overdue rise?' })">Why did Overdue rise?</button>
           </div>
@@ -445,17 +462,13 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
       </div>
     </div>
 
-    <!-- input -->
+    <!-- message input (chat style) -->
     <div class="af">
-      <div class="chipsrow">
-        <button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button>
-      </div>
       <div class="inbox">
-        <Icon name="sparkles" :size="15" class="ib-ic" />
-        <input v-model="input" placeholder="Ask about your dashboard, or describe a widget…" @keyup.enter="submit" />
-        <button class="send" :disabled="!input.trim()" @click="submit"><Icon name="open-in" :size="16" /></button>
+        <button class="attach" title="Attach"><Icon name="attach" :size="16" /></button>
+        <input v-model="input" placeholder="Type your message…" @keyup.enter="submit" />
+        <button class="send" :class="{ ready: input.trim() }" :disabled="!input.trim()" @click="submit"><Icon name="send" :size="15" /></button>
       </div>
-      <div class="grounded"><Icon name="lock" :size="11" /> Grounded · runs on-prem · no data leaves your perimeter</div>
     </div>
 
     <ConfirmDialog v-if="pending" :title="pending.action.label" :message="pending.action.confirm"
@@ -479,7 +492,7 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .blk { animation: none; } }
 .user { display: flex; justify-content: flex-end; }
-.user span { background: var(--primary); color: #fff; font-size: 12.5px; font-weight: 500; padding: 7px 12px; border-radius: 13px 13px 3px 13px; max-width: 85%; }
+.user span { background: var(--surface-2); color: var(--ink); font-size: 12.5px; font-weight: 500; padding: 8px 13px; border-radius: 13px 13px 3px 13px; max-width: 85%; }
 .blk-h { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; margin-bottom: 9px; }
 .blk-h.bad > :first-child { color: var(--red); } .blk-h.warn > :first-child { color: var(--amber); }
 .blk-h > :first-child { color: var(--ai); }
@@ -607,10 +620,27 @@ tr:last-child td { border-bottom: none; }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .sg { border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
 .sg:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); }
-.inbox { display: flex; align-items: center; gap: 8px; height: 42px; border: 1.5px solid var(--ai); border-radius: var(--r); padding: 0 6px 0 11px; box-shadow: 0 0 0 3px var(--ai-soft); }
-.ib-ic { color: var(--ai); flex: none; }
+.inbox { display: flex; align-items: center; gap: 6px; height: 44px; border: 1px solid var(--ai-border); border-radius: 11px; padding: 0 6px 0 8px; background: var(--surface); }
+.inbox:focus-within { border-color: var(--ai); box-shadow: 0 0 0 3px var(--ai-soft); }
+.attach { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; flex: none; }
+.attach:hover { background: var(--surface-2); color: var(--ink); }
 .inbox input { flex: 1; border: none; outline: none; background: transparent; font-size: 13px; font-family: inherit; color: var(--ink); }
-.send { width: 32px; height: 32px; border: none; border-radius: 7px; background: var(--ai-grad); color: #fff; display: grid; place-items: center; flex: none; }
-.send:disabled { opacity: .45; }
+.send { width: 32px; height: 32px; border: none; border-radius: 8px; background: var(--surface-2); color: var(--muted); display: grid; place-items: center; flex: none; transition: background .14s, color .14s; }
+.send.ready { background: var(--ai-grad); color: #fff; }
+
+/* greeting empty state */
+.empty-ai { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 30px 18px 12px; }
+.ea-orb :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; margin-bottom: 12px; }
+.empty-ai h3 { font-size: 20px; font-weight: 600; margin: 4px 0 8px; color: var(--ink); letter-spacing: -.2px; }
+.empty-ai p { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0 0 20px; max-width: 300px; }
+.ea-ctas { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+.ea-cta { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border: none; border-radius: 10px; background: var(--ai-grad-soft); color: var(--ink); font-weight: 500; font-size: 13px; text-align: left; }
+.ea-cta :deep(.ico) { color: var(--ai); flex: none; }
+.ea-cta:hover { background: var(--ai-soft); }
+
+/* suggested next actions */
+.na-h { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin: 13px 0 8px; }
+.na-row .sg { background: var(--ai-grad-soft); border: 1px solid var(--ai-border); color: var(--ai-ink); }
+.na-row .sg:hover { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
 .grounded { display: flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 10.5px; color: var(--muted); }
 </style>
