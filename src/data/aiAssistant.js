@@ -7,7 +7,7 @@
  * layer (aiEngine) computes; this module only routes intent and maps a
  * description → widget spec against a governed catalog.
  */
-import { anomalies } from './aiEngine.js'
+import { anomalies, facts } from './aiEngine.js'
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
 
@@ -49,7 +49,14 @@ export function tileFromText(board, text) {
 }
 
 export function factFromText(board, text) {
-  const t = (text || '').toLowerCase()
+  const t = (text || '').toLowerCase().trim()
+  // Exact/substring match against the deterministically-ranked facts first, so an
+  // "Investigate" launched from the summary card resolves to that same fact (right
+  // tile to spotlight, right kind to narrate) rather than defaulting to the breach.
+  const fs = facts(board)
+  const hit = fs.find((f) => f.text.toLowerCase() === t)
+    || (t && fs.find((f) => t.includes(f.chip.toLowerCase()) || f.text.toLowerCase().includes(t)))
+  if (hit) return hit
   if (/overdue|anomal|spike|spiked|surge/.test(t)) {
     const a = anomalies(board)[0]
     if (a) return { kind: 'anomaly', tileId: a.tile.id, chip: a.tile.title, text: a.anomaly.text, severity: a.anomaly.severity }
