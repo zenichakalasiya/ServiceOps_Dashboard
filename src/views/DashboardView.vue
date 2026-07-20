@@ -17,8 +17,6 @@ import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
 import AiSummaryCard from '../components/ai/AiSummaryCard.vue'
 import AiAssistant from '../components/ai/AiAssistant.vue'
 import { demoBoard } from '../data/aiDemo.js'
-import { facts as computeFacts } from '../data/aiEngine.js'
-import { AI_ENTRIES } from '../data/aiEntries.js'
 import { store, byId, recordView, toggleFavorite, removeTile, toast, rearrangeTiles } from '../store/index.js'
 import { uid } from '../data/mock.js'
 const route = useRoute()
@@ -110,7 +108,7 @@ const GSTYLES = [
   { id: 8, n: '⑧', label: 'Sections', desc: 'F — Typed section headings; drag widgets under them' },
   { id: 9, n: '⑨', label: 'Auto-group', desc: 'G — Group automatically by Type or Source' },
 ]
-const showGroupDemo = true    // demo switcher visible; default grouping is ① Select
+const showGroupDemo = false   // grouping-demo bar hidden; default grouping is ① Select
 const gs = computed(() => store.ui.groupStyle)
 
 // ---- Legend-strategy DEMO switcher.
@@ -126,29 +124,19 @@ const LSTYLES = [
 const showLegendDemo = false
 const ls = computed(() => store.ui.legendStyle)
 
-// ---- AI entry-point DEMO: nine ways to surface the AI Summary/Assistant, one at a time.
-// Every entry opens the same grounded assistant panel (or, for ①, expands the card). The
-// panel and card run off a stable demo board so the anomaly/summary story is always there.
-const AISTYLES = AI_ENTRIES
-const aiEntry = computed(() => store.ui.aiEntry)
+// ---- AI: the Summary card is always upfront; every CTA opens the ServiceOps AI side panel.
+// The panel + card run off a stable demo board so the anomaly/summary story is always there.
 const aiBoard = demoBoard()
 const aiRole = ref('technician')
-const aiNudgeDismissed = ref(false)
-// The nudge is grounded: it names what the deterministic engine actually found on this board,
-// role-ranked, and shows the calm-board copy when nothing is off — never manufactured urgency.
-const aiAttention = computed(() => computeFacts(aiBoard, aiRole.value).filter((f) => f.severity === 'bad' || f.severity === 'warn'))
 const aiPanel = ref(null)
 function openAi() { store.ui.aiPanelOpen = true }
-// The card chips carry an explicit intent (explain / drill / open) + a natural-language
-// label, so we run it directly rather than re-parsing the text.
+// The card CTAs carry an explicit intent (summary / changes / analyzing / drill / explain)
+// + a natural-language label, run directly rather than re-parsing the text.
 function onCardAsk(intent, text) {
   store.ui.aiPanelOpen = true
   if (intent && intent !== 'open') nextTick(() => aiPanel.value?.trigger(intent, text))
 }
-function askTile(title) { store.ui.aiPanelOpen = true; nextTick(() => aiPanel.value?.trigger('explain', `Explain ${title}`)) }
-// switching the demo tab is a clean slate: close the panel and restore the nudge
-watch(aiEntry, () => { store.ui.aiPanelOpen = false; aiNudgeDismissed.value = false })
-// a widget or the topbar can request an intent from anywhere; forward it into the panel
+// a widget can request an intent from anywhere; forward it into the panel
 watch(() => store.ui.aiAsk, (a) => {
   if (!a) return
   store.ui.aiPanelOpen = true
@@ -592,8 +580,6 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <button class="btn ico-only" :class="{ on: showDownload }" @click.stop="showDownload = !showDownload" title="Download"><Icon name="download" :size="17" /></button>
           <DownloadDialog v-if="showDownload" :d="d" @close="showDownload = false" />
         </div>
-        <!-- ② toolbar entry — a compact sparkle beside ⋯, so it never competes with the top-bar Ask AI -->
-        <button v-if="aiEntry === 'toolbar'" class="btn ico-only ai-ico" @click="openAi()" title="Ask AI about this dashboard"><Icon name="sparkles" :size="17" /></button>
         <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" />
       </div>
     </header>
@@ -633,40 +619,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <span class="gsb-desc">{{ LSTYLES.find(s => s.id === ls)?.desc }}</span>
       </div>
 
-      <!-- DEMO: the nine AI entry points, one at a time. Purple = AI, per the ServiceOps branding. -->
-      <div v-if="!loadingBoard" class="gstyle-bar ai-bar">
-        <span class="gsb-label ai"><Icon name="sparkles" :size="14" /> AI entry</span>
-        <div class="gsb-seg">
-          <button v-for="s in AISTYLES" :key="s.id" class="gsb-b" :class="{ on: aiEntry === s.id }" :title="s.desc" @click="store.ui.aiEntry = s.id">
-            <span class="gsb-n">{{ s.n }}</span> {{ s.label }}
-          </button>
-        </div>
-        <span class="gsb-desc">{{ AISTYLES.find(s => s.id === aiEntry)?.desc }}<em v-if="AISTYLES.find(s => s.id === aiEntry)?.ref"> · {{ AISTYLES.find(s => s.id === aiEntry)?.ref }}</em></span>
-      </div>
-
-      <!-- AI entry surfaces (only one shows, driven by the tab above) -->
-      <template v-if="!loadingBoard && d.tiles.length">
-        <!-- ① pinned summary card (the ServiceOps reference) -->
-        <AiSummaryCard v-if="aiEntry === 'card'" :board="aiBoard" @ask="onCardAsk" />
-
-        <!-- ⑤ dismissible onboarding nudge — grounded in what the engine actually found -->
-        <div v-else-if="aiEntry === 'nudge' && !aiNudgeDismissed" class="ai-nudge">
-          <span class="an-spark"><Icon name="sparkles" :size="18" /></span>
-          <div class="an-txt">
-            <template v-if="aiAttention.length">
-              <b>AI already read this dashboard.</b>
-              It flagged {{ aiAttention.length }} thing{{ aiAttention.length > 1 ? 's' : '' }} that need attention — top of the list: “{{ aiAttention[0].text }}”.
-            </template>
-            <template v-else>
-              <b>New — AI on your dashboards.</b>
-              It ranks what needs attention, explains a spike, and builds a widget from one sentence.
-            </template>
-            <span class="an-sub"><Icon name="lock" :size="11" /> On-prem · grounded in your data — nothing leaves your server.</span>
-          </div>
-          <button class="an-try" @click="openAi()">{{ aiAttention.length ? 'Show me what needs attention' : 'Try it' }}</button>
-          <button class="an-x" title="Dismiss" @click="aiNudgeDismissed = true"><Icon name="x" :size="15" /></button>
-        </div>
-      </template>
+      <!-- AI Summary — always upfront on the board (the ServiceOps reference), with its
+           three deep-dive CTAs on the right; each opens the ServiceOps AI side panel. -->
+      <AiSummaryCard v-if="!loadingBoard && d.tiles.length" :board="aiBoard" @ask="onCardAsk" />
 
       <!-- loading skeleton (P2·9) -->
       <div v-if="loadingBoard" class="grid">
@@ -813,6 +768,11 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       <div v-if="fabMenu" class="fab-backdrop" @click="fabMenu = false" />
       <transition name="fabpop">
         <div v-if="fabMenu" class="fab-menu">
+          <!-- Generate with AI — the first, primary CTA (the full conversational create flow) -->
+          <button class="fab-opt ai" @click="fabMenu = false; openAi()">
+            <span class="fo-ic ai"><Icon name="sparkles" :size="18" /></span> Generate with AI
+          </button>
+          <div class="fab-sep" />
           <button class="fab-opt" @click="fabMenu = false; store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true">
             <span class="fo-ic dash"><Icon name="layout" :size="18" /></span> Create Dashboard
           </button>
@@ -822,17 +782,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <button v-if="gShowFabGroup" class="fab-opt" @click="fabMenu = false; addEmptyGroup()">
             <span class="fo-ic grp"><Icon name="new-group" :size="18" /></span> Empty Group
           </button>
-          <!-- ③ "Generate with AI" inside the Create menu (the Amplitude pattern) -->
-          <button v-if="aiEntry === 'addmenu'" class="fab-opt" @click="fabMenu = false; openAi()">
-            <span class="fo-ic ai"><Icon name="sparkles" :size="18" /></span> Generate with AI
-          </button>
-          <!-- ⑩ "Create a dashboard with AI" — describe a board, AI assembles it (Ask Zia / SpotterViz) -->
-          <button v-if="aiEntry === 'createai'" class="fab-opt" @click="fabMenu = false; openAi()">
-            <span class="fo-ic ai"><Icon name="sparkles" :size="18" /></span> Create dashboard with AI
-          </button>
         </div>
       </transition>
-      <button class="fab" :class="{ on: fabMenu, 'ai-hint': (aiEntry === 'addmenu' || aiEntry === 'createai') && !fabMenu }" @click="fabMenu = !fabMenu" title="Add"><Icon name="plus" :size="26" /></button>
+      <button class="fab" :class="{ on: fabMenu }" @click="fabMenu = !fabMenu" title="Add"><Icon name="plus" :size="26" /></button>
     </div>
 
     <!-- the docked assistant panel — the shared destination every entry opens into -->
@@ -1072,6 +1024,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .fab-menu { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
 .fab-opt { display: inline-flex; align-items: center; gap: 11px; height: 46px; padding: 0 18px 0 14px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 999px; font-weight: 600; font-size: 13.5px; box-shadow: var(--sh-md); white-space: nowrap; }
 .fab-opt:hover { background: var(--surface-2); border-color: var(--primary); color: var(--primary-700); transform: translateY(-1px); }
+/* Generate with AI — the primary, violet-tinted first CTA */
+.fab-opt.ai { border-color: var(--ai-border); background: var(--ai-softer); color: var(--ai-ink); }
+.fab-opt.ai:hover { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
+.fab-sep { align-self: stretch; height: 1px; background: var(--border); margin: -2px 6px; opacity: .7; }
 .fo-ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none; }
 .fo-ic.dash { background: var(--primary); }
 .fo-ic.wid { background: var(--green); }

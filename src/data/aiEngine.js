@@ -126,6 +126,37 @@ export function confidence(board) {
 export const FRESHNESS = 'just now'
 
 // ---------------------------------------------------------------------------
+// "What changed since your last visit" — grounded in each KPI's own delta + status,
+// plus a worklist change. A fixed last-visit label keeps the demo honest without a clock.
+// This is the ITSM flow: a technician returning to their board sees, at a glance, which
+// metrics moved and which need action — no re-scanning every widget.
+// ---------------------------------------------------------------------------
+export function changesSinceLastVisit(board) {
+  const items = board.tiles
+    .filter((t) => t.type === 'kpi' && t.delta)
+    .map((t) => ({
+      widget: t.title,
+      dir: t.delta.dir,
+      delta: `${t.delta.dir === 'up' ? '+' : t.delta.dir === 'down' ? '−' : ''}${t.delta.pct}%`,
+      value: `${t.value}${t.unit || ''}`,
+      severity: t.status,                       // good | warn | bad
+      note: t.status === 'bad'
+        ? `${t.title} broke out of its normal range while you were away`
+        : '',
+    }))
+  // the worklist gained new records — the thing a technician most needs to know
+  const wl = board.tiles.find((t) => t.type === 'shortcut')
+  if (wl) items.push({
+    widget: wl.title, dir: 'up', delta: '+4 new', value: `${wl.rows.length} open`,
+    severity: 'bad', note: '4 new P1 requests were assigned to you since your last visit',
+  })
+  // rank so the things that need action lead
+  const rank = { bad: 0, warn: 1, good: 2 }
+  items.sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3))
+  return { lastVisit: '2 days ago · Mon, 18 Jul at 9:12 AM', items }
+}
+
+// ---------------------------------------------------------------------------
 // Deep-dive (P2-A). Given a fact, derive: editable scope chips, the record set
 // behind it, and 1–3 next-best-actions. The "3-tier honest drill" — because most
 // tiles have no per-record rows in mock, we degrade gracefully:

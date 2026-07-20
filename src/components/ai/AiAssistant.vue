@@ -13,7 +13,7 @@ import { ref, nextTick, watch, onMounted } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, changesSinceLastVisit, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { toast } from '../../store/index.js'
 
@@ -50,11 +50,25 @@ function pushWidget(text) {
   thread.value.push({ id: ++bid, kind: 'widget', spec, recommendedKind: spec.kind, added: false })
   scrollDown()
 }
+function pushChanges() {
+  thread.value.push({ id: ++bid, kind: 'changes', data: changesSinceLastVisit(props.board) })
+  scrollDown()
+}
+// "Ask about this dashboard": a visible analyzing/thinking state, then the grounded context.
+// Mutate the REACTIVE array element (not the raw object we pushed) so the reveal re-renders.
+function pushAnalyzing() {
+  thread.value.push({ id: ++bid, kind: 'analyzing', phase: 'thinking', facts: [] })
+  const b = thread.value[thread.value.length - 1]
+  scrollDown()
+  setTimeout(() => { b.phase = 'done'; b.facts = computeFacts(props.board, props.role); scrollDown() }, 1700)
+}
 function dispatch(intent, text) {
   if (intent === 'summary') pushSummary()
   else if (intent === 'explain') pushExplain(text)
   else if (intent === 'drill') pushDrill(text)
   else if (intent === 'create') pushWidget(text)
+  else if (intent === 'changes') pushChanges()
+  else if (intent === 'analyzing') pushAnalyzing()
 }
 
 // ---- interactions ----
@@ -117,7 +131,7 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
     <!-- header -->
     <div class="ah">
       <div class="ah-l"><span class="spk"><Icon name="sparkles" :size="16" /></span>
-        <div><div class="ah-t">AI Assistant</div><div class="ah-sub">{{ board.name }} · {{ board.tiles.length }} widgets</div></div>
+        <div><div class="ah-t">ServiceOps AI</div><div class="ah-sub">{{ board.name }} · {{ board.tiles.length }} widgets</div></div>
       </div>
       <button class="x" @click="emit('update:open', false)"><Icon name="x" :size="17" /></button>
     </div>
@@ -145,6 +159,63 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
             </div>
             <div v-if="!b.facts.length" class="calm"><Icon name="check" :size="16" /> Nothing unusual — all {{ board.tiles.length }} widgets are within range.</div>
           </div>
+          <div class="sub-h">What next</div>
+          <div class="chipsrow">
+            <button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button>
+          </div>
+        </template>
+
+        <!-- What changed since last visit -->
+        <template v-else-if="b.kind === 'changes'">
+          <div class="blk-h"><Icon name="history" :size="14" /> What changed since your last visit</div>
+          <div class="lastvisit"><Icon name="clock" :size="12" /> Last visit: {{ b.data.lastVisit }}</div>
+          <div class="chg-list">
+            <div v-for="(it, i) in b.data.items" :key="i" class="chg" :class="it.severity">
+              <span class="chg-dir" :class="it.dir"><Icon :name="it.dir === 'down' ? 'sort-desc' : 'sort-asc'" :size="15" /></span>
+              <div class="chg-b">
+                <div class="chg-top"><b>{{ it.widget }}</b><span class="chg-delta">{{ it.delta }}</span><span class="chg-val">now {{ it.value }}</span></div>
+                <div v-if="it.note" class="chg-note">{{ it.note }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="sub-h">What next</div>
+          <div class="chipsrow">
+            <button class="sg" @click="suggest({ intent: 'drill', label: 'Show the new P1 requests' })">Show the new P1 requests</button>
+            <button class="sg" @click="suggest({ intent: 'explain', label: 'Why did Overdue rise?' })">Why did Overdue rise?</button>
+          </div>
+        </template>
+
+        <!-- Ask about this dashboard — analyzing → context -->
+        <template v-else-if="b.kind === 'analyzing'">
+          <template v-if="b.phase === 'thinking'">
+            <div class="analyzing">
+              <span class="an-orb"><Icon name="sparkles" :size="16" /></span>
+              <span class="an-txt">Analyzing this dashboard<span class="an-dots"><i /><i /><i /></span></span>
+            </div>
+            <div class="an-steps">
+              <div class="an-step"><span class="asd" /> Reading {{ board.tiles.length }} widgets</div>
+              <div class="an-step"><span class="asd" /> Checking SLA, backlog and anomaly signals</div>
+              <div class="an-step"><span class="asd" /> Ranking what matters for your role</div>
+            </div>
+          </template>
+          <template v-else>
+            <div class="blk-h"><Icon name="sparkles" :size="14" /> Here's what I found</div>
+            <p class="say">“{{ board.name }}” brings together {{ board.tiles.length }} widgets. {{ b.facts.length ? `${b.facts.length} need attention right now — the most urgent are below.` : 'Everything is within range right now.' }}</p>
+            <div class="facts">
+              <div v-for="f in b.facts.slice(0, 3)" :key="f.id" class="fact">
+                <span class="dot" :class="dotClass(f.severity)" />
+                <div class="fb">
+                  <div class="ftext">{{ f.text }}</div>
+                  <div class="fmeta">
+                    <button class="lnk" @click="explainFact(f)">Explain</button>
+                    <button class="lnk" @click="investigate(f)">Investigate →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="sub-h">What next</div>
+            <div class="chipsrow"><button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button></div>
+          </template>
         </template>
 
         <!-- P3 explain -->
@@ -276,6 +347,35 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
 .lnk:hover { text-decoration: underline; }
 .calm { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); padding: 8px; }
 .calm > :first-child { color: var(--green); }
+/* what changed since last visit */
+.lastvisit { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+.chg-list { display: flex; flex-direction: column; gap: 7px; }
+.chg { display: flex; gap: 9px; padding: 8px 9px; border-radius: 9px; background: var(--surface-2); }
+.chg.bad { background: var(--red-soft); } .chg.warn { background: var(--amber-soft); }
+.chg-dir { flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; }
+.chg-dir.up { color: var(--red); } .chg-dir.down { color: var(--blue); }
+.chg.good .chg-dir.up { color: var(--green); }
+.chg-b { flex: 1; min-width: 0; }
+.chg-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.chg-top b { color: var(--ink); font-weight: 600; }
+.chg-delta { font-weight: 700; font-variant-numeric: tabular-nums; }
+.chg.bad .chg-delta { color: var(--red); } .chg.warn .chg-delta { color: var(--amber); } .chg.good .chg-delta { color: var(--green); }
+.chg-val { color: var(--muted); font-size: 11.5px; }
+.chg-note { font-size: 11.5px; color: var(--ink-2); margin-top: 3px; }
+/* ask → analyzing */
+.analyzing { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; }
+.an-orb { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; animation: orbpulse 1.2s ease-in-out infinite; }
+@keyframes orbpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.4); } 50% { box-shadow: 0 0 0 7px rgba(139,92,246,0); } }
+.an-txt { font-size: 13px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: baseline; }
+.an-dots { display: inline-flex; gap: 2px; margin-left: 3px; }
+.an-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--ai); align-self: flex-end; margin-bottom: 3px; animation: andot 1.2s infinite; }
+.an-dots i:nth-child(2) { animation-delay: .2s; } .an-dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes andot { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
+.an-steps { display: flex; flex-direction: column; gap: 8px; }
+.an-step { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.asd { width: 6px; height: 6px; border-radius: 50%; background: var(--ai); flex: none; animation: andot 1.4s infinite; }
+.an-step:nth-child(2) .asd { animation-delay: .3s; } .an-step:nth-child(3) .asd { animation-delay: .6s; }
+@media (prefers-reduced-motion: reduce) { .an-orb, .an-dots i, .asd { animation: none; } }
 /* explain */
 .say { margin: 0 0 9px; font-size: 12.5px; line-height: 1.45; }
 .spark svg { width: 100%; height: 42px; display: block; margin-bottom: 8px; }

@@ -34,7 +34,7 @@ const MAP = {
   erase: 'ink_eraser', mail: 'mail', cursor: 'arrow_selector_tool',
   'chart-area': 'area_chart', 'chart-donut': 'donut_large', 'chart-funnel': 'filter_alt',
   'chart-pyramid': 'change_history', 'chart-hbar': 'align_horizontal_left',
-  'open-in': 'arrow_forward',
+  'open-in': 'arrow_forward', chat: 'chat_bubble', 'auto-graph': 'auto_graph', bolt: 'bolt',
 }
 const FILLED = new Set(['star-fill'])
 

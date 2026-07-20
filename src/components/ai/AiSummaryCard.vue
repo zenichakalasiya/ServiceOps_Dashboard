@@ -1,170 +1,73 @@
 <script setup>
 /**
- * AiSummaryCard — the pinned "AI Summary" card (entry ① / the ServiceOps reference).
+ * AiSummaryCard — the always-upfront "AI Summary" banner (the ServiceOps reference look).
  *
- * Collapsed it is a slim bar (sparkle · "AI Summary" · freshness · refresh · ⋯ · ▾);
- * clicking it expands in place to a plain-language summary of THIS dashboard — what
- * data, KPIs, widgets and shortcuts it holds — plus key points, a generated-by line,
- * and the suggested next actions. Grounded: the composition is computed from the
- * board's own tiles (no LLM invents it); a real model would only rephrase it.
+ * A compact card: the AI Summary identity on the left with a grounded one-liner, and the
+ * three deep-dive CTAs on the right. Each CTA opens the ServiceOps AI side panel to a
+ * different behaviour:
+ *   Show AI Summary            → the full role-ranked dashboard summary + next actions
+ *   What changed since last visit → the per-widget deltas since the user was last here
+ *   Ask about this dashboard   → an "analyzing…" thinking state, then grounded context
  *
- * The action chips are DASHBOARD-level and DATA-AWARE (the Monday/Tableau pattern):
- * the deep-dive chip names the metric the engine actually flagged ("Why is Overdue
- * up?"), so the card offers the investigation that's relevant to THIS board today.
- * Ticket-level actions (find similar / suggest KB) belong on a record, not here —
- * they moved to the drill view. Each chip emits `ask(intent, text)` → the panel.
+ * Grounded: the one-liner is computed from the engine (no LLM invents it).
  */
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import Icon from '../ui/Icon.vue'
 import { facts as computeFacts } from '../../data/aiEngine.js'
 import { store } from '../../store/index.js'
 
-const props = defineProps({
-  board: { type: Object, required: true },
-  startOpen: { type: Boolean, default: false },
-})
+const props = defineProps({ board: { type: Object, required: true } })
 const emit = defineEmits(['ask'])
 
-const open = ref(props.startOpen)
-const refreshing = ref(false)
-
-// grounded: the collapsed note reports what the engine actually found, never "insights are ready"
 const attention = computed(() => computeFacts(props.board).filter((f) => f.severity === 'bad' || f.severity === 'warn'))
-const tiles = computed(() => props.board?.tiles || [])
-const kpis = computed(() => tiles.value.filter((t) => t.type === 'kpi'))
-const charts = computed(() => tiles.value.filter((t) => t.type === 'chart'))
-const shortcuts = computed(() => tiles.value.filter((t) => t.type === 'shortcut'))
-const names = (arr, n = 3) => {
-  const t = arr.map((x) => x.title).slice(0, n)
-  const extra = arr.length - t.length
-  return t.join(', ') + (extra > 0 ? ` and ${extra} more` : '')
-}
-
-const summary = computed(() => {
-  const parts = []
-  if (kpis.value.length) parts.push(`${kpis.value.length} headline KPI${kpis.value.length > 1 ? 's' : ''}`)
-  if (charts.value.length) parts.push(`${charts.value.length} chart${charts.value.length > 1 ? 's' : ''}`)
-  if (shortcuts.value.length) parts.push(`${shortcuts.value.length} record list${shortcuts.value.length > 1 ? 's' : ''}`)
-  const comp = parts.length ? parts.join(', ').replace(/,([^,]*)$/, ' and$1') : 'no widgets yet'
-  return `“${props.board.name}” brings together ${comp}, giving a single at-a-glance view of your service desk. The KPIs track the current state, the charts trend it over time, and the list surfaces the records that need a technician’s attention.`
+const teaser = computed(() => {
+  const n = attention.value.length
+  if (!n) return `“${props.board.name}” looks healthy — all widgets are within range.`
+  const top = attention.value[0]
+  return `${n} thing${n > 1 ? 's' : ''} need attention on “${props.board.name}” — top of the list: ${top.text}.`
 })
 
-const keyPoints = computed(() => {
-  const pts = []
-  if (kpis.value.length) pts.push(`Headline KPIs: ${names(kpis.value)}`)
-  if (charts.value.length) pts.push(`${charts.value.length} chart${charts.value.length > 1 ? 's' : ''} trending ${names(charts.value, 2)}`)
-  if (shortcuts.value.length) pts.push(`Worklist: ${names(shortcuts.value, 2)} — the records to act on now`)
-  if (!pts.length) pts.push('This dashboard is empty — add a KPI, widget or shortcut to summarise')
-  return pts
-})
-
-function refresh() {
-  refreshing.value = true
-  setTimeout(() => (refreshing.value = false), 900)
-}
-
-/* Data-aware deep-dive: the top chip investigates whatever the engine flagged first
- * (an anomaly/delta metric preferred over the breach worklist), so its label reads
- * "Why is Overdue up?" on a board where Overdue spiked. */
-const topSignal = computed(() => {
-  const f = computeFacts(props.board)
-  return f.find((x) => x.kind === 'anomaly') || f.find((x) => x.kind === 'delta') || f[0] || null
-})
-const topLabel = computed(() => {
-  const s = topSignal.value
-  if (!s) return ''
-  const down = /down|drop|below|dip/.test(s.text.toLowerCase())
-  return `Why is ${s.chip} ${down ? 'down' : 'up'}?`
-})
-/* The full DASHBOARD-level action set (catalog section A). The first chip is data-aware —
- * it names whatever the engine flagged first ("Why is Overdue up?") and drops on a calm
- * board. Each carries an explicit intent routed into the assistant panel; ✅ ones are
- * grounded, 🔶 ones lean on the narrative summary (the panel has four block types, so the
- * NL-narrative chips share the summary view in this prototype). */
-const cardChips = computed(() => {
-  const s = topSignal.value
-  const chips = []
-  if (s) chips.push({ label: topLabel.value, intent: 'explain', text: topLabel.value, icon: 'bulb', primary: true })
-  chips.push({ label: 'Show tickets about to breach', intent: 'drill', text: 'Show tickets breaching SLA today', icon: 'alert', primary: !s })
-  chips.push({ label: 'Prioritize my worklist', intent: 'drill', text: 'Prioritize my open P1 requests', icon: 'clipboard' })
-  chips.push({ label: 'What changed since last week?', intent: 'summary', text: 'What changed since last week?', icon: 'trend' })
-  chips.push({ label: 'Ask about this dashboard', intent: 'open', text: '', icon: 'sparkles' })
-  chips.push({ label: 'Draft a shift handover', intent: 'summary', text: 'Draft a shift handover', icon: 'file-text' })
-  return chips
-})
+const CTAS = [
+  { label: 'Show AI Summary', intent: 'summary', icon: 'sparkles', primary: true },
+  { label: 'What changed since last visit', intent: 'changes', icon: 'history' },
+  { label: 'Ask about this dashboard', intent: 'analyzing', icon: 'chat' },
+]
 </script>
 
 <template>
-  <section class="ai-card" :class="{ open }">
-    <!-- collapsed bar (always visible) -->
-    <header class="ac-bar" @click="open = !open">
-      <span class="ac-spark"><Icon name="sparkles" :size="18" /></span>
-      <b class="ac-title">AI Summary</b>
-      <div class="ac-grow" />
-      <span class="ac-note">{{ open ? `Summarised from ${tiles.length} widgets` : (attention.length ? `${attention.length} need attention · updated just now` : 'All widgets within range · updated just now') }}</span>
-      <button class="ac-ic" :class="{ spin: refreshing }" title="Regenerate" @click.stop="refresh"><Icon name="refresh" :size="15" /></button>
-      <button class="ac-ic" title="More" @click.stop="mock('More')"><Icon name="dots-v" :size="15" /></button>
-      <button class="ac-ic" :title="open ? 'Collapse' : 'Expand'" @click.stop="open = !open">
-        <Icon :name="open ? 'chevron-up' : 'chevron-down'" :size="16" />
-      </button>
-    </header>
-
-    <!-- expanded body -->
-    <transition name="ac-exp">
-      <div v-if="open" class="ac-body">
-        <p class="ac-summary">{{ summary }}</p>
-
-        <div class="ac-kp-h">Key points</div>
-        <ul class="ac-kp">
-          <li v-for="(p, i) in keyPoints" :key="i"><span class="kp-dot" />{{ p }}</li>
-        </ul>
-
-        <div class="ac-gen">
-          <Icon name="sparkles" :size="12" /> Generated by {{ store.currentUser }} · just now
-        </div>
-
-        <div class="ac-acts">
-          <button v-for="c in cardChips" :key="c.label" class="ac-cta" :class="{ primary: c.primary }" @click="emit('ask', c.intent, c.text)">
-            <Icon :name="c.icon" :size="15" /> {{ c.label }}
-          </button>
-        </div>
+  <section class="ai-card">
+    <div class="ac-left">
+      <span class="ac-spark"><Icon name="sparkles" :size="20" /></span>
+      <div class="ac-copy">
+        <div class="ac-title">AI Summary <span class="ac-badge" v-if="attention.length">{{ attention.length }}</span></div>
+        <div class="ac-teaser">{{ teaser }}</div>
       </div>
-    </transition>
+    </div>
+    <div class="ac-ctas">
+      <button
+        v-for="c in CTAS" :key="c.intent" class="ac-cta" :class="{ primary: c.primary }"
+        @click="emit('ask', c.intent, c.label)"
+      >
+        <Icon :name="c.icon" :size="15" /> {{ c.label }}
+      </button>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .ai-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
   border: 1px solid var(--ai-border); border-radius: var(--r-lg);
-  background: var(--ai-grad-soft);
-  overflow: hidden; margin-bottom: 14px;
+  background: var(--ai-grad-soft); padding: 13px 16px; margin-bottom: 14px;
 }
-/* --- collapsed bar --- */
-.ac-bar { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px 0 14px; cursor: pointer; user-select: none; }
-.ac-spark { flex: none; display: grid; place-items: center; }
-.ac-spark :deep(.ico) {
-  background: var(--ai-grad); -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
-}
-.ac-title { font-size: 14px; font-weight: 600; color: var(--ink); }
-.ac-grow { flex: 1; }
-.ac-note { font-size: 12px; color: var(--muted); }
-.ac-ic { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
-.ac-ic:hover { background: var(--ai-soft); color: var(--ai-ink); }
-.ac-ic.spin :deep(.ico) { animation: acspin .9s linear; }
-@keyframes acspin { to { transform: rotate(360deg); } }
+.ac-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.ac-spark { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
+.ac-copy { min-width: 0; }
+.ac-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--ink); }
+.ac-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--ai-grad); color: #fff; font-size: 11px; font-weight: 700; }
+.ac-teaser { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
 
-/* --- expanded body --- */
-.ac-body { padding: 4px 16px 16px; }
-.ac-summary { margin: 0 0 14px; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
-.ac-kp-h { font-size: 10.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
-.ac-kp { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.ac-kp li { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; color: var(--ink-2); line-height: 1.4; }
-.kp-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; margin-top: 6px; background: var(--ai-grad); }
-.ac-gen { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); margin-bottom: 14px; }
-.ac-gen :deep(.ico) { color: var(--ai); }
-
-.ac-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.ac-ctas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
 .ac-cta {
   display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px;
   border: 1px solid var(--ai-border); border-radius: var(--r-pill);
@@ -172,12 +75,8 @@ const cardChips = computed(() => {
 }
 .ac-cta :deep(.ico) { color: var(--ai); }
 .ac-cta:hover { border-color: var(--ai); background: var(--ai-soft); }
-.ac-cta.primary { border-color: transparent; background: var(--surface); box-shadow: 0 0 0 1.5px var(--ai) inset; }
+.ac-cta.primary { border-color: transparent; box-shadow: 0 0 0 1.5px var(--ai) inset; }
 .ac-cta.primary:hover { background: var(--ai-soft); }
 
-/* expand/collapse */
-.ac-exp-enter-active, .ac-exp-leave-active { transition: opacity .18s ease, max-height .22s ease; overflow: hidden; }
-.ac-exp-enter-from, .ac-exp-leave-to { opacity: 0; max-height: 0; }
-.ac-exp-enter-to, .ac-exp-leave-from { opacity: 1; max-height: 460px; }
-@media (prefers-reduced-motion: reduce) { .ac-exp-enter-active, .ac-exp-leave-active { transition: none; } }
+@media (max-width: 860px) { .ac-ctas { width: 100%; } }
 </style>
