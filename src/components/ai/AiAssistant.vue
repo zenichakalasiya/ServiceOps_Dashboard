@@ -12,7 +12,6 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
-import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter } from 'vue-router'
@@ -25,7 +24,6 @@ const router = useRouter()
 
 const thread = ref([])
 const input = ref('')
-const pending = ref(null)      // { block, action }
 const bodyEl = ref(null)
 let bid = 0
 
@@ -120,24 +118,22 @@ function pushExplain(text) {
     streamText(b, 'shownText', full, () => { setTimeout(() => { b.showExtras = true; b.settled = true; scrollDown() }, 200) })
   })
 }
-// P2 — investigate: think, spotlight the widget, STREAM the briefing line-by-line, reveal actions
+// P2 — investigate: think, spotlight the widget, STREAM the briefing line-by-line.
+// The "what next" belongs to the contextual Follow-ups below, so there's no separate
+// suggested-actions block here (it duplicated what the follow-ups already offer).
 function pushDrill(text, factObj) {
   const fact = factObj || factFromText(props.board, text)
-  const b = push('drill', { phase: 'thinking', fact, widget: '', showSpot: false, shownLines: [], cur: '', lines: [], actions: [], shownActions: 0, settled: false })
+  const b = push('drill', { phase: 'thinking', fact, widget: '', showSpot: false, shownLines: [], cur: '', lines: [], settled: false })
   runThinking(b, THINK_STEPS.drill(), () => {
     const drill = drillFor(props.board, fact)
     b.widget = props.board.tiles.find((x) => x.id === fact.tileId)?.title || drill.sourceTitle
-    b.actions = drill.actions.slice(0, 3)
     b.lines = drillNarrative(props.board, fact)
     highlightWidget(fact)
     setTimeout(() => { b.showSpot = true; scrollDown(); streamLines(b, 0) }, 240)
   })
 }
 function streamLines(b, idx) {
-  if (idx >= b.lines.length) {
-    setTimeout(() => { b.showSpot = b.showSpot; revealItems(b, 'shownActions', b.actions.length, 150, () => { b.settled = true }) }, 220)
-    return
-  }
+  if (idx >= b.lines.length) { b.settled = true; scrollDown(); return }
   streamText(b, 'cur', b.lines[idx], () => {
     b.shownLines.push(b.lines[idx]); b.cur = ''
     setTimeout(() => streamLines(b, idx + 1), 150)
@@ -159,12 +155,18 @@ function pushAnalyzing() {
     b.settled = true
   })
 }
-// a short templated reply for actions we don't fully simulate (edit / schedule)
+// a short templated reply for the "next action" follow-ups we don't fully simulate
 function pushNote(text) {
-  const edit = /edit|change|rename|group|type/i.test(text)
-  const reply = edit
-    ? 'You can edit any widget from its ⋯ menu — chart type, filters or grouping. Tell me which widget and what to change, and I’ll walk you through it.'
-    : 'I can set that up — scheduled digests and threshold alerts run on-prem. Confirm the cadence (daily / weekly) and I’ll draft it.'
+  const t = text.toLowerCase()
+  let reply
+  if (/reassign|escalate|major incident|notify|stakeholder|problem record|status update|recovery/.test(t)) {
+    // grounded to the on-prem "confirmed, never automatic" principle
+    reply = `“${text}” is ready to go — actions like this always wait for your confirmation before they run on-prem. Say the word and I’ll carry it out and log it against the affected records.`
+  } else if (/edit|change|rename|group|type/.test(t)) {
+    reply = 'You can edit any widget from its ⋯ menu — chart type, filters or grouping. Tell me which widget and what to change, and I’ll walk you through it.'
+  } else {
+    reply = 'I can set that up — scheduled digests and threshold alerts run on-prem. Confirm the cadence (daily / weekly) and I’ll draft it.'
+  }
   thread.value.push({ id: ++bid, kind: 'note', text: reply }); scrollDown()
 }
 // ---- P4 conversational CREATE flow (Generate with AI) ----
@@ -249,11 +251,21 @@ function followUpsFor(b) {
     { label: 'Investigate the top offenders', intent: 'drill' },
     { label: 'Create an alert for this metric', intent: 'note' },
   ]
-  if (k === 'drill') return [
-    { label: 'Draft a status update', intent: 'summary' },
-    { label: 'What changed since last visit', intent: 'changes' },
-    { label: 'Schedule a follow-up check', intent: 'note' },
-  ]
+  // Investigate has no separate "suggested actions" block — the next best actions live
+  // here as follow-ups, tailored to what was investigated.
+  if (k === 'drill') {
+    const fk = b.fact?.kind
+    if (fk === 'anomaly') return [
+      { label: 'Open a problem record for the spike', intent: 'note' },
+      { label: 'Why did it break out of range?', intent: 'explain' },
+      { label: 'Compare with my last visit', intent: 'changes' },
+    ]
+    return [
+      { label: 'Reassign the stalled P1s to on-call', intent: 'note' },
+      { label: 'Escalate these to a Major Incident', intent: 'note' },
+      { label: 'Draft a status update for stakeholders', intent: 'note' },
+    ]
+  }
   if (k === 'widget') return [
     { label: 'Add another widget', intent: 'create' },
     { label: 'Create a dashboard for this', intent: 'createstart' },
@@ -317,9 +329,6 @@ function suggest(s) { pushUser(s.label); dispatch(s.intent, s.label) }
 // One action per fact: Investigate → spotlight the widget + a written briefing + 3 actions
 // (the "why" is folded into the narrative, so a separate Explain link is no longer needed).
 function investigate(fact) { pushUser(`Investigate: ${fact.chip}`); pushDrill(fact.chip, fact) }
-
-// drill block: written narrative + up to 3 actions (no records table)
-function runAction() { const a = pending.value.action; pending.value = null; toast(`${a.label} — done`, a.danger === false ? 'success' : 'warn') }
 
 // widget block: editable chips + type + add
 function removeSpecChip(b, i) { b.spec.chips.splice(i, 1) }
@@ -485,16 +494,6 @@ watch(() => props.role, () => {
           </transition>
           <p v-for="(line, i) in b.shownLines" :key="i" class="say">{{ line }}</p>
           <p v-if="b.cur" class="say">{{ b.cur }}<span class="caret" /></p>
-          <template v-if="b.shownActions > 0">
-            <div class="sub-h">Suggested actions <span class="muted">confirmed, never automatic</span></div>
-            <div class="acts">
-              <template v-for="(a, ai) in b.actions" :key="a.id">
-                <button v-if="ai < b.shownActions" class="act reveal" @click="pending = { block: b, action: a }">
-                  <span class="aic"><Icon :name="a.icon" :size="14" /></span><span class="al">{{ a.label }}</span><Icon name="chevron-right" :size="14" class="ac" />
-                </button>
-              </template>
-            </div>
-          </template>
         </template>
 
         <!-- P4 build -->
@@ -663,10 +662,6 @@ watch(() => props.role, () => {
         <button class="send" :class="{ ready: input.trim() }" :disabled="!input.trim()" @click="submit"><Icon name="send" :size="15" /></button>
       </div>
     </div>
-
-    <ConfirmDialog v-if="pending" :title="pending.action.label" :message="pending.action.confirm"
-      :confirm-label="pending.action.label" :danger="pending.action.danger !== false"
-      @confirm="runAction" @cancel="pending = null" />
   </aside>
 </template>
 
