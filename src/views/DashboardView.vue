@@ -769,7 +769,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
       <transition name="fabpop">
         <div v-if="fabMenu" class="fab-menu">
           <!-- Generate with AI — the first, primary CTA (the full conversational create flow) -->
-          <button class="fab-opt ai" @click="fabMenu = false; openAi()">
+          <button class="fab-opt ai" @click="fabMenu = false; onCardAsk('createstart', 'Generate with AI')">
             <span class="fo-ic ai"><Icon name="sparkles" :size="18" /></span> Generate with AI
           </button>
           <div class="fab-sep" />

@@ -15,10 +15,13 @@ import ChartTile from '../dashboard/ChartTile.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, changesSinceLastVisit, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
-import { toast } from '../../store/index.js'
+import { useRouter } from 'vue-router'
+import { store, toast, createDashboard } from '../../store/index.js'
+import { chart, uid } from '../../data/mock.js'
 
 const props = defineProps({ board: Object, role: String, open: Boolean })
 const emit = defineEmits(['update:open', 'role', 'cite'])
+const router = useRouter()
 
 const thread = ref([])
 const input = ref('')
@@ -62,6 +65,52 @@ function pushAnalyzing() {
   scrollDown()
   setTimeout(() => { b.phase = 'done'; b.facts = computeFacts(props.board, props.role); scrollDown() }, 1700)
 }
+// ---- P4 conversational CREATE flow (Generate with AI) ----
+const draft = ref({})
+function push(kind, extra = {}) { thread.value.push({ id: ++bid, kind, ...extra }); scrollDown(); return thread.value[thread.value.length - 1] }
+const VIS = [{ v: 'public', label: 'Public — everyone' }, { v: 'private', label: 'Private — just me' }, { v: 'restricted', label: 'Restricted — chosen people' }]
+const visLabel = (v) => VIS.find((x) => x.v === v)?.label || v
+const otherBoards = () => store.dashboards.filter((d) => !d.archived)
+
+function pushCreateStart() {
+  // Generate-with-AI leads with the create flow — drop a lone auto-summary/preamble.
+  if (thread.value.every((b) => b.kind === 'summary' || b.kind === 'user')) thread.value = []
+  draft.value = {}; push('create-start')
+}
+// dashboard path
+function startDash() { draft.value = { mode: 'dash' }; push('cd-name', { name: '' }) }
+function dashName(b) { const n = (b.name || '').trim(); if (!n) return; draft.value.name = n; pushUser(n); push('cd-cat') }
+function dashCat(cat) { draft.value.category = cat; pushUser(cat); push('cd-vis') }
+function dashVis(v) { draft.value.access = v; pushUser(visLabel(v)); push('cd-confirm') }
+function dashCreate() {
+  const d = createDashboard({ name: draft.value.name, access: draft.value.access, category: draft.value.category, description: 'Created with ServiceOps AI' })
+  // if we came here to place a widget, continue straight into the widget step on the new board
+  if (draft.value.thenWidget) { draft.value.dash = d; draft.value.mode = 'widget'; push('cw-desc', { text: '' }) }
+  else push('cd-done', { dash: d })
+}
+function openBoard(d) { emit('update:open', false); router.push(`/dashboard/${d.id}`) }
+// widget path
+function startWidget() { draft.value = { mode: 'widget' }; push('cw-dash') }
+function widgetDash(d) {
+  if (!d) { pushUser('A new dashboard first'); draft.value.mode = 'dash'; draft.value.thenWidget = true; push('cd-name', { name: '' }); return }
+  draft.value.dash = d; pushUser(d.name); push('cw-desc', { text: '' })
+}
+function widgetDesc(b) { const t = (b.text || '').trim(); if (!t) return; pushUser(t); push('cw-preview', { spec: specFromText(t), group: '', newGroup: '', added: false }) }
+function widgetSuggest(b, s) { b.text = s; widgetDesc(b) }
+function setSpecKind(b, id) { b.spec.chart.kind = id; b.spec.kind = id }
+function removeSpecChip2(b, i) { b.spec.chips.splice(i, 1) }
+function widgetAdd(b) {
+  const d = draft.value.dash
+  const tile = chart(b.spec.title, b.spec.chart, 'Created with ServiceOps AI'); tile.prov = 'user'
+  if (b.group === '__new' && (b.newGroup || '').trim()) {
+    if (!d.groups) d.groups = []
+    const g = { id: uid('g'), name: b.newGroup.trim(), collapsed: false }; d.groups.push(g); tile.group = g.id
+  } else if (b.group && b.group !== '__new') tile.group = b.group
+  d.tiles.push(tile); d.updated = new Date().toISOString()
+  b.added = true
+  toast(`Added “${b.spec.title}” to ${d.name}`, 'success'); scrollDown()
+}
+
 function dispatch(intent, text) {
   if (intent === 'summary') pushSummary()
   else if (intent === 'explain') pushExplain(text)
@@ -69,6 +118,7 @@ function dispatch(intent, text) {
   else if (intent === 'create') pushWidget(text)
   else if (intent === 'changes') pushChanges()
   else if (intent === 'analyzing') pushAnalyzing()
+  else if (intent === 'createstart') pushCreateStart()
 }
 
 // ---- interactions ----
@@ -291,6 +341,107 @@ onMounted(() => { if (props.open && !thread.value.length) pushSummary() })
             <Icon :name="b.added ? 'check' : 'plus'" :size="14" /> {{ b.added ? 'Added to dashboard' : 'Add to dashboard' }}
           </button>
         </template>
+
+        <!-- ===== Generate with AI: conversational create flow ===== -->
+        <template v-else-if="b.kind === 'create-start'">
+          <div class="blk-h"><Icon name="wand" :size="14" /> Generate with AI</div>
+          <p class="say">What would you like to create? I'll set it up step by step.</p>
+          <div class="opts">
+            <button class="opt" @click="startDash"><span class="opt-ic"><Icon name="layout" :size="16" /></span><div><b>A new dashboard</b><span>Name it, pick a category and who can see it</span></div></button>
+            <button class="opt" @click="startWidget"><span class="opt-ic"><Icon name="chart-bar" :size="16" /></span><div><b>A new widget</b><span>Describe it — I'll build it and place it</span></div></button>
+          </div>
+        </template>
+
+        <!-- dashboard: name -->
+        <template v-else-if="b.kind === 'cd-name'">
+          <div class="blk-h"><Icon name="layout" :size="14" /> New dashboard</div>
+          <p class="say">What should we call it?</p>
+          <div class="formrow">
+            <input class="fin" v-model="b.name" placeholder="e.g. Network Operations" @keyup.enter="dashName(b)" />
+            <button class="mini-cta" :disabled="!b.name.trim()" @click="dashName(b)">Continue <Icon name="chevron-right" :size="13" /></button>
+          </div>
+        </template>
+        <!-- dashboard: category -->
+        <template v-else-if="b.kind === 'cd-cat'">
+          <p class="say">Which category should it live under?</p>
+          <div class="chipsrow">
+            <button v-for="c in store.categories.slice(0, 6)" :key="c" class="sg" @click="dashCat(c)">{{ c }}</button>
+          </div>
+        </template>
+        <!-- dashboard: visibility -->
+        <template v-else-if="b.kind === 'cd-vis'">
+          <p class="say">Who can see it?</p>
+          <div class="opts">
+            <button v-for="o in VIS" :key="o.v" class="opt sm" @click="dashVis(o.v)">
+              <span class="opt-ic"><Icon :name="o.v === 'public' ? 'globe' : o.v === 'private' ? 'lock' : 'users'" :size="15" /></span><b>{{ o.label }}</b>
+            </button>
+          </div>
+        </template>
+        <!-- dashboard: confirm -->
+        <template v-else-if="b.kind === 'cd-confirm'">
+          <div class="blk-h"><Icon name="check" :size="14" /> Ready to create</div>
+          <div class="recap">
+            <div><span>Name</span><b>{{ draft.name }}</b></div>
+            <div><span>Category</span><b>{{ draft.category }}</b></div>
+            <div><span>Visibility</span><b>{{ visLabel(draft.access) }}</b></div>
+          </div>
+          <button class="add" @click="dashCreate"><Icon name="sparkles" :size="14" /> Create dashboard</button>
+        </template>
+        <!-- dashboard: done -->
+        <template v-else-if="b.kind === 'cd-done'">
+          <div class="calm"><Icon name="check" :size="16" /> Created “{{ b.dash.name }}”.</div>
+          <button class="mini-cta" @click="openBoard(b.dash)">Open it <Icon name="open-in" :size="13" /></button>
+        </template>
+
+        <!-- widget: pick dashboard -->
+        <template v-else-if="b.kind === 'cw-dash'">
+          <div class="blk-h"><Icon name="chart-bar" :size="14" /> New widget</div>
+          <p class="say">Which dashboard should it go on?</p>
+          <div class="picklist">
+            <button v-for="d in otherBoards().slice(0, 5)" :key="d.id" class="pick" @click="widgetDash(d)"><Icon name="layout" :size="14" /> {{ d.name }}</button>
+            <button class="pick new" @click="widgetDash(null)"><Icon name="plus" :size="14" /> A new dashboard first</button>
+          </div>
+        </template>
+        <!-- widget: describe -->
+        <template v-else-if="b.kind === 'cw-desc'">
+          <p class="say">What should the widget show{{ draft.dash ? ` on “${draft.dash.name}”` : '' }}?</p>
+          <div class="formrow">
+            <input class="fin" v-model="b.text" placeholder="e.g. SLA breaches this week by team" @keyup.enter="widgetDesc(b)" />
+            <button class="mini-cta" :disabled="!b.text.trim()" @click="widgetDesc(b)">Build <Icon name="chevron-right" :size="13" /></button>
+          </div>
+          <div class="chipsrow">
+            <button class="sg" @click="widgetSuggest(b, 'SLA breaches this week by team')">SLA breaches by team</button>
+            <button class="sg" @click="widgetSuggest(b, 'Backlog trend last 6 months')">Backlog trend</button>
+            <button class="sg" @click="widgetSuggest(b, 'Open tickets by priority')">By priority</button>
+          </div>
+        </template>
+        <!-- widget: preview + config -->
+        <template v-else-if="b.kind === 'cw-preview'">
+          <div class="blk-h"><Icon name="wand" :size="14" /> Live preview</div>
+          <div class="wprev">
+            <div class="wp-h"><b>{{ b.spec.title }}</b><span class="pv">Preview</span></div>
+            <ChartTile :chart="b.spec.chart" :legend="true" :height="150" />
+          </div>
+          <div class="sub-h">Filter <span class="muted">editable</span></div>
+          <div class="chips">
+            <span v-for="(c, i) in b.spec.chips" :key="i" class="dchip"><b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}<button class="cx" @click="removeSpecChip2(b, i)"><Icon name="x" :size="11" /></button></span>
+          </div>
+          <div class="sub-h">Chart type</div>
+          <div class="kinds">
+            <button v-for="k in KINDS" :key="k.id" class="kind" :class="{ on: b.spec.chart.kind === k.id }" @click="setSpecKind(b, k.id)"><Icon :name="k.icon" :size="14" /> {{ k.label }}</button>
+          </div>
+          <div class="sub-h">Group</div>
+          <div class="chipsrow">
+            <button class="sg" :class="{ on: b.group === '' }" @click="b.group = ''">No group</button>
+            <button v-for="g in (draft.dash?.groups || [])" :key="g.id" class="sg" :class="{ on: b.group === g.id }" @click="b.group = g.id">{{ g.name }}</button>
+            <button class="sg" :class="{ on: b.group === '__new' }" @click="b.group = '__new'">＋ New group</button>
+          </div>
+          <input v-if="b.group === '__new'" class="fin" v-model="b.newGroup" placeholder="New group name" />
+          <button class="add" :disabled="b.added" @click="widgetAdd(b)">
+            <Icon :name="b.added ? 'check' : 'plus'" :size="14" /> {{ b.added ? `Added to ${draft.dash.name}` : `Add to ${draft.dash?.name || 'dashboard'}` }}
+          </button>
+          <button v-if="b.added && draft.dash" class="mini-cta" @click="openBoard(draft.dash)">Open the dashboard <Icon name="open-in" :size="13" /></button>
+        </template>
       </div>
     </div>
 
@@ -429,8 +580,28 @@ tr:last-child td { border-bottom: none; }
 .rec { color: var(--green); font-weight: 700; }
 .why { display: flex; align-items: flex-start; gap: 5px; margin: 9px 0 0; font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 7px; padding: 8px 10px; line-height: 1.45; }
 .why > :first-child { color: var(--amber); flex: none; margin-top: 1px; }
-.add { display: inline-flex; align-items: center; gap: 6px; margin-top: 11px; height: 32px; padding: 0 14px; border: none; border-radius: 8px; background: var(--primary); color: #fff; font-weight: 600; font-size: 12.5px; }
+.add { display: inline-flex; align-items: center; gap: 6px; margin-top: 11px; height: 32px; padding: 0 14px; border: none; border-radius: 8px; background: var(--ai-grad); color: #fff; font-weight: 600; font-size: 12.5px; }
 .add:disabled { background: var(--green); opacity: 1; }
+/* ===== create flow ===== */
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt { display: flex; align-items: center; gap: 11px; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 11px 12px; }
+.opt:hover { border-color: var(--ai); background: var(--ai-softer); }
+.opt.sm { padding: 9px 11px; }
+.opt-ic { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--ai-soft); color: var(--ai-ink); }
+.opt > div { display: flex; flex-direction: column; }
+.opt b { font-size: 13px; color: var(--ink); }
+.opt > div > span { font-size: 11px; color: var(--muted); }
+.formrow { display: flex; gap: 7px; align-items: center; margin-top: 4px; }
+.fin { flex: 1; height: 34px; border: 1.5px solid var(--ai); border-radius: 8px; padding: 0 11px; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); box-shadow: 0 0 0 3px var(--ai-soft); }
+.fin:focus { outline: none; }
+.recap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.recap > div { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 6px 9px; background: var(--surface-2); border-radius: 7px; }
+.recap span { color: var(--muted); } .recap b { color: var(--ink); }
+.picklist { display: flex; flex-direction: column; gap: 6px; }
+.pick { display: inline-flex; align-items: center; gap: 8px; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; color: var(--ink); }
+.pick:hover { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
+.pick.new { color: var(--ai-ink); border-style: dashed; }
+.sg.on { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
 /* footer input */
 .af { border-top: 1px solid var(--border); padding: 10px 14px 12px; }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
