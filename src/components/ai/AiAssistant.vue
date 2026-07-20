@@ -321,15 +321,14 @@ watch(() => props.role, () => {
         <template v-else-if="b.kind === 'changes'">
           <div class="blk-h"><Icon name="history" :size="14" /> What changed since your last visit</div>
           <div class="lastvisit"><Icon name="clock" :size="12" /> Last visit: {{ b.data.lastVisit }}</div>
-          <div class="chg-cards">
-            <div v-for="(it, i) in b.data.items" :key="i" class="chgc" :class="it.severity">
-              <div class="chgc-head">
-                <span class="chgc-ico" :class="it.dir"><Icon :name="it.dir === 'down' ? 'sort-desc' : 'sort-asc'" :size="14" /></span>
-                <span class="chgc-name">{{ it.widget }}</span>
+          <div class="chg-grid">
+            <div v-for="(it, i) in b.data.items" :key="i" class="chgc" :class="[it.severity, { hasnote: it.note }]" :title="it.note || null">
+              <div class="chgc-top">
+                <span class="chgc-ico" :class="it.dir"><Icon :name="it.dir === 'down' ? 'sort-desc' : 'sort-asc'" :size="13" /></span>
                 <span class="chgc-delta" :class="it.dir">{{ it.delta }}</span>
               </div>
+              <div class="chgc-name">{{ it.widget }}</div>
               <div class="chgc-val">Now <b>{{ it.value }}</b></div>
-              <div v-if="it.note" class="chgc-note">{{ it.note }}</div>
             </div>
           </div>
         </template>
@@ -596,22 +595,24 @@ watch(() => props.role, () => {
 .calm > :first-child { color: var(--green); }
 /* what changed since last visit */
 .lastvisit { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); margin-bottom: 11px; }
-/* light-tinted change cards — one per moved metric, severity gives the wash */
-.chg-cards { display: flex; flex-direction: column; gap: 9px; }
-.chgc { border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; background: var(--surface-2); }
+/* compact 2-up change cards — one mini stat card per moved metric; the explanatory
+   note rides in a hover tooltip so the digest stays small. Severity gives the wash. */
+.chg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.chgc { display: flex; flex-direction: column; gap: 5px; min-width: 0; border: 1px solid var(--border); border-radius: 11px; padding: 9px 10px; background: var(--surface-2); }
 .chgc.bad { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 22%, transparent); }
 .chgc.warn { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 24%, transparent); }
 .chgc.good { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 24%, transparent); }
-.chgc-head { display: flex; align-items: center; gap: 8px; }
-.chgc-ico { flex: none; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--surface); color: var(--muted); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
-.chgc.bad .chgc-ico { color: var(--red); } .chgc.warn .chgc-ico { color: var(--amber); }
-.chgc.good .chgc-ico.up { color: var(--green); } .chgc.good .chgc-ico.down { color: var(--green); }
-.chgc-name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chgc-delta { flex: none; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: var(--r-pill); background: var(--surface); }
+.chgc.hasnote { cursor: help; }
+.chgc-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.chgc-ico { flex: none; width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; background: var(--surface); color: var(--muted); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.chgc.bad .chgc-ico { color: var(--red); } .chgc.warn .chgc-ico { color: var(--amber); } .chgc.good .chgc-ico { color: var(--green); }
+.chgc-delta { flex: none; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface); }
 .chgc.bad .chgc-delta { color: var(--red); } .chgc.warn .chgc-delta { color: var(--amber); } .chgc.good .chgc-delta { color: var(--green); }
-.chgc-val { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+.chgc-name { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.chgc-val { font-size: 11px; color: var(--muted); }
 .chgc-val b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.chgc-note { font-size: 11.5px; color: var(--ink-2); line-height: 1.45; margin-top: 6px; padding-top: 7px; border-top: 1px dashed color-mix(in srgb, var(--ink) 12%, transparent); }
+/* a faint marker that a hover note exists */
+.chgc.hasnote .chgc-val::after { content: "ⓘ"; color: var(--muted-2); font-weight: 400; margin-left: 5px; font-size: 10.5px; }
 /* ask → analyzing (renamed so it can't collide with the .blk.analyzing wrapper class) */
 .an-loading { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; }
 .narr { font-size: 13px; line-height: 1.6; color: var(--ink-2); }
