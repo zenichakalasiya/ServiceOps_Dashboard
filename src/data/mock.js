@@ -132,6 +132,34 @@ function test1Tiles() {
   ]
 }
 
+// Mirrors the real custom "Vulnerability and Remediation Dashboard" from .185 — captured
+// widget-by-widget via Customize: 6 patch/asset counters and 6 patch charts, each with its
+// exact group-by dimensions (statuses, categories, severities). The live instance is a
+// sparse test setup, so values are representative while every category/series matches.
+function vulnRemediationTiles() {
+  const DAYS = ['14 Jul', '15 Jul', '16 Jul', '17 Jul', '18 Jul', '19 Jul', '20 Jul']
+  return [
+    { ...kpi('Pending Patch Installations (Last 24 Hours)', 8, '', { dir: 'up', pct: 12 }, 'warn', 'Patch installations pending in the last 24 hours.'), w: 2 },
+    { ...kpi('Failed Patch Installations (Last 24 Hours)', 3, '', { dir: 'up', pct: 0 }, 'bad', 'Patch installations that failed in the last 24 hours.'), w: 2 },
+    { ...kpi('Successful Patch Installations (Last 24 Hours)', 42, '', { dir: 'up', pct: 9 }, 'good', 'Patch installations that succeeded in the last 24 hours.'), w: 2 },
+    { ...kpi('Completed Patch Deployment (Last 7 Days)', 12, '', { dir: 'up', pct: 15 }, 'good', 'Patch deployments completed in the last 7 days.'), w: 2 },
+    { ...kpi('Total Hardware Assets', 2, '', { dir: 'up', pct: 0 }, 'good', 'Managed hardware assets.'), w: 2 },
+    { ...kpi('Vulnerable Assets', 5, '', { dir: 'up', pct: 20 }, 'bad', 'Assets with open vulnerabilities awaiting remediation.'), w: 2 },
+    { ...chart('Patch Deployment Status Summary (Last 30 Days)', { kind: 'donut', labels: ['Draft', 'Ready to Deploy', 'In Progress', 'Completed', 'Expired', 'Canceled', 'Partial Completed'], series: [{ name: 'Deployments', values: [4, 2, 3, 8, 1, 1, 2] }] }, 'Patch deployments grouped by status over the last 30 days.'), w: 6 },
+    { ...chart('Patch Category Distribution per Deployment (Last 7 Days)', { kind: 'bar', labels: ['Tools', 'Feature Packs', 'Service Packs', 'Update Rollups', 'Definition Updates', 'Critical Updates', 'Updates', 'Security Updates', 'Hotfix', 'Upgrades'], series: [{ name: 'Patches', values: [2, 1, 3, 4, 5, 7, 1, 6, 2, 1] }] }, 'Patches grouped by category across deployments in the last 7 days.'), w: 6 },
+    { ...chart('Download Status for Last 24 Hours', { kind: 'bar', labels: ['Pending', 'In Progress (File Server)', 'In Progress (Distribution Server)', 'Success', 'Failed', 'Canceled', 'Failed (Check Sum)', 'Pending on DMZ'], series: [{ name: 'Downloads', values: [6, 3, 2, 28, 3, 1, 1, 2] }] }, 'Patch downloads grouped by status in the last 24 hours.'), w: 6 },
+    { ...chart('Installation Status for Last 24 Hours', { kind: 'bar', labels: ['Yet To Receive', 'In Progress', 'Success', 'Failed', 'Canceled', 'Not Applicable', 'Not Ready', 'Partially Installed', 'Received', 'Resolving Dependency', 'Downloading', 'Download Success'], series: [{ name: 'Installations', values: [4, 5, 34, 3, 1, 6, 2, 2, 8, 1, 3, 12] }] }, 'Patch installations grouped by status in the last 24 hours.'), w: 6 },
+    { ...chart('Daily Report for Severity Deployed Patch Count', { kind: 'bar', labels: DAYS, series: [
+      { name: 'Critical', values: [0, 3, 0, 1, 0, 0, 2] },
+      { name: 'Important', values: [0, 5, 0, 0, 0, 1, 0] },
+      { name: 'Moderate', values: [0, 1, 0, 0, 0, 0, 0] },
+      { name: 'Low', values: [0, 0, 0, 1, 0, 0, 0] },
+      { name: 'Unspecified', values: [0, 8, 0, 0, 0, 0, 0] },
+    ] }, 'Deployed patch count grouped by severity, per day.'), w: 8 },
+    { ...chart('Daily Report for Patch Installation Task', { kind: 'line', labels: DAYS, series: [{ name: 'Tasks', values: [0, 5, 0, 0, 0, 0, 0] }] }, 'Patch installation tasks per day.'), w: 4 },
+  ]
+}
+
 // demo tiles that showcase the empty-widget states (unconfigured / error / no-data)
 function demoStateTiles() {
   return [
@@ -178,6 +206,7 @@ export function seed() {
     { name: 'Helpdesk Dashboard - 02-12-2022', folder: null, category: '', owner: 'Sneha Patil', access: 'private', predefined: false, favorite: false, description: '', tiles: helpdeskTiles().slice(0, 4), updated: days(540), clone: true },
     { name: 'Asset', folder: null, category: '', owner: 'Sneha Patil', access: 'private', predefined: false, favorite: false, description: '', tiles: assetTiles().slice(0, 3), updated: days(120), clone: true },
     { name: 'test 1', folder: 'f-mine', category: '', owner: 'Aarav Mehta', access: 'private', predefined: false, favorite: false, description: 'Custom board (mirrors the “test 1” dashboard on the ServiceOps instance): mixed request/patch counters and a custom line chart.', tiles: test1Tiles(), updated: days(3), mine: true },
+    { name: 'Vulnerability and Remediation Dashboard', folder: 'f-noc', category: 'Patch Management', owner: 'Aarav Mehta', access: 'public', predefined: false, favorite: false, description: 'Custom board (mirrors the “Vulnerability and Remediation Dashboard” on the ServiceOps instance): patch installation/deployment counters plus status, category and severity breakdowns.', tiles: vulnRemediationTiles(), updated: days(1), mine: true },
     { name: 'My SLA drafts', folder: 'f-mine', category: '', owner: 'Aarav Mehta', access: 'private', predefined: false, favorite: false, description: 'Work in progress — includes empty-widget state demos.', tiles: [...execTiles().slice(0, 3), ...demoStateTiles()], updated: days(5), mine: true },
   ].map((d, i) => ({
     id: uid('d'), enabled: true, archived: false, default: i === 0, groups: [],
