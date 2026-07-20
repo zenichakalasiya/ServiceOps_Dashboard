@@ -114,6 +114,24 @@ function execTiles() {
   ]
 }
 
+// Mirrors the real custom "test 1" dashboard from the .185 instance (a user-built board):
+// 10 mixed request/patch counters + one custom line chart ("t1"). Representative values.
+function test1Tiles() {
+  return [
+    { ...kpi('Manual OS Deployments', 3, '', { dir: 'up', pct: 0 }, 'good', 'OS images deployed manually.'), w: 2 },
+    { ...kpi('Closed Requests', 142, '', { dir: 'up', pct: 8 }, 'good', 'Requests closed in this window.'), w: 2 },
+    { ...kpi('Resolution Violated Requests', 5, '', { dir: 'up', pct: 12 }, 'bad', 'Requests that breached their resolution SLA.'), w: 2 },
+    { ...kpi('Completed Patch Deployment (Last 7 Days)', 12, '', { dir: 'up', pct: 15 }, 'good', 'Patch deployments completed in the last 7 days.'), w: 2 },
+    { ...kpi('My Open Requests', 9, '', { dir: 'up', pct: 3 }, 'good', 'Open requests assigned to me.'), w: 2 },
+    { ...kpi('Installed Patches', 98, '', { dir: 'up', pct: 6 }, 'good', 'Patches installed across the estate.'), w: 2 },
+    { ...kpi('Patch Records Expiring This Week', 2, '', { dir: 'up', pct: 0 }, 'warn', 'Patch deployment records expiring within 7 days.'), w: 2 },
+    { ...kpi('First Response Violated Requests', 4, '', { dir: 'up', pct: 9 }, 'bad', 'Requests that breached their first-response SLA.'), w: 2 },
+    { ...kpi('Passcode-Based OS Deployments', 1, '', { dir: 'up', pct: 0 }, 'good', 'OS deployments using a passcode.'), w: 2 },
+    { ...kpi('Open Requests', 248, '', { dir: 'up', pct: 4 }, 'warn', 'Requests in an open state.'), w: 2 },
+    { ...chart('t1', line(MON, [12, 18, 15, 22, 19, 24]), 'Custom line chart.'), w: 8 },
+  ]
+}
+
 // demo tiles that showcase the empty-widget states (unconfigured / error / no-data)
 function demoStateTiles() {
   return [
@@ -159,6 +177,7 @@ export function seed() {
     { name: 'Network NOC Wall', folder: 'f-noc', category: 'NOC', owner: 'Rohan Iyer', access: 'restricted', predefined: false, favorite: false, description: 'Operations wallboard for the network team.', tiles: helpdeskTiles().slice(0, 6), updated: days(3), sharedWithMe: true },
     { name: 'Helpdesk Dashboard - 02-12-2022', folder: null, category: '', owner: 'Sneha Patil', access: 'private', predefined: false, favorite: false, description: '', tiles: helpdeskTiles().slice(0, 4), updated: days(540), clone: true },
     { name: 'Asset', folder: null, category: '', owner: 'Sneha Patil', access: 'private', predefined: false, favorite: false, description: '', tiles: assetTiles().slice(0, 3), updated: days(120), clone: true },
+    { name: 'test 1', folder: 'f-mine', category: '', owner: 'Aarav Mehta', access: 'private', predefined: false, favorite: false, description: 'Custom board (mirrors the “test 1” dashboard on the ServiceOps instance): mixed request/patch counters and a custom line chart.', tiles: test1Tiles(), updated: days(3), mine: true },
     { name: 'My SLA drafts', folder: 'f-mine', category: '', owner: 'Aarav Mehta', access: 'private', predefined: false, favorite: false, description: 'Work in progress — includes empty-widget state demos.', tiles: [...execTiles().slice(0, 3), ...demoStateTiles()], updated: days(5), mine: true },
   ].map((d, i) => ({
     id: uid('d'), enabled: true, archived: false, default: i === 0, groups: [],
