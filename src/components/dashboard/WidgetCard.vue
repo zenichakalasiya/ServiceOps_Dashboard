@@ -432,7 +432,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ti.ai { color: var(--ai); }
 .ti.ai:hover, .ti.ai.on { background: var(--ai-soft); color: var(--ai-ink); }
 /* per-widget hover mini-summary card */
-.wai-card { position: fixed; z-index: 260; width: 320px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--ai-wash); box-shadow: var(--sh-lg); }
+.wai-card { position: fixed; z-index: 260; width: 320px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
 .wai-card.up { transform: translateY(-100%); }
 .wai-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .wai-h .ellip { color: var(--ai-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

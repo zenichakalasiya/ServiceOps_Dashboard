@@ -1038,9 +1038,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .fab-menu { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
 .fab-opt { display: inline-flex; align-items: center; gap: 11px; height: 46px; padding: 0 18px 0 14px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 999px; font-weight: 600; font-size: 13.5px; box-shadow: var(--sh-md); white-space: nowrap; }
 .fab-opt:hover { background: var(--surface-2); border-color: var(--primary); color: var(--primary-700); transform: translateY(-1px); }
-/* Generate with AI — the primary, violet-tinted first CTA (AI gradient wash) */
-.fab-opt.ai { border-color: var(--ai-border); background: var(--ai-grad-soft); color: var(--ai-ink); }
-.fab-opt.ai:hover { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
+/* Generate with AI — primary CTA with the gradient border (blue→purple→pink) */
+.fab-opt.ai { border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; color: var(--ai-ink); }
+.fab-opt.ai:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; color: var(--ai-ink); transform: translateY(-1px); }
 .fab-sep { align-self: stretch; height: 1px; background: var(--border); margin: -2px 6px; opacity: .7; }
 .fo-ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none; }
 .fo-ic.dash { background: var(--primary); }

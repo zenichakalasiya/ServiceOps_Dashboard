@@ -22,11 +22,12 @@
   --ai-soft: #f2ecfe;          /* lavender surface */
   --ai-softer: #f9f6ff;
   --ai-border: #e7dcfb;
-  --ai-grad: linear-gradient(120deg, #8b5cf6 0%, #a855f7 45%, #d9488f 100%);
-  /* Soft horizontal AI wash (magenta → light → violet) — the subtle "AI surface"
-     signature applied to every AI element: CTAs, cards, chat input, menus. */
-  --ai-grad-soft: linear-gradient(90deg, #fbe7f1 0%, #f6f1ff 52%, #ebe4ff 100%);
-  --ai-wash: linear-gradient(90deg, #fdf3f8 0%, #ffffff 55%, #f4f0ff 100%);
+  /* AI gradient (blue → purple → pink). --ai-grad: solid fills (orbs, badges).
+     --ai-grad-line: the 0.8-alpha border for PRIMARY CTAs. --ai-grad-soft: the
+     light 0.12 tint for SECONDARY CTAs. Interfaces stay white; only CTAs carry it. */
+  --ai-grad: linear-gradient(90deg, #4cb1fe 0%, #731efb 41.49%, #f911e3 100%);
+  --ai-grad-line: linear-gradient(90deg, rgba(76,177,254,.8) 0%, rgba(115,30,251,.8) 41.49%, rgba(249,17,227,.8) 100%);
+  --ai-grad-soft: linear-gradient(90deg, #e9f6ff 0%, #eee4fe 41.49%, #fee2fc 100%);
 
   /* Neutrals — ServiceOps token source */
   --bg: #f9fafb;               /* Light BG / Card Foreground */
@@ -74,9 +75,9 @@
   --ai-soft: #241f39;
   --ai-softer: #1f1b2e;
   --ai-border: #3a3358;
-  --ai-grad: linear-gradient(120deg, #a78bfa 0%, #c084fc 45%, #f472b6 100%);
-  --ai-grad-soft: linear-gradient(90deg, #2b1a27 0%, #221d31 52%, #241d3c 100%);
-  --ai-wash: linear-gradient(90deg, #211722 0%, #1d1d27 55%, #1f1b2e 100%);
+  --ai-grad: linear-gradient(90deg, #4cb1fe 0%, #8b5cf6 41.49%, #f472b6 100%);
+  --ai-grad-line: linear-gradient(90deg, rgba(76,177,254,.85) 0%, rgba(139,92,246,.85) 41.49%, rgba(244,114,182,.85) 100%);
+  --ai-grad-soft: linear-gradient(90deg, #212f41 0%, #271d40 41.49%, #371b3d 100%);
 
   --bg: #14141c;
   --surface: #1d1d27;

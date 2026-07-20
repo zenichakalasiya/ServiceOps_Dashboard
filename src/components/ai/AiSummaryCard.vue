@@ -77,9 +77,9 @@ const CTAS = [
 }
 .ac-cta :deep(.ico) { color: var(--ai); }
 .ac-cta:hover { border-color: var(--ai); background: var(--ai-soft); }
-/* the primary CTA reads as the outlined "Show AI Summary" from the reference */
-.ac-cta.primary { border-color: var(--ai); background: var(--ai-wash); box-shadow: 0 0 0 1px var(--ai) inset; }
-.ac-cta.primary:hover { background: var(--ai-soft); }
+/* primary CTA — a gradient BORDER (blue→purple→pink) over a white fill */
+.ac-cta.primary { border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; }
+.ac-cta.primary:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 
 @media (max-width: 860px) { .ac-ctas { width: 100%; } }
 </style>

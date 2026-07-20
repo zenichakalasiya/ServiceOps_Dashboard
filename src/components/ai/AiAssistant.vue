@@ -650,7 +650,7 @@ watch(() => props.role, () => {
 </template>
 
 <style scoped>
-.asst { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--ai-wash); }
+.asst { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--surface); }
 .ah { display: flex; align-items: center; justify-content: space-between; padding: 13px 14px; border-bottom: 1px solid var(--border); }
 .ah-l { display: flex; gap: 10px; align-items: center; }
 .spk { width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
@@ -799,7 +799,7 @@ tr:last-child td { border-bottom: none; }
 .opt b { font-size: 13px; color: var(--ink); }
 .opt > div > span { font-size: 11px; color: var(--muted); }
 .formrow { display: flex; gap: 7px; align-items: center; margin-top: 4px; }
-.fin { flex: 1; height: 34px; border: 1.5px solid var(--ai); border-radius: 8px; padding: 0 11px; font: inherit; font-size: 13px; color: var(--ink); background: var(--ai-grad-soft); box-shadow: 0 0 0 3px var(--ai-soft); }
+.fin { flex: 1; height: 34px; border: 1.5px solid var(--ai); border-radius: 8px; padding: 0 11px; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); box-shadow: 0 0 0 3px var(--ai-soft); }
 .fin:focus { outline: none; }
 .recap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .recap > div { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 6px 9px; background: var(--surface-2); border-radius: 7px; }
@@ -836,7 +836,7 @@ tr:last-child td { border-bottom: none; }
 .actchip:hover { border-color: var(--ai); color: var(--ai-ink); }
 .actchip:hover :deep(.ico), .actchip.on :deep(.ico) { color: var(--ai); }
 .actchip.on { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
-.actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--ai-wash); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
+.actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
 .actpop-enter-active, .actpop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .actpop-enter-from, .actpop-leave-to { opacity: 0; transform: translateY(8px); }
 .actpop-h { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 4px 6px 8px; }
@@ -850,7 +850,7 @@ tr:last-child td { border-bottom: none; }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .sg { border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
 .sg:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); }
-.inbox { display: flex; align-items: center; gap: 6px; height: 44px; border: 1px solid var(--ai-border); border-radius: 11px; padding: 0 6px 0 8px; background: var(--ai-grad-soft); }
+.inbox { display: flex; align-items: center; gap: 6px; height: 44px; border: 1px solid var(--ai-border); border-radius: 11px; padding: 0 6px 0 8px; background: var(--surface); }
 .inbox:focus-within { border-color: var(--ai); box-shadow: 0 0 0 3px var(--ai-soft); }
 .attach { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; flex: none; }
 .attach:hover { background: var(--surface-2); color: var(--ink); }

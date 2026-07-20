@@ -370,8 +370,9 @@ const inlineEntries = computed(() =>
  * user with no route back to the rest. */
 const overflowCount = computed(() =>
   truncating.value ? Math.max(0, manageable.value.length - inlineEntries.value.length) : 0)
-// clicking a legend entry disables it and pulls its data out of the chart
-const legendClickable = computed(() => rankModes.value || chipModes.value)
+// clicking ANY legend entry (any chart, any cardinality) disables that series/slice
+// and pulls its data out of the chart — it stays listed, struck through, to come back.
+const legendClickable = computed(() => true)
 
 /* ---- Side legend (part-of-whole charts) -------------------------------------
  * A pie/donut names slices, and slice names are long. Laid out centre-bottom they

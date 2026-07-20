@@ -49,9 +49,9 @@ function openAi() { store.ui.aiPanelOpen = true }
 .right { display: flex; align-items: center; gap: 6px; }
 .ic { width: 36px; height: 36px; border: none; background: transparent; color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
-.askai { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: var(--r-pill); border: 1px solid var(--ai-border); background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 13px; margin-right: 2px; }
+.askai { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: var(--r-pill); border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; color: var(--ai-ink); font-weight: 600; font-size: 13px; margin-right: 2px; }
 .askai :deep(.ico) { color: var(--ai); }
-.askai:hover { background: var(--ai-soft); border-color: var(--ai); }
+.askai:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 .plus { width: 36px; height: 36px; border-radius: 10px; border: none; background: var(--primary); color: #fff; display: grid; place-items: center; box-shadow: var(--sh-sm); }
 .plus:hover { background: var(--primary-600); }
 .avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; margin-left: 4px; }
