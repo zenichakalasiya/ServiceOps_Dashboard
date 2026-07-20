@@ -155,18 +155,12 @@ function pushAnalyzing() {
     b.settled = true
   })
 }
-// a short templated reply for the "next action" follow-ups we don't fully simulate
+// a short templated reply for actions we don't fully simulate (edit / schedule)
 function pushNote(text) {
-  const t = text.toLowerCase()
-  let reply
-  if (/reassign|escalate|major incident|notify|stakeholder|problem record|status update|recovery/.test(t)) {
-    // grounded to the on-prem "confirmed, never automatic" principle
-    reply = `“${text}” is ready to go — actions like this always wait for your confirmation before they run on-prem. Say the word and I’ll carry it out and log it against the affected records.`
-  } else if (/edit|change|rename|group|type/.test(t)) {
-    reply = 'You can edit any widget from its ⋯ menu — chart type, filters or grouping. Tell me which widget and what to change, and I’ll walk you through it.'
-  } else {
-    reply = 'I can set that up — scheduled digests and threshold alerts run on-prem. Confirm the cadence (daily / weekly) and I’ll draft it.'
-  }
+  const edit = /edit|change|rename|group|type/i.test(text)
+  const reply = edit
+    ? 'You can edit any widget from its ⋯ menu — chart type, filters or grouping. Tell me which widget and what to change, and I’ll walk you through it.'
+    : 'I can set that up — scheduled digests and threshold alerts run on-prem. Confirm the cadence (daily / weekly) and I’ll draft it.'
   thread.value.push({ id: ++bid, kind: 'note', text: reply }); scrollDown()
 }
 // ---- P4 conversational CREATE flow (Generate with AI) ----
@@ -251,21 +245,11 @@ function followUpsFor(b) {
     { label: 'Investigate the top offenders', intent: 'drill' },
     { label: 'Create an alert for this metric', intent: 'note' },
   ]
-  // Investigate has no separate "suggested actions" block — the next best actions live
-  // here as follow-ups, tailored to what was investigated.
-  if (k === 'drill') {
-    const fk = b.fact?.kind
-    if (fk === 'anomaly') return [
-      { label: 'Open a problem record for the spike', intent: 'note' },
-      { label: 'Why did it break out of range?', intent: 'explain' },
-      { label: 'Compare with my last visit', intent: 'changes' },
-    ]
-    return [
-      { label: 'Reassign the stalled P1s to on-call', intent: 'note' },
-      { label: 'Escalate these to a Major Incident', intent: 'note' },
-      { label: 'Draft a status update for stakeholders', intent: 'note' },
-    ]
-  }
+  if (k === 'drill') return [
+    { label: 'Draft a status update', intent: 'summary' },
+    { label: 'What changed since last visit', intent: 'changes' },
+    { label: 'Schedule a follow-up check', intent: 'note' },
+  ]
   if (k === 'widget') return [
     { label: 'Add another widget', intent: 'create' },
     { label: 'Create a dashboard for this', intent: 'createstart' },
