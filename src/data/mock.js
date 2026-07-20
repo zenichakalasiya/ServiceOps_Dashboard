@@ -57,30 +57,38 @@ export const TECH_GROUPS = [
 const WK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
 
+// Mirrors the real ServiceOps "Helpdesk Dashboard" (predefined) from the .185 instance:
+// 6 KPI counters, 3 grouped charts (Status · Priority · Technician), 3 record lists.
+// The live instance is near-empty (one test request), so values here are representative
+// ITSM figures while every widget's title, type and group-by matches the real board.
 function helpdeskTiles() {
+  const TECHS = ['yash', 'RW', 'Juli Gopani', 'Sakshi', 'ahmedraza', 'Rosy', 'Keya', 'Jerry', 'Stuti', 'Nikhil', 'Unassigned']
   return [
-    kpi('Open Tickets', 248, '', { dir: 'up', pct: 4.2 }, 'warn', 'Count of requests in an open state, windowed by Created date.'),
-    kpi('Overdue', 31, '', { dir: 'up', pct: 12 }, 'bad', 'Open requests past their SLA due date.'),
-    kpi('Resolved Today', 86, '', { dir: 'up', pct: 8 }, 'good', 'Requests moved to Resolved today.'),
-    kpi('SLA Compliance', 94.2, '%', { dir: 'down', pct: 1.1 }, 'warn', 'Percent of requests resolved within SLA this window.'),
-    chart('Created vs Resolved', grouped(WK, [42, 51, 38, 60, 55, 22, 18], [39, 48, 41, 57, 50, 25, 20]), 'Daily created vs resolved request volume.'),
-    chart('Tickets by Priority', donut(['P1', 'P2', 'P3', 'P4'], [18, 64, 120, 46]), 'Open requests split by priority.'),
-    chart('Backlog Trend', area(MON, [180, 210, 198, 240, 232, 248]), 'Open backlog at month end.'),
-    // `wide` keeps Rearrange from shrinking it — the series-manager panel needs the width
-    { ...chart('Tickets by Technician', technicianLoad(63), 'Open requests grouped by assigned technician — 63 distinct values.'), w: 12, h: 3, highCard: true, wide: true },
-    shortcut('My Open P1 Requests',
-      ['ID', 'Subject', 'Priority', 'Status', 'Due'],
-      [['INC-2041', 'VPN down for finance team', 'P1', 'In Progress', 'Today 4:00 PM'],
-       ['INC-2038', 'Email delivery delayed', 'P1', 'Open', 'Today 6:00 PM'],
-       ['INC-2031', 'Payroll app 500 error', 'P1', 'In Progress', 'Tomorrow'],
-       ['INC-2029', 'SSO login failing for HR', 'P1', 'Open', 'Today 5:30 PM'],
-       ['INC-2024', 'Database replication lag', 'P1', 'In Progress', 'Tomorrow'],
-       ['INC-2019', 'Printer fleet offline – 3rd floor', 'P1', 'Open', 'Today 7:00 PM'],
-       ['INC-2015', 'CRM API timeouts', 'P1', 'In Progress', 'Tomorrow'],
-       ['INC-2011', 'Wi-Fi outage – Pune office', 'P1', 'Open', 'Today 8:00 PM'],
-       ['INC-2007', 'Backup job failed overnight', 'P1', 'In Progress', 'Tomorrow'],
-       ['INC-2003', 'Firewall rule blocking payments', 'P1', 'Open', 'Today 9:00 PM']],
-      'Requests assigned to me where priority = P1 and status is open.'),
+    { ...kpi('Overdue Requests', 18, '', { dir: 'up', pct: 14 }, 'bad', 'Open requests past their SLA due date.'), w: 2 },
+    { ...kpi('Requests Due In the 24 Hours', 24, '', { dir: 'up', pct: 9 }, 'warn', 'Open requests whose SLA due date falls within the next 24 hours.'), w: 2 },
+    { ...kpi('Open Requests', 248, '', { dir: 'up', pct: 4 }, 'warn', 'Count of requests in an open state.'), w: 2 },
+    { ...kpi('Unassigned Requests', 12, '', { dir: 'down', pct: 6 }, 'warn', 'Open requests with no technician assigned.'), w: 2 },
+    { ...kpi('My Open Requests', 9, '', { dir: 'up', pct: 3 }, 'good', 'Open requests assigned to me.'), w: 2 },
+    { ...kpi('Urgent Open Requests', 6, '', { dir: 'up', pct: 20 }, 'bad', 'Open requests with priority Urgent.'), w: 2 },
+    { ...chart('Open Requests By Status', { kind: 'donut', labels: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'], series: [{ name: 'Requests', values: [96, 54, 30, 42, 26] }] }, 'Open requests grouped by status.'), w: 4 },
+    { ...chart('Open Requests By Priority', { kind: 'donut', labels: ['Low', 'Medium', 'High', 'Urgent'], series: [{ name: 'Requests', values: [120, 78, 34, 16] }] }, 'Open requests grouped by priority.'), w: 4 },
+    { ...chart('Open Requests By Technician', { kind: 'hbar', labels: TECHS, series: [{ name: 'Total', values: [34, 28, 22, 19, 17, 14, 12, 9, 7, 5, 12] }] }, 'Open requests grouped by assigned technician.'), w: 4 },
+    { ...shortcut('My Open Requests', ['Subject', 'Requester', 'Status', 'Priority'],
+      [['VPN down for finance team', 'Arnav Desai', 'In Progress', 'Urgent'],
+       ['Email delivery delayed', 'Sarah Chen', 'Open', 'High'],
+       ['Payroll app 500 error', 'Neha Gupta', 'In Progress', 'High'],
+       ['SSO login failing for HR', 'Rahul Shukla', 'Open', 'Medium'],
+       ['Wi-Fi outage – Pune office', 'Karan Mehta', 'Open', 'High']],
+      'Open requests assigned to me.'), w: 4 },
+    { ...shortcut('My Open Tasks', ['Subject', 'Reference', 'Status', 'Priority'],
+      [['Provision laptop for new joiner', 'TASK-3021', 'Open', 'Medium'],
+       ['Review firewall change', 'TASK-3018', 'In Progress', 'High'],
+       ['Patch database servers', 'TASK-3009', 'Open', 'Urgent']],
+      'Tasks assigned to me that are open.'), w: 4 },
+    { ...shortcut('My Pending Approvals', ['Requester Name', 'Created Date', 'Subject', 'Type'],
+      [['Priya Nair', '18 Jul 2026', 'New software purchase — Figma', 'Service Request'],
+       ['Vikram Deshpande', '17 Jul 2026', 'Access to production DB', 'Change']],
+      'Approval requests waiting on me.'), w: 4 },
   ]
 }
 function assetTiles() {
@@ -145,7 +153,7 @@ export function seed() {
   ]
 
   const dashboards = [
-    { name: 'Helpdesk Overview', folder: 'f-svc', category: 'Service Desk', owner: 'Aarav Mehta', access: 'public', predefined: true, favorite: true, certified: true, description: 'Live service-desk health: open volume, SLA, backlog and P1 worklist.', tiles: [...helpdeskTiles(), { ...chart('My SLA Trend (custom)', line(MON, [88, 90, 91, 93, 92, 94]), 'A custom widget you added to this predefined dashboard — editable, but not removable: nothing can be removed from a predefined board.'), prov: 'user' }], updated: days(0) },
+    { name: 'Helpdesk Overview', folder: 'f-svc', category: 'Service Desk', owner: 'Aarav Mehta', access: 'public', predefined: true, favorite: true, certified: true, description: 'Predefined service-desk board (mirrors ServiceOps “Helpdesk Dashboard”): request counters, status/priority/technician breakdowns, and my worklists.', tiles: helpdeskTiles(), updated: days(0) },
     { name: 'Executive Summary', folder: 'f-lead', category: 'Leadership', owner: 'Vikram Deshpande', access: 'restricted', predefined: true, favorite: true, description: 'Leadership KPIs — MTTR, CSAT, backlog and volume trends.', tiles: execTiles(), updated: days(1), sharedWithMe: true },
     { name: 'Asset & Patch Health', folder: 'f-noc', category: 'Assets', owner: 'Priya Nair', access: 'public', predefined: true, favorite: false, description: 'Hardware estate, warranty, patch compliance and expiring contracts.', tiles: assetTiles(), updated: days(2) },
     { name: 'Network NOC Wall', folder: 'f-noc', category: 'NOC', owner: 'Rohan Iyer', access: 'restricted', predefined: false, favorite: false, description: 'Operations wallboard for the network team.', tiles: helpdeskTiles().slice(0, 6), updated: days(3), sharedWithMe: true },

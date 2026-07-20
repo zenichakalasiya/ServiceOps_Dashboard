@@ -5,47 +5,48 @@
 // — the product's KPIs don't normally store this; it's what makes P3-B real.
 import { kpi, chart, shortcut } from './mock.js'
 
-const WK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+const TECHS = ['yash', 'RW', 'Juli Gopani', 'Sakshi', 'ahmedraza', 'Rosy', 'Keya', 'Jerry', 'Stuti', 'Nikhil', 'Unassigned']
 
-// The P1 worklist — used both as a tile and as the record source the Deep-dive
-// panel drills into (tier-1 honest drill). "Due" drives breach-imminence facts.
-const P1_ROWS = [
-  ['INC-2041', 'VPN down for finance team', 'P1', 'In Progress', 'Today 4:00 PM'],
-  ['INC-2038', 'Email delivery delayed', 'P1', 'Open', 'Today 6:00 PM'],
-  ['INC-2031', 'Payroll app 500 error', 'P1', 'In Progress', 'Today 5:15 PM'],
-  ['INC-2029', 'SSO login failing for HR', 'P1', 'Open', 'Today 5:30 PM'],
-  ['INC-2019', 'Printer fleet offline – 3rd floor', 'P2', 'Open', 'Tomorrow'],
-  ['INC-2015', 'CRM API timeouts', 'P1', 'In Progress', 'Today 7:00 PM'],
-  ['INC-2011', 'Wi-Fi outage – Pune office', 'P1', 'Open', 'Today 8:00 PM'],
-  ['INC-2003', 'Firewall rule blocking payments', 'P1', 'Open', 'Today 9:00 PM'],
+// The worklist — also the record source the Deep-dive drills into (tier-1 honest drill).
+// "Due" drives breach-imminence facts; several P1s due today make the breach story.
+const OPEN_ROWS = [
+  ['VPN down for finance team', 'Arnav Desai', 'P1', 'In Progress', 'Today 4:00 PM'],
+  ['Email delivery delayed', 'Sarah Chen', 'P1', 'Open', 'Today 6:00 PM'],
+  ['Payroll app 500 error', 'Neha Gupta', 'P1', 'In Progress', 'Today 5:15 PM'],
+  ['SSO login failing for HR', 'Rahul Shukla', 'P1', 'Open', 'Today 5:30 PM'],
+  ['Printer fleet offline – 3rd floor', 'Karan Mehta', 'P2', 'Open', 'Tomorrow'],
+  ['CRM API timeouts', 'Divya Rao', 'P1', 'In Progress', 'Today 7:00 PM'],
+  ['Wi-Fi outage – Pune office', 'Ishita Bose', 'P1', 'Open', 'Today 8:00 PM'],
 ]
 
+// Mirrors the real "Helpdesk Dashboard": 6 request counters, 3 grouped charts, 3 lists.
+// KPI `history` (prior periods, oldest→newest) lets the engine compute a z-score anomaly.
 export function demoBoard() {
   return {
     id: 'ai-demo',
     name: 'Helpdesk Overview',
     role: 'technician',
     tiles: [
-      // --- KPI row (history drives anomaly detection) ---
-      // Open Tickets: gently up, in-pattern → NOT an anomaly.
-      { ...kpi('Open Tickets', 248, '', { dir: 'up', pct: 4.2 }, 'warn', 'Count of requests in an open state, windowed by Created date.'),
-        history: [236, 241, 238, 245, 240, 244, 239], metric: 'open', w: 3, h: 1 },
-      // Overdue: 31 against a ~14 baseline → a clear statistical outlier (the anomaly the demo turns on).
-      { ...kpi('Overdue', 31, '', { dir: 'up', pct: 121 }, 'bad', 'Open requests past their SLA due date.'),
-        history: [12, 14, 13, 15, 12, 16, 14], metric: 'overdue', w: 3, h: 1 },
-      // Resolved Today: healthy, in-pattern.
-      { ...kpi('Resolved Today', 86, '', { dir: 'up', pct: 8 }, 'good', 'Requests moved to Resolved today.'),
-        history: [78, 82, 80, 84, 79, 83, 81], metric: 'resolved', w: 3, h: 1 },
-      // SLA Compliance: a mild dip — deliberately does NOT trip the badge (the restraint proof).
-      { ...kpi('SLA Compliance', 94.2, '%', { dir: 'down', pct: 1.1 }, 'warn', 'Percent of requests resolved within SLA this window.'),
-        history: [96, 95.5, 95, 95.3, 94.8, 95.1, 94.9], metric: 'sla', w: 3, h: 1 },
+      // Overdue: 18 against a ~11 baseline → a clear statistical outlier (the anomaly).
+      { ...kpi('Overdue Requests', 18, '', { dir: 'up', pct: 64 }, 'bad', 'Open requests past their SLA due date.'),
+        history: [9, 11, 10, 12, 11, 13, 10], metric: 'overdue', w: 2, h: 1 },
+      { ...kpi('Requests Due In the 24 Hours', 24, '', { dir: 'up', pct: 9 }, 'warn', 'Open requests whose SLA due date falls within the next 24 hours.'),
+        history: [20, 22, 19, 23, 21, 22, 21], metric: 'due24', w: 2, h: 1 },
+      // Open Requests: gently up, in-pattern → NOT an anomaly.
+      { ...kpi('Open Requests', 248, '', { dir: 'up', pct: 4 }, 'warn', 'Count of requests in an open state.'),
+        history: [236, 241, 238, 245, 240, 244, 239], metric: 'open', w: 2, h: 1 },
+      { ...kpi('Unassigned Requests', 12, '', { dir: 'down', pct: 6 }, 'warn', 'Open requests with no technician assigned.'),
+        history: [15, 14, 13, 14, 13, 12, 13], metric: 'unassigned', w: 2, h: 1 },
+      { ...kpi('My Open Requests', 9, '', { dir: 'up', pct: 3 }, 'good', 'Open requests assigned to me.'), metric: 'mine', w: 2, h: 1 },
+      { ...kpi('Urgent Open Requests', 6, '', { dir: 'up', pct: 20 }, 'bad', 'Open requests with priority Urgent.'), metric: 'urgent', w: 2, h: 1 },
       // --- charts ---
-      { ...chart('Created vs Resolved', { kind: 'bar', labels: WK, series: [{ name: 'Created', values: [42, 51, 38, 60, 55] }, { name: 'Resolved', values: [39, 48, 41, 57, 50] }] }, 'Daily created vs resolved request volume.'), w: 6, h: 2 },
-      { ...chart('Tickets by Priority', { kind: 'donut', labels: ['P1', 'P2', 'P3', 'P4'], series: [{ name: 'Priority', values: [18, 64, 120, 46] }] }, 'Open requests split by priority.'), w: 3, h: 2 },
-      { ...chart('Backlog Trend', { kind: 'area', labels: MON, series: [{ name: 'Backlog', values: [180, 210, 198, 240, 232, 248] }] }, 'Open backlog at month end.'), w: 3, h: 2 },
-      // --- worklist (drill source) ---
-      { ...shortcut('My Open P1 Requests', ['ID', 'Subject', 'Priority', 'Status', 'Due'], P1_ROWS, 'Requests assigned to me where priority = P1 and status is open.'), w: 6, h: 2 },
+      { ...chart('Open Requests By Status', { kind: 'donut', labels: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'], series: [{ name: 'Requests', values: [96, 54, 30, 42, 26] }] }, 'Open requests grouped by status.'), w: 4, h: 2 },
+      { ...chart('Open Requests By Priority', { kind: 'donut', labels: ['Low', 'Medium', 'High', 'Urgent'], series: [{ name: 'Requests', values: [120, 78, 34, 16] }] }, 'Open requests grouped by priority.'), w: 4, h: 2 },
+      { ...chart('Open Requests By Technician', { kind: 'hbar', labels: TECHS, series: [{ name: 'Total', values: [34, 28, 22, 19, 17, 14, 12, 9, 7, 5, 12] }] }, 'Open requests grouped by assigned technician.'), w: 4, h: 2 },
+      // --- worklists (first one is the drill/breach source) ---
+      { ...shortcut('My Open Requests', ['Subject', 'Requester', 'Priority', 'Status', 'Due'], OPEN_ROWS, 'Open requests assigned to me.'), w: 4, h: 2 },
+      { ...shortcut('My Open Tasks', ['Subject', 'Reference', 'Status', 'Priority'], [['Provision laptop for new joiner', 'TASK-3021', 'Open', 'Medium'], ['Review firewall change', 'TASK-3018', 'In Progress', 'High']], 'Tasks assigned to me that are open.'), w: 4, h: 2 },
+      { ...shortcut('My Pending Approvals', ['Requester Name', 'Created Date', 'Subject', 'Type'], [['Priya Nair', '18 Jul 2026', 'New software purchase — Figma', 'Service Request']], 'Approval requests waiting on me.'), w: 4, h: 2 },
     ],
   }
 }
