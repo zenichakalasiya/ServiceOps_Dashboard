@@ -13,7 +13,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, changesSinceLastVisit, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, applyChips, changesSinceLastVisit, dashboardNarrative, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
@@ -57,13 +57,13 @@ function pushChanges() {
   thread.value.push({ id: ++bid, kind: 'changes', data: changesSinceLastVisit(props.board) })
   scrollDown()
 }
-// "Ask about this dashboard": a visible analyzing/thinking state, then the grounded context.
+// Summarize / Ask: a visible analyzing/thinking state, then a WRITTEN prose summary.
 // Mutate the REACTIVE array element (not the raw object we pushed) so the reveal re-renders.
 function pushAnalyzing() {
-  thread.value.push({ id: ++bid, kind: 'analyzing', phase: 'thinking', facts: [] })
+  thread.value.push({ id: ++bid, kind: 'analyzing', phase: 'thinking', narrative: '' })
   const b = thread.value[thread.value.length - 1]
   scrollDown()
-  setTimeout(() => { b.phase = 'done'; b.facts = computeFacts(props.board, props.role); scrollDown() }, 1700)
+  setTimeout(() => { b.phase = 'done'; b.narrative = dashboardNarrative(props.board, props.role); scrollDown() }, 1700)
 }
 // ---- P4 conversational CREATE flow (Generate with AI) ----
 const draft = ref({})
@@ -169,9 +169,9 @@ defineExpose({ trigger })
 // The empty-state greeting + starter CTAs (dashboard context — mirrors the ticket chat).
 const firstName = computed(() => (store.currentUser || 'there').split(' ')[0])
 const EMPTY_CTAS = [
-  { label: 'Summarize this dashboard', intent: 'summary', icon: 'bulb' },
+  { label: 'Summarize this dashboard', intent: 'analyzing', icon: 'bulb' },
   { label: 'What changed since last visit', intent: 'changes', icon: 'history' },
-  { label: 'Analyze what needs attention', intent: 'analyzing', icon: 'auto-graph' },
+  { label: 'What needs attention', intent: 'summary', icon: 'auto-graph' },
   { label: 'Generate a widget', intent: 'createstart', icon: 'wand' },
 ]
 
@@ -252,36 +252,24 @@ watch(() => props.role, () => {
           </div>
         </template>
 
-        <!-- Ask about this dashboard — analyzing → context -->
+        <!-- Summarize / Ask about this dashboard — analyzing → written summary -->
         <template v-else-if="b.kind === 'analyzing'">
           <template v-if="b.phase === 'thinking'">
-            <div class="analyzing">
+            <div class="an-loading">
               <span class="an-orb"><Icon name="sparkles" :size="16" /></span>
               <span class="an-txt">Analyzing this dashboard<span class="an-dots"><i /><i /><i /></span></span>
             </div>
             <div class="an-steps">
               <div class="an-step"><span class="asd" /> Reading {{ board.tiles.length }} widgets</div>
               <div class="an-step"><span class="asd" /> Checking SLA, backlog and anomaly signals</div>
-              <div class="an-step"><span class="asd" /> Ranking what matters for your role</div>
+              <div class="an-step"><span class="asd" /> Writing a plain-language summary</div>
             </div>
           </template>
           <template v-else>
-            <div class="blk-h"><Icon name="sparkles" :size="14" /> Here's what I found</div>
-            <p class="say">“{{ board.name }}” brings together {{ board.tiles.length }} widgets. {{ b.facts.length ? `${b.facts.length} need attention right now — the most urgent are below.` : 'Everything is within range right now.' }}</p>
-            <div class="facts">
-              <div v-for="f in b.facts.slice(0, 3)" :key="f.id" class="fact">
-                <span class="dot" :class="dotClass(f.severity)" />
-                <div class="fb">
-                  <div class="ftext">{{ f.text }}</div>
-                  <div class="fmeta">
-                    <button class="lnk" @click="explainFact(f)">Explain</button>
-                    <button class="lnk" @click="investigate(f)">Investigate →</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="sub-h">What next</div>
-            <div class="chipsrow"><button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button></div>
+            <div class="blk-h"><Icon name="sparkles" :size="14" /> Dashboard summary</div>
+            <p class="say narr">{{ b.narrative }}</p>
+            <div class="na-h">Suggested next actions</div>
+            <div class="chipsrow na-row"><button v-for="s in SUGGESTIONS" :key="s.label" class="sg" @click="suggest(s)">{{ s.label }}</button></div>
           </template>
         </template>
 
@@ -526,8 +514,9 @@ watch(() => props.role, () => {
 .chg.bad .chg-delta { color: var(--red); } .chg.warn .chg-delta { color: var(--amber); } .chg.good .chg-delta { color: var(--green); }
 .chg-val { color: var(--muted); font-size: 11.5px; }
 .chg-note { font-size: 11.5px; color: var(--ink-2); margin-top: 3px; }
-/* ask → analyzing */
-.analyzing { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; }
+/* ask → analyzing (renamed so it can't collide with the .blk.analyzing wrapper class) */
+.an-loading { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; }
+.narr { font-size: 13px; line-height: 1.6; color: var(--ink-2); }
 .an-orb { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; animation: orbpulse 1.2s ease-in-out infinite; }
 @keyframes orbpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.4); } 50% { box-shadow: 0 0 0 7px rgba(139,92,246,0); } }
 .an-txt { font-size: 13px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: baseline; }

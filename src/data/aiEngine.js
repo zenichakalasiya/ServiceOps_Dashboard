@@ -126,6 +126,34 @@ export function confidence(board) {
 export const FRESHNESS = 'just now'
 
 // ---------------------------------------------------------------------------
+// dashboardNarrative — a WRITTEN, plain-language summary of the dashboard (what it is,
+// what it shows, how it reads right now) — prose, not a list of ticket facts.
+// ---------------------------------------------------------------------------
+export function dashboardNarrative(board, role = 'technician') {
+  const t = board.tiles || []
+  const kpis = t.filter((x) => x.type === 'kpi')
+  const charts = t.filter((x) => x.type === 'chart')
+  const shorts = t.filter((x) => x.type === 'shortcut')
+  const names = (arr, n = 3) => {
+    const s = arr.map((x) => x.title).slice(0, n)
+    const extra = arr.length - s.length
+    return s.join(', ') + (extra > 0 ? ` and ${extra} more` : '')
+  }
+  const lens = role === 'exec' ? 'a leadership' : role === 'manager' ? 'a team' : 'a day-to-day'
+  const parts = [
+    `“${board.name}” is ${lens} view of your service desk, built from ${kpis.length} headline KPIs, ${charts.length} charts and ${shorts.length} record ${shorts.length === 1 ? 'list' : 'lists'}.`,
+  ]
+  if (kpis.length) parts.push(`The KPIs track ${names(kpis)}, giving you the current state at a glance.`)
+  if (charts.length) parts.push(`The charts trend it over time — ${names(charts, 2)} — and the ${shorts.length ? `worklist (${names(shorts, 1)})` : 'lists'} surfaces the individual records that need a technician’s hands.`)
+  const fs = facts(board, role)
+  const bad = fs.filter((f) => f.severity === 'bad').length
+  parts.push(fs.length
+    ? `Overall it’s reading as ${bad ? 'needs-attention' : 'slightly stretched'} right now, with the most pressure on SLA and overdue work — a good place to start.`
+    : 'Overall everything is sitting within its normal range right now, so there’s no immediate action to take.')
+  return parts.join(' ')
+}
+
+// ---------------------------------------------------------------------------
 // widgetBrief — a tiny grounded summary + two type-specific suggestive actions for a
 // single tile, shown on hover of its AI sparkle. Works on any real tile (KPI / chart /
 // shortcut), degrading gracefully when history/delta aren't present.

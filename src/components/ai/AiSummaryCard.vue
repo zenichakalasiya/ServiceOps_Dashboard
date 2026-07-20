@@ -28,9 +28,11 @@ const teaser = computed(() => {
 })
 
 const CTAS = [
-  { label: 'Show AI Summary', intent: 'summary', icon: 'sparkles', primary: true },
+  // Show AI Summary → the written, plain-language summary (analyzing → prose)
+  { label: 'Show AI Summary', intent: 'analyzing', icon: 'sparkles', primary: true },
   { label: 'What changed since last visit', intent: 'changes', icon: 'history' },
-  { label: 'Ask about this dashboard', intent: 'analyzing', icon: 'chat' },
+  // Ask about this dashboard → open the chat greeting so you can type a question
+  { label: 'Ask about this dashboard', intent: 'open', icon: 'chat' },
 ]
 </script>
 
