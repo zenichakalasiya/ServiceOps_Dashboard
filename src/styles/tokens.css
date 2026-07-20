@@ -23,7 +23,10 @@
   --ai-softer: #f9f6ff;
   --ai-border: #e7dcfb;
   --ai-grad: linear-gradient(120deg, #8b5cf6 0%, #a855f7 45%, #d9488f 100%);
-  --ai-grad-soft: linear-gradient(120deg, #f7f2ff 0%, #fdf3fb 100%);
+  /* Soft horizontal AI wash (magenta → light → violet) — the subtle "AI surface"
+     signature applied to every AI element: CTAs, cards, chat input, menus. */
+  --ai-grad-soft: linear-gradient(90deg, #fbe7f1 0%, #f6f1ff 52%, #ebe4ff 100%);
+  --ai-wash: linear-gradient(90deg, #fdf3f8 0%, #ffffff 55%, #f4f0ff 100%);
 
   /* Neutrals — ServiceOps token source */
   --bg: #f9fafb;               /* Light BG / Card Foreground */
@@ -72,7 +75,8 @@
   --ai-softer: #1f1b2e;
   --ai-border: #3a3358;
   --ai-grad: linear-gradient(120deg, #a78bfa 0%, #c084fc 45%, #f472b6 100%);
-  --ai-grad-soft: linear-gradient(120deg, #211d33 0%, #2a1f30 100%);
+  --ai-grad-soft: linear-gradient(90deg, #2b1a27 0%, #221d31 52%, #241d3c 100%);
+  --ai-wash: linear-gradient(90deg, #211722 0%, #1d1d27 55%, #1f1b2e 100%);
 
   --bg: #14141c;
   --surface: #1d1d27;

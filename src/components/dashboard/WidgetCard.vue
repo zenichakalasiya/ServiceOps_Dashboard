@@ -432,7 +432,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ti.ai { color: var(--ai); }
 .ti.ai:hover, .ti.ai.on { background: var(--ai-soft); color: var(--ai-ink); }
 /* per-widget hover mini-summary card */
-.wai-card { position: fixed; z-index: 260; width: 320px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
+.wai-card { position: fixed; z-index: 260; width: 320px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--ai-wash); box-shadow: var(--sh-lg); }
 .wai-card.up { transform: translateY(-100%); }
 .wai-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .wai-h .ellip { color: var(--ai-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -440,7 +440,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .wai-sum { margin: 10px 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 /* two actions, side by side */
 .wai-acts { display: flex; flex-direction: row; gap: 6px; }
-.wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--ai-border); border-radius: 8px; background: var(--ai-softer); color: var(--ai-ink); font-weight: 600; font-size: 11.5px; text-align: center; }
+.wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--ai-border); border-radius: 8px; background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 11.5px; text-align: center; }
 .wai-a:hover { background: var(--ai-soft); border-color: var(--ai); }
 .wai-enter-active, .wai-leave-active { transition: opacity .14s ease; }
 .wai-enter-from, .wai-leave-to { opacity: 0; }

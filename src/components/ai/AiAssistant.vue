@@ -650,7 +650,7 @@ watch(() => props.role, () => {
 </template>
 
 <style scoped>
-.asst { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.asst { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--ai-wash); }
 .ah { display: flex; align-items: center; justify-content: space-between; padding: 13px 14px; border-bottom: 1px solid var(--border); }
 .ah-l { display: flex; gap: 10px; align-items: center; }
 .spk { width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
@@ -733,7 +733,7 @@ watch(() => props.role, () => {
 .say { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
 .say:first-of-type { color: var(--ink); }
 /* "spotlighted a widget on the board" note — the written answer points AT the tile */
-.spot { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 11.5px; color: var(--ai-ink); background: var(--ai-softer); border: 1px solid var(--ai-border); border-radius: var(--r-pill); padding: 4px 11px; }
+.spot { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 11.5px; color: var(--ai-ink); background: var(--ai-grad-soft); border: 1px solid var(--ai-border); border-radius: var(--r-pill); padding: 4px 11px; }
 .spot :deep(.ico) { color: var(--ai); }
 .spot b { font-weight: 600; }
 .spark svg { width: 100%; height: 42px; display: block; margin-bottom: 8px; }
@@ -791,7 +791,7 @@ tr:last-child td { border-bottom: none; }
 .add:disabled { background: var(--green); opacity: 1; }
 /* ===== create flow ===== */
 .opts { display: flex; flex-direction: column; gap: 8px; }
-.opt { display: flex; align-items: center; gap: 11px; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 11px 12px; }
+.opt { display: flex; align-items: center; gap: 11px; text-align: left; border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: 10px; padding: 11px 12px; }
 .opt:hover { border-color: var(--ai); background: var(--ai-softer); }
 .opt.sm { padding: 9px 11px; }
 .opt-ic { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--ai-soft); color: var(--ai-ink); }
@@ -799,13 +799,13 @@ tr:last-child td { border-bottom: none; }
 .opt b { font-size: 13px; color: var(--ink); }
 .opt > div > span { font-size: 11px; color: var(--muted); }
 .formrow { display: flex; gap: 7px; align-items: center; margin-top: 4px; }
-.fin { flex: 1; height: 34px; border: 1.5px solid var(--ai); border-radius: 8px; padding: 0 11px; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); box-shadow: 0 0 0 3px var(--ai-soft); }
+.fin { flex: 1; height: 34px; border: 1.5px solid var(--ai); border-radius: 8px; padding: 0 11px; font: inherit; font-size: 13px; color: var(--ink); background: var(--ai-grad-soft); box-shadow: 0 0 0 3px var(--ai-soft); }
 .fin:focus { outline: none; }
 .recap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .recap > div { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 6px 9px; background: var(--surface-2); border-radius: 7px; }
 .recap span { color: var(--muted); } .recap b { color: var(--ink); }
 .picklist { display: flex; flex-direction: column; gap: 6px; }
-.pick { display: inline-flex; align-items: center; gap: 8px; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; color: var(--ink); }
+.pick { display: inline-flex; align-items: center; gap: 8px; text-align: left; border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; color: var(--ink); }
 .pick:hover { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
 .pick.new { color: var(--ai-ink); border-style: dashed; }
 .sg.on { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
@@ -822,7 +822,7 @@ tr:last-child td { border-bottom: none; }
 .fu-sec { margin-top: 12px; }
 .fu-h { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .fu-list { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.fu { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); padding: 8px 14px; font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.fu { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; text-align: left; border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); padding: 8px 14px; font-size: 12.5px; font-weight: 500; color: var(--ink); }
 .fu .fu-arrow { color: var(--muted-2); transform: rotate(0deg); flex: none; }
 .fu:hover { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
 .fu:hover .fu-arrow { color: var(--ai); }
@@ -831,12 +831,12 @@ tr:last-child td { border-bottom: none; }
 /* action bar */
 .actionbar { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 9px; scrollbar-width: none; }
 .actionbar::-webkit-scrollbar { display: none; }
-.actchip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); font-size: 12px; font-weight: 600; color: var(--ink-2); flex: none; }
+.actchip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); font-size: 12px; font-weight: 600; color: var(--ink-2); flex: none; }
 .actchip :deep(.ico) { color: var(--muted); }
 .actchip:hover { border-color: var(--ai); color: var(--ai-ink); }
 .actchip:hover :deep(.ico), .actchip.on :deep(.ico) { color: var(--ai); }
 .actchip.on { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
-.actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
+.actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--ai-wash); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
 .actpop-enter-active, .actpop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .actpop-enter-from, .actpop-leave-to { opacity: 0; transform: translateY(8px); }
 .actpop-h { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); padding: 4px 6px 8px; }
@@ -848,9 +848,9 @@ tr:last-child td { border-bottom: none; }
 .actprompt:hover { background: var(--ai-softer); color: var(--ai-ink); }
 .actprompt:hover :deep(.ico) { color: var(--ai); }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
-.sg { border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
+.sg { border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
 .sg:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); }
-.inbox { display: flex; align-items: center; gap: 6px; height: 44px; border: 1px solid var(--ai-border); border-radius: 11px; padding: 0 6px 0 8px; background: var(--surface); }
+.inbox { display: flex; align-items: center; gap: 6px; height: 44px; border: 1px solid var(--ai-border); border-radius: 11px; padding: 0 6px 0 8px; background: var(--ai-grad-soft); }
 .inbox:focus-within { border-color: var(--ai); box-shadow: 0 0 0 3px var(--ai-soft); }
 .attach { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; flex: none; }
 .attach:hover { background: var(--surface-2); color: var(--ink); }

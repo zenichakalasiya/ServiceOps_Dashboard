@@ -78,7 +78,7 @@ const CTAS = [
 .ac-cta :deep(.ico) { color: var(--ai); }
 .ac-cta:hover { border-color: var(--ai); background: var(--ai-soft); }
 /* the primary CTA reads as the outlined "Show AI Summary" from the reference */
-.ac-cta.primary { border-color: var(--ai); background: var(--surface); box-shadow: 0 0 0 1px var(--ai) inset; }
+.ac-cta.primary { border-color: var(--ai); background: var(--ai-wash); box-shadow: 0 0 0 1px var(--ai) inset; }
 .ac-cta.primary:hover { background: var(--ai-soft); }
 
 @media (max-width: 860px) { .ac-ctas { width: 100%; } }
