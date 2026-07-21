@@ -16,7 +16,7 @@ import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
-import { chart, uid } from '../../data/mock.js'
+import { chart, kpi, shortcut } from '../../data/mock.js'
 
 const props = defineProps({ board: Object, role: String, open: Boolean })
 const emit = defineEmits(['update:open', 'role', 'cite'])
@@ -177,7 +177,6 @@ function pushNote(text) {
 const draft = ref({})
 function push(kind, extra = {}) { thread.value.push({ id: ++bid, kind, ...extra }); scrollDown(); return thread.value[thread.value.length - 1] }
 const VIS = [{ v: 'public', label: 'Public — everyone' }, { v: 'private', label: 'Private — just me' }, { v: 'restricted', label: 'Restricted — chosen people' }]
-const visLabel = (v) => VIS.find((x) => x.v === v)?.label || v
 const otherBoards = () => store.dashboards.filter((d) => !d.archived)
 
 function pushCreateStart() {
@@ -185,38 +184,210 @@ function pushCreateStart() {
   if (thread.value.every((b) => b.kind === 'summary' || b.kind === 'user')) thread.value = []
   draft.value = {}; push('create-start')
 }
-// dashboard path
-function startDash() { draft.value = { mode: 'dash' }; push('cd-name', { name: '' }) }
-function dashName(b) { const n = (b.name || '').trim(); if (!n) return; draft.value.name = n; pushUser(n); push('cd-cat') }
-function dashCat(cat) { draft.value.category = cat; pushUser(cat); push('cd-vis') }
-function dashVis(v) { draft.value.access = v; pushUser(visLabel(v)); push('cd-confirm') }
-function dashCreate() {
-  const d = createDashboard({ name: draft.value.name, access: draft.value.access, category: draft.value.category, description: 'Created with ServiceOps AI' })
-  // if we came here to place a widget, continue straight into the widget step on the new board
-  if (draft.value.thenWidget) { draft.value.dash = d; draft.value.mode = 'widget'; push('cw-desc', { text: '' }) }
-  else push('cd-done', { dash: d })
-}
 function openBoard(d) { emit('update:open', false); router.push(`/dashboard/${d.id}`) }
-// widget path
-function startWidget() { draft.value = { mode: 'widget' }; push('cw-dash') }
-function widgetDash(d) {
-  if (!d) { pushUser('A new dashboard first'); draft.value.mode = 'dash'; draft.value.thenWidget = true; push('cd-name', { name: '' }); return }
-  draft.value.dash = d; pushUser(d.name); push('cw-desc', { text: '' })
+
+/* ============ AI-guided creation ============================================
+ * The user states an INTENT in their own words; the AI drafts from it, names it
+ * if they didn't, then asks only the two things it genuinely cannot infer
+ * (category, visibility) as numbered question cards. Nothing else blocks them. */
+const DASH_STARTERS = [
+  'A service-desk board for SLA breaches and overdue work',
+  'An executive view of backlog, MTTR and CSAT',
+  'A NOC wallboard for network and asset health',
+]
+const WIDGET_STARTERS = [
+  'SLA breaches this week by team',
+  'Backlog trend over the last 6 months',
+  'Open tickets by priority',
+]
+// When the user asks us to write the prompt, hand back the shape we actually need.
+const DASH_PROMPT_TEMPLATE = 'Build a dashboard for [who it is for] that answers [the question they ask every day]. Track [the 3–4 metrics that matter], broken down by [team / priority / status], over [the time window]. Flag anything that [breaches SLA / breaks out of its normal range].'
+const WIDGET_PROMPT_TEMPLATE = 'Show [the measure] for [the records], grouped by [field], over [time window], as a [chart type]. Highlight [the threshold that matters].'
+
+// name the board from the intent — honouring an explicit "called X", else choosing one
+function nameFromIntent(text) {
+  const explicit = text.match(/\b(?:called|named|titled)\s+["“']?([^"”'\n.]{2,40})/i)
+  if (explicit) return { name: explicit[1].trim(), ours: false }
+  const t = text.toLowerCase()
+  const hit = (re, n) => (re.test(t) ? n : null)
+  const name = hit(/exec|leadership|cxo|board level/, 'Executive Overview')
+    || hit(/noc|network|wallboard|uptime/, 'Network Operations')
+    || hit(/asset|patch|hardware|inventory|vulnerab/, 'Asset & Patch Health')
+    || hit(/sla|breach|overdue/, 'SLA & Overdue Watch')
+    || hit(/change|release|deploy/, 'Change & Release')
+    || hit(/csat|satisfaction|feedback|quality/, 'Service Quality')
+    || hit(/backlog|volume|trend/, 'Backlog & Volume')
+    || 'Service Desk Overview'
+  return { name, ours: true }
 }
-function widgetDesc(b) { const t = (b.text || '').trim(); if (!t) return; pushUser(t); push('cw-preview', { spec: specFromText(t), group: '', newGroup: '', added: false }) }
-function widgetSuggest(b, s) { b.text = s; widgetDesc(b) }
-function setSpecKind(b, id) { b.spec.chart.kind = id; b.spec.kind = id }
-function removeSpecChip2(b, i) { b.spec.chips.splice(i, 1) }
-function widgetAdd(b) {
-  const d = draft.value.dash
-  const tile = chart(b.spec.title, b.spec.chart, 'Created with ServiceOps AI'); tile.prov = 'user'
-  if (b.group === '__new' && (b.newGroup || '').trim()) {
-    if (!d.groups) d.groups = []
-    const g = { id: uid('g'), name: b.newGroup.trim(), collapsed: false }; d.groups.push(g); tile.group = g.id
-  } else if (b.group && b.group !== '__new') tile.group = b.group
+function categoryFromIntent(text) {
+  const t = text.toLowerCase()
+  if (/exec|leadership|cxo/.test(t)) return 'Leadership'
+  if (/noc|network|uptime/.test(t)) return 'NOC'
+  if (/asset|patch|hardware|vulnerab/.test(t)) return 'Assets'
+  return 'Service Desk'
+}
+// what the AI says it put on the board — grounded in the words the user used
+function planFromIntent(text) {
+  const t = text.toLowerCase()
+  const plan = []
+  if (/sla|breach|overdue/.test(t)) plan.push('Counters for overdue, due-soon and SLA-breaching requests')
+  if (/backlog|volume|trend/.test(t)) plan.push('A backlog trend line over the selected window')
+  if (/priorit|urgent|p1/.test(t)) plan.push('A priority breakdown so the urgent share is visible')
+  if (/team|technician|assign/.test(t)) plan.push('Load by team/technician, ranked')
+  if (/csat|satisfaction|mttr/.test(t)) plan.push('MTTR and CSAT headline numbers')
+  if (/asset|patch|hardware|vulnerab/.test(t)) plan.push('Patch and asset health counters')
+  if (/status/.test(t)) plan.push('A status split of open work')
+  if (!plan.length) plan.push('Headline counters for open, overdue and unassigned work', 'A status and priority breakdown', 'Your worklist of records to action')
+  plan.push('A worklist so the records are one click away')
+  return [...new Set(plan)].slice(0, 4)
+}
+
+// ---- dashboard flow ----
+function startDash() { draft.value = { mode: 'dash' }; push('cd-intent', { text: '' }) }
+function useDashPrompt(b) { b.text = DASH_PROMPT_TEMPLATE }
+function dashIntent(b) {
+  const t = (b.text || '').trim(); if (!t) return
+  pushUser(t)
+  const nm = nameFromIntent(t)
+  draft.value = { ...draft.value, mode: 'dash', intent: t, name: nm.name, namedByAi: nm.ours, category: categoryFromIntent(t) }
+  const blk = push('cd-draft', { phase: 'thinking', name: '', plan: [], namedByAi: false, settled: false })
+  runThinking(blk, ['Reading the intent behind it', 'Choosing the widgets that answer it', 'Drafting the dashboard'], () => {
+    blk.name = draft.value.name
+    blk.namedByAi = draft.value.namedByAi
+    blk.plan = planFromIntent(t)
+    blk.settled = true
+    setTimeout(askCategory, 650)
+  })
+}
+// the user wants to refine before we commit
+function refineDash(b) { const t = (b.more || '').trim(); if (!t) return; b.more = ''; pushUser(t); dashIntent({ text: `${draft.value.intent}. Also: ${t}` }) }
+
+function askCategory() {
+  const cats = (store.categories || []).filter(Boolean).slice(0, 4)
+  push('ask', {
+    askId: 'cat', step: 1, total: 2, other: '',
+    q: 'Which category should this dashboard live in?',
+    sub: 'Pick an existing one, or type a new category to create it.',
+    options: cats.map((c) => ({ label: c, value: c })),
+    otherPh: 'Create a new category…', skippable: true,
+  })
+}
+function askVisibility() {
+  push('ask', {
+    askId: 'vis', step: 2, total: 2, other: '',
+    q: 'Who should be able to see it?',
+    sub: 'This is the last thing I need — then I’ll build it.',
+    options: VIS.map((v) => ({ label: v.label, value: v.v })),
+    otherPh: '', skippable: true,
+  })
+}
+function createTheDashboard() {
+  const d = createDashboard({
+    name: draft.value.name,
+    access: draft.value.access || 'private',
+    category: draft.value.category === '__skip' ? '' : draft.value.category,
+    description: draft.value.intent || 'Created with ServiceOps AI',
+  })
+  draft.value.dash = d
+  const blk = push('cd-done', { phase: 'thinking', dash: null, namedByAi: draft.value.namedByAi, settled: false })
+  runThinking(blk, ['Creating the dashboard', 'Applying category and visibility', 'Finishing up'], () => {
+    blk.dash = d; blk.settled = true
+  })
+}
+
+// ---- widget flow (same shape, reachable on its own or straight after a board) ----
+function startWidget() { draft.value = { ...draft.value, mode: 'widget' }; push('cw-intent', { text: '' }) }
+function useWidgetPrompt(b) { b.text = WIDGET_PROMPT_TEMPLATE }
+function widgetIntent(b) {
+  const t = (b.text || '').trim(); if (!t) return
+  pushUser(t)
+  draft.value.intent = t
+  const blk = push('cw-picks', { phase: 'thinking', picks: [], settled: false })
+  runThinking(blk, ['Reading what you want to show', 'Matching it to fields we can query', 'Drafting a few ways to build it'], () => {
+    blk.picks = widgetPicks(t); blk.settled = true
+  })
+}
+function widgetPicks(text) {
+  const base = specFromText(text)
+  return [
+    { id: 'chart', type: 'chart', title: base.title, spec: base, why: base.why },
+    { id: 'kpi', type: 'kpi', title: `${base.title} · headline`, why: 'A single number, when you only need the level rather than the shape.' },
+    { id: 'shortcut', type: 'shortcut', title: `${base.title} · records`, why: 'The underlying records as a list you can act on directly.' },
+  ]
+}
+function pickWidget(p) { draft.value.pick = p; pushUser(p.title); setTimeout(askWidgetWhere, 300) }
+function askWidgetWhere() {
+  const cur = draft.value.dash
+  const boards = otherBoards().filter((d) => d.id !== cur?.id).slice(0, 3)
+  const needsType = draft.value.pick.type !== 'chart'
+  push('ask', {
+    askId: 'wdash', step: 1, total: needsType ? 2 : 1, other: '',
+    q: 'Where should it go?',
+    sub: 'I’ll place it at the end of the board.',
+    options: [
+      cur ? { label: `Add to “${cur.name}”`, value: cur.id } : null,
+      ...boards.map((d) => ({ label: `Add to “${d.name}”`, value: d.id })),
+    ].filter(Boolean),
+    otherPh: '', skippable: false,
+  })
+}
+function askWidgetType() {
+  push('ask', {
+    askId: 'wtype', step: 2, total: 2, other: '',
+    q: 'Want to visualise it as a chart instead?',
+    sub: 'A list is fine too — this only changes how it’s drawn.',
+    options: [
+      { label: 'Keep it as is', value: 'keep' },
+      { label: 'Line', value: 'line' }, { label: 'Column', value: 'bar' },
+      { label: 'Bar', value: 'hbar' }, { label: 'Pie', value: 'donut' },
+    ],
+    otherPh: '', skippable: true,
+  })
+}
+// turn the chosen pick into a real tile on the chosen board
+function addTheWidget() {
+  const d = draft.value.targetBoard || draft.value.dash
+  const p = draft.value.pick
+  const kindOverride = draft.value.chartKind
+  let tile
+  if (p.type === 'chart' || (kindOverride && kindOverride !== 'keep')) {
+    const ch = p.spec ? { ...p.spec.chart } : { ...specFromText(draft.value.intent).chart }
+    if (kindOverride && kindOverride !== 'keep') ch.kind = kindOverride
+    tile = chart(p.title.replace(/ · (headline|records)$/, ''), ch, draft.value.intent)
+  } else if (p.type === 'kpi') {
+    tile = kpi(p.title.replace(/ · headline$/, ''), 128, '', { dir: 'up', pct: 6 }, 'warn', draft.value.intent)
+  } else {
+    tile = shortcut(p.title.replace(/ · records$/, ''), ['Subject', 'Requester', 'Status', 'Priority'], [
+      ['VPN down for finance team', 'Arnav Desai', 'In Progress', 'Urgent'],
+      ['Email delivery delayed', 'Sarah Chen', 'Open', 'High'],
+      ['Payroll app 500 error', 'Neha Gupta', 'In Progress', 'High'],
+    ], draft.value.intent)
+  }
+  tile.prov = 'user'
   d.tiles.push(tile); d.updated = new Date().toISOString()
-  b.added = true
-  toast(`Added “${b.spec.title}” to ${d.name}`, 'success'); scrollDown()
+  const blk = push('cw-done', { phase: 'thinking', tile: null, dash: d, settled: false })
+  runThinking(blk, ['Configuring the widget', 'Placing it on the board'], () => {
+    blk.tile = tile; blk.settled = true
+    toast(`Added “${tile.title}” to ${d.name}`, 'success')
+  })
+}
+
+// ---- one handler for every question card ----
+function answerAsk(b, opt, custom) {
+  const val = custom === '__skip' ? '__skip' : (opt ? opt.value : (custom || '').trim())
+  if (!val) return
+  b.answered = custom === '__skip' ? 'Skipped' : (opt ? opt.label : custom)
+  pushUser(b.answered)
+  if (b.askId === 'cat') { draft.value.category = val === '__skip' ? '' : val; setTimeout(askVisibility, 350); return }
+  if (b.askId === 'vis') { draft.value.access = val === '__skip' ? 'private' : val; setTimeout(createTheDashboard, 400); return }
+  if (b.askId === 'wdash') {
+    draft.value.targetBoard = store.dashboards.find((d) => d.id === val) || draft.value.dash
+    if (draft.value.pick.type !== 'chart') setTimeout(askWidgetType, 350)
+    else setTimeout(addTheWidget, 350)
+    return
+  }
+  if (b.askId === 'wtype') { draft.value.chartKind = val === '__skip' ? 'keep' : val; setTimeout(addTheWidget, 350) }
 }
 
 function dispatch(intent, text) {
@@ -231,7 +402,7 @@ function dispatch(intent, text) {
 }
 
 // ---- contextual Follow ups (change with the block / what the user asked) ----
-const CREATE_FLOW_KINDS = ['create-start', 'cd-name', 'cd-cat', 'cd-vis', 'cd-confirm', 'cd-done', 'cw-dash', 'cw-desc', 'cw-preview']
+const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-picks', 'cw-done', 'ask']
 function isAnswer(b) {
   if (b.kind === 'user' || CREATE_FLOW_KINDS.includes(b.kind)) return false
   if (b.phase && b.phase !== 'done') return false   // still thinking
@@ -617,102 +788,119 @@ watch(() => props.role, () => {
         <!-- ===== Generate with AI: conversational create flow ===== -->
         <template v-else-if="b.kind === 'create-start'">
           <div class="blk-h"><Icon name="wand" :size="14" /> Generate with AI</div>
-          <p class="say">What would you like to create? I'll set it up step by step.</p>
+          <p class="say">What would you like to build? Just tell me what it's for — I'll handle the rest and only ask what I genuinely need.</p>
           <div class="opts">
-            <button class="opt" @click="startDash"><span class="opt-ic"><Icon name="layout" :size="16" /></span><div><b>A new dashboard</b><span>Name it, pick a category and who can see it</span></div></button>
-            <button class="opt" @click="startWidget"><span class="opt-ic"><Icon name="chart-bar" :size="16" /></span><div><b>A new widget</b><span>Describe it — I'll build it and place it</span></div></button>
+            <button class="opt" @click="startDash"><span class="opt-ic"><Icon name="layout" :size="16" /></span><div><b>A new dashboard</b><span>Describe the intent — I'll draft and name it</span></div></button>
+            <button class="opt" @click="startWidget"><span class="opt-ic"><Icon name="chart-bar" :size="16" /></span><div><b>A new widget</b><span>Describe the data — I'll configure and place it</span></div></button>
           </div>
         </template>
 
-        <!-- dashboard: name -->
-        <template v-else-if="b.kind === 'cd-name'">
+        <!-- dashboard: state the intent (AI leads, user writes freely) -->
+        <template v-else-if="b.kind === 'cd-intent'">
           <div class="blk-h"><Icon name="layout" :size="14" /> New dashboard</div>
-          <p class="say">What should we call it?</p>
+          <p class="say">Tell me what this dashboard is <b>for</b> — the question you want it to answer every morning. I’ll pick the widgets, and if you don’t name it, I’ll name it for you.</p>
           <div class="formrow">
-            <input class="fin" v-model="b.name" placeholder="e.g. Network Operations" @keyup.enter="dashName(b)" />
-            <button class="mini-cta" :disabled="!b.name.trim()" @click="dashName(b)">Continue <Icon name="chevron-right" :size="13" /></button>
+            <input class="fin" v-model="b.text" placeholder="e.g. a board for my team’s SLA breaches and overdue work" @keyup.enter="dashIntent(b)" />
+            <button class="mini-cta" :disabled="!b.text.trim()" @click="dashIntent(b)">Build <Icon name="chevron-right" :size="13" /></button>
           </div>
-        </template>
-        <!-- dashboard: category -->
-        <template v-else-if="b.kind === 'cd-cat'">
-          <p class="say">Which category should it live under?</p>
+          <div class="sub-h">Or start from one of these</div>
           <div class="chipsrow">
-            <button v-for="c in store.categories.slice(0, 6)" :key="c" class="sg" @click="dashCat(c)">{{ c }}</button>
+            <button v-for="s in DASH_STARTERS" :key="s" class="sg" @click="b.text = s; dashIntent(b)">{{ s }}</button>
+          </div>
+          <button class="lnk-row" @click="useDashPrompt(b)"><Icon name="wand" :size="13" /> Not sure how to phrase it? Write the prompt for me</button>
+        </template>
+
+        <!-- dashboard: what the AI drafted, with the name it chose highlighted -->
+        <template v-else-if="b.kind === 'cd-draft'">
+          <div class="reasoning"><span class="rz-dot" /> Drafted from your intent</div>
+          <div class="blk-h"><Icon name="wand" :size="14" /> Here’s what I’ll build</div>
+          <ul class="sum-list">
+            <li v-for="(p, pi) in b.plan" :key="pi">{{ p }}</li>
+          </ul>
+          <p class="say named">
+            I’ve called it <b class="nm">{{ b.name }}</b>
+            <span v-if="b.namedByAi" class="nm-note">— my suggestion, rename it any time.</span>
+          </p>
+          <div class="sub-h">Anything missing?</div>
+          <div class="formrow">
+            <input class="fin" v-model="b.more" placeholder="Add anything I’ve missed and I’ll fold it in…" @keyup.enter="refineDash(b)" />
+            <button class="mini-cta" :disabled="!(b.more || '').trim()" @click="refineDash(b)">Improve <Icon name="chevron-right" :size="13" /></button>
           </div>
         </template>
-        <!-- dashboard: visibility -->
-        <template v-else-if="b.kind === 'cd-vis'">
-          <p class="say">Who can see it?</p>
+
+        <!-- dashboard: created -->
+        <template v-else-if="b.kind === 'cd-done'">
+          <div class="calm"><Icon name="check" :size="16" /> Created <b class="nm">{{ b.dash.name }}</b>.</div>
+          <p v-if="b.namedByAi" class="say muted-say">I named it for you — open it and rename from the board header if you'd like something else.</p>
+          <div class="doneacts">
+            <button class="add" @click="openBoard(b.dash)"><Icon name="open-in" :size="14" /> Open it</button>
+            <button class="mini-cta" @click="startWidget">Add a widget with AI <Icon name="chevron-right" :size="13" /></button>
+          </div>
+        </template>
+
+        <!-- widget: state the intent -->
+        <template v-else-if="b.kind === 'cw-intent'">
+          <div class="blk-h"><Icon name="chart-bar" :size="14" /> New widget</div>
+          <p class="say">Describe what it should show and which data it should come from{{ draft.dash ? ` on “${draft.dash.name}”` : '' }} — I’ll configure it.</p>
+          <div class="formrow">
+            <input class="fin" v-model="b.text" placeholder="e.g. SLA breaches this week, grouped by team" @keyup.enter="widgetIntent(b)" />
+            <button class="mini-cta" :disabled="!b.text.trim()" @click="widgetIntent(b)">Build <Icon name="chevron-right" :size="13" /></button>
+          </div>
+          <div class="sub-h">Or start from one of these</div>
+          <div class="chipsrow">
+            <button v-for="s in WIDGET_STARTERS" :key="s" class="sg" @click="b.text = s; widgetIntent(b)">{{ s }}</button>
+          </div>
+          <button class="lnk-row" @click="useWidgetPrompt(b)"><Icon name="wand" :size="13" /> Write the prompt for me</button>
+        </template>
+
+        <!-- widget: the ways we could build it -->
+        <template v-else-if="b.kind === 'cw-picks'">
+          <div class="reasoning"><span class="rz-dot" /> Three ways to show this — pick one</div>
+          <div class="blk-h"><Icon name="wand" :size="14" /> Suggested widgets</div>
           <div class="opts">
-            <button v-for="o in VIS" :key="o.v" class="opt sm" @click="dashVis(o.v)">
-              <span class="opt-ic"><Icon :name="o.v === 'public' ? 'globe' : o.v === 'private' ? 'lock' : 'users'" :size="15" /></span><b>{{ o.label }}</b>
+            <button v-for="p in b.picks" :key="p.id" class="opt" @click="pickWidget(p)">
+              <span class="opt-ic"><Icon :name="p.type === 'chart' ? 'chart-bar' : p.type === 'kpi' ? 'bolt' : 'list'" :size="16" /></span>
+              <div><b>{{ p.title }}</b><span>{{ p.why }}</span></div>
             </button>
           </div>
-        </template>
-        <!-- dashboard: confirm -->
-        <template v-else-if="b.kind === 'cd-confirm'">
-          <div class="blk-h"><Icon name="check" :size="14" /> Ready to create</div>
-          <div class="recap">
-            <div><span>Name</span><b>{{ draft.name }}</b></div>
-            <div><span>Category</span><b>{{ draft.category }}</b></div>
-            <div><span>Visibility</span><b>{{ visLabel(draft.access) }}</b></div>
+          <div v-if="b.picks[0] && b.picks[0].spec" class="wprev">
+            <div class="wp-h"><b>{{ b.picks[0].title }}</b><span class="pv">Preview</span></div>
+            <ChartTile :chart="b.picks[0].spec.chart" :legend="true" :height="140" />
           </div>
-          <button class="add" @click="dashCreate"><Icon name="sparkles" :size="14" /> Create dashboard</button>
-        </template>
-        <!-- dashboard: done -->
-        <template v-else-if="b.kind === 'cd-done'">
-          <div class="calm"><Icon name="check" :size="16" /> Created “{{ b.dash.name }}”.</div>
-          <button class="mini-cta" @click="openBoard(b.dash)">Open it <Icon name="open-in" :size="13" /></button>
         </template>
 
-        <!-- widget: pick dashboard -->
-        <template v-else-if="b.kind === 'cw-dash'">
-          <div class="blk-h"><Icon name="chart-bar" :size="14" /> New widget</div>
-          <p class="say">Which dashboard should it go on?</p>
-          <div class="picklist">
-            <button v-for="d in otherBoards().slice(0, 5)" :key="d.id" class="pick" @click="widgetDash(d)"><Icon name="layout" :size="14" /> {{ d.name }}</button>
-            <button class="pick new" @click="widgetDash(null)"><Icon name="plus" :size="14" /> A new dashboard first</button>
+        <!-- widget: added -->
+        <template v-else-if="b.kind === 'cw-done'">
+          <div class="calm"><Icon name="check" :size="16" /> Added <b class="nm">{{ b.tile.title }}</b> to <b>{{ b.dash.name }}</b>.</div>
+          <div class="doneacts">
+            <button class="add" @click="openBoard(b.dash)"><Icon name="open-in" :size="14" /> Open the dashboard</button>
+            <button class="mini-cta" @click="startWidget">Add another <Icon name="chevron-right" :size="13" /></button>
           </div>
         </template>
-        <!-- widget: describe -->
-        <template v-else-if="b.kind === 'cw-desc'">
-          <p class="say">What should the widget show{{ draft.dash ? ` on “${draft.dash.name}”` : '' }}?</p>
-          <div class="formrow">
-            <input class="fin" v-model="b.text" placeholder="e.g. SLA breaches this week by team" @keyup.enter="widgetDesc(b)" />
-            <button class="mini-cta" :disabled="!b.text.trim()" @click="widgetDesc(b)">Build <Icon name="chevron-right" :size="13" /></button>
+
+        <!-- the one question card used by every mandatory question -->
+        <template v-else-if="b.kind === 'ask'">
+          <div class="askc" :class="{ done: b.answered }">
+            <div class="ask-h">
+              <div class="ask-qs"><span class="ask-q">{{ b.q }}</span><span v-if="b.sub && !b.answered" class="ask-sub">{{ b.sub }}</span></div>
+              <span class="ask-step">{{ b.step }} of {{ b.total }}</span>
+            </div>
+            <template v-if="!b.answered">
+              <button v-for="(o, oi) in b.options" :key="o.value" class="ask-opt" @click="answerAsk(b, o)">
+                <span class="ask-n">{{ oi + 1 }}</span>
+                <span class="ask-l">{{ o.label }}</span>
+                <Icon name="chevron-right" :size="14" class="ask-arrow" />
+              </button>
+              <div class="ask-foot">
+                <span class="ask-other">
+                  <Icon name="edit" :size="13" />
+                  <input v-model="b.other" :placeholder="b.otherPh || 'Something else'" @keyup.enter="answerAsk(b, null, b.other)" />
+                </span>
+                <button v-if="b.skippable" class="ask-skip" @click="answerAsk(b, null, '__skip')">Skip</button>
+              </div>
+            </template>
+            <div v-else class="ask-answered"><Icon name="check" :size="13" /> {{ b.answered }}</div>
           </div>
-          <div class="chipsrow">
-            <button class="sg" @click="widgetSuggest(b, 'SLA breaches this week by team')">SLA breaches by team</button>
-            <button class="sg" @click="widgetSuggest(b, 'Backlog trend last 6 months')">Backlog trend</button>
-            <button class="sg" @click="widgetSuggest(b, 'Open tickets by priority')">By priority</button>
-          </div>
-        </template>
-        <!-- widget: preview + config -->
-        <template v-else-if="b.kind === 'cw-preview'">
-          <div class="blk-h"><Icon name="wand" :size="14" /> Live preview</div>
-          <div class="wprev">
-            <div class="wp-h"><b>{{ b.spec.title }}</b><span class="pv">Preview</span></div>
-            <ChartTile :chart="b.spec.chart" :legend="true" :height="150" />
-          </div>
-          <div class="sub-h">Filter <span class="muted">editable</span></div>
-          <div class="chips">
-            <span v-for="(c, i) in b.spec.chips" :key="i" class="dchip"><b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}<button class="cx" @click="removeSpecChip2(b, i)"><Icon name="x" :size="11" /></button></span>
-          </div>
-          <div class="sub-h">Chart type</div>
-          <div class="kinds">
-            <button v-for="k in KINDS" :key="k.id" class="kind" :class="{ on: b.spec.chart.kind === k.id }" @click="setSpecKind(b, k.id)"><Icon :name="k.icon" :size="14" /> {{ k.label }}</button>
-          </div>
-          <div class="sub-h">Group</div>
-          <div class="chipsrow">
-            <button class="sg" :class="{ on: b.group === '' }" @click="b.group = ''">No group</button>
-            <button v-for="g in (draft.dash?.groups || [])" :key="g.id" class="sg" :class="{ on: b.group === g.id }" @click="b.group = g.id">{{ g.name }}</button>
-            <button class="sg" :class="{ on: b.group === '__new' }" @click="b.group = '__new'">＋ New group</button>
-          </div>
-          <input v-if="b.group === '__new'" class="fin" v-model="b.newGroup" placeholder="New group name" />
-          <button class="add" :disabled="b.added" @click="widgetAdd(b)">
-            <Icon :name="b.added ? 'check' : 'plus'" :size="14" /> {{ b.added ? `Added to ${draft.dash.name}` : `Add to ${draft.dash?.name || 'dashboard'}` }}
-          </button>
-          <button v-if="b.added && draft.dash" class="mini-cta" @click="openBoard(draft.dash)">Open the dashboard <Icon name="open-in" :size="13" /></button>
         </template>
 
         <!-- short templated reply (edit / schedule) -->
@@ -938,6 +1126,41 @@ tr:last-child td { border-bottom: none; }
 .add { display: inline-flex; align-items: center; gap: 6px; margin-top: 11px; height: 32px; padding: 0 14px; border: none; border-radius: 8px; background: var(--ai-grad); color: #fff; font-weight: 600; font-size: 12.5px; }
 .add:disabled { background: var(--green); opacity: 1; }
 /* ===== create flow ===== */
+/* the AI-chosen name, called out in the sentence that announces it */
+.nm { color: var(--ai-ink); font-weight: 700; background: var(--ai-grad-soft); border: 1px solid var(--ai-border); border-radius: 6px; padding: 1px 7px; }
+.named { margin-top: 10px; }
+.nm-note { color: var(--muted); font-size: 11.5px; margin-left: 5px; }
+.muted-say { color: var(--muted); font-size: 11.5px; margin-top: -2px; }
+.doneacts { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 10px; }
+.doneacts .add, .doneacts .mini-cta { margin-top: 0; }
+.lnk-row { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; border: none; background: transparent; color: var(--ai-ink); font-weight: 600; font-size: 11.5px; padding: 4px 0; }
+.lnk-row :deep(.ico) { color: var(--ai); }
+.lnk-row:hover { text-decoration: underline; }
+
+/* ===== the question card (one per mandatory question) ===== */
+.askc { border: 1px solid var(--ai-border); border-radius: 12px; background: var(--surface); box-shadow: var(--sh-sm); padding: 11px; display: flex; flex-direction: column; gap: 6px; }
+.askc.done { background: var(--surface-2); border-color: var(--border); }
+.ask-h { display: flex; align-items: flex-start; gap: 10px; padding: 1px 2px 6px; }
+.ask-qs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ask-q { font-size: 12.5px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+.ask-sub { font-size: 11px; color: var(--muted); }
+.ask-step { flex: none; font-size: 10.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ask-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 9px; padding: 8px 10px; }
+.ask-opt:hover { border-color: var(--ai); background: var(--ai-softer); }
+.ask-n { flex: none; width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ask-opt:hover .ask-n { background: var(--ai-grad); color: #fff; }
+.ask-l { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink); }
+.ask-arrow { color: var(--muted-2); flex: none; }
+.ask-opt:hover .ask-arrow { color: var(--ai); }
+.ask-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.ask-other { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: 9px; color: var(--muted); }
+.ask-other:focus-within { border-style: solid; border-color: var(--ai); background: var(--ai-softer); }
+.ask-other input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: inherit; font-size: 12px; color: var(--ink); }
+.ask-skip { flex: none; height: 32px; padding: 0 13px; border: 1px solid var(--border); background: var(--surface); border-radius: 9px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.ask-skip:hover { border-color: var(--ai); color: var(--ai-ink); }
+.ask-answered { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ai-ink); }
+.ask-answered :deep(.ico) { color: var(--green); }
+
 .opts { display: flex; flex-direction: column; gap: 8px; }
 .opt { display: flex; align-items: center; gap: 11px; text-align: left; border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: 10px; padding: 11px 12px; }
 .opt:hover { border-color: var(--ai); background: var(--ai-softer); }
