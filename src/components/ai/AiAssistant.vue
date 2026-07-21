@@ -16,7 +16,7 @@ import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
-import { chart, kpi, shortcut } from '../../data/mock.js'
+import { chart } from '../../data/mock.js'
 
 const props = defineProps({ board: Object, role: String, open: Boolean })
 const emit = defineEmits(['update:open', 'role', 'cite'])
@@ -358,79 +358,75 @@ function runNextStep(s) {
 // ---- widget flow (same shape, reachable on its own or straight after a board) ----
 function startWidget() { draft.value = { ...draft.value, mode: 'widget' }; push('cw-intent'); awaiting.value = 'widget-intent'; focusComposer() }
 function useWidgetPrompt() { askPromptHelp('widget') }
+// The AI builds ONE widget from the description. Chart type is left as a light
+// preference (minimal pills that repaint the preview) — everything else it decides.
+const WIDGET_KINDS = [
+  { id: 'bar', label: 'Column' }, { id: 'hbar', label: 'Bar' },
+  { id: 'line', label: 'Line' }, { id: 'donut', label: 'Doughnut' },
+]
 function widgetIntent(text) {
   const t = (text || '').trim(); if (!t) return
   awaiting.value = null
   pushUser(t)
   draft.value.intent = t
-  const blk = push('cw-picks', { phase: 'thinking', picks: [], settled: false })
-  runThinking(blk, ['Reading what you want to show', 'Matching it to fields we can query', 'Drafting a few ways to build it'], () => {
-    blk.picks = widgetPicks(t); blk.settled = true
+  const spec = specFromText(t)
+  const blk = push('cw-build', { phase: 'thinking', title: '', chart: null, why: '', chips: [], settled: false })
+  runThinking(blk, ['Reading what you want to show', 'Matching it to fields we can query', 'Configuring the widget'], () => {
+    blk.title = spec.title; blk.chart = { ...spec.chart }; blk.why = spec.why
+    blk.chips = spec.chips || []; blk.settled = true
   })
 }
-function widgetPicks(text) {
-  const base = specFromText(text)
-  return [
-    { id: 'chart', type: 'chart', title: base.title, spec: base, why: base.why },
-    { id: 'kpi', type: 'kpi', title: `${base.title} · headline`, why: 'A single number, when you only need the level rather than the shape.' },
-    { id: 'shortcut', type: 'shortcut', title: `${base.title} · records`, why: 'The underlying records as a list you can act on directly.' },
-  ]
+function setBuildKind(b, id) { b.chart = { ...b.chart, kind: id } }
+function changeWidget() { awaiting.value = 'widget-refine'; focusComposer() }
+function refineWidget(text) { const t = (text || '').trim(); if (!t) return; widgetIntent(`${draft.value.intent}. ${t}`) }
+// add it as-is: straight onto the board we're already on, otherwise ask which one
+function confirmWidget(b) {
+  draft.value.build = { title: b.title, chart: { ...b.chart }, chips: b.chips || [] }
+  if (draft.value.dash) { draft.value.targetBoard = draft.value.dash; addTheWidget(); return }
+  askWidgetWhere()
 }
-function pickWidget(p) { draft.value.pick = p; pushUser(p.title); setTimeout(askWidgetWhere, 300) }
 function askWidgetWhere() {
   awaiting.value = null
   const cur = draft.value.dash
-  const boards = otherBoards().filter((d) => d.id !== cur?.id).slice(0, 3)
-  const needsType = draft.value.pick.type !== 'chart'
+  const boards = otherBoards().filter((d) => d.id !== cur?.id).slice(0, 4)
   push('ask', {
-    askId: 'wdash', step: 1, total: needsType ? 2 : 1, other: '',
+    askId: 'wdash', step: 1, total: 1, other: '',
     q: 'Where should it go?',
-    sub: 'I’ll place it at the end of the board.',
+    sub: 'Pick a board, or type a name and I’ll create that dashboard for it.',
     options: [
       cur ? { label: `Add to “${cur.name}”`, value: cur.id } : null,
       ...boards.map((d) => ({ label: `Add to “${d.name}”`, value: d.id })),
     ].filter(Boolean),
-    otherPh: '', skippable: false,
+    otherPh: 'Create a new dashboard called…', skippable: false,
   })
 }
-function askWidgetType() {
-  awaiting.value = null
-  push('ask', {
-    askId: 'wtype', step: 2, total: 2, other: '',
-    q: 'Want to visualise it as a chart instead?',
-    sub: 'A list is fine too — this only changes how it’s drawn.',
-    options: [
-      { label: 'Keep it as is', value: 'keep' },
-      { label: 'Line', value: 'line' }, { label: 'Column', value: 'bar' },
-      { label: 'Bar', value: 'hbar' }, { label: 'Pie', value: 'donut' },
-    ],
-    otherPh: '', skippable: true,
-  })
+// Spell the configuration back, so "added" is verifiable rather than a claim.
+function configLines(build) {
+  const chips = build.chips || []
+  const val = (f) => chips.find((c) => new RegExp(f, 'i').test(c.field))?.value
+  const kindLabel = (WIDGET_KINDS.find((k) => k.id === build.chart.kind) || {}).label || build.chart.kind
+  const filters = chips.filter((c) => !/^group by$/i.test(c.field))
+  const groupBy = val('group by') || (build.chart.labels?.length ? 'the categories on its axis' : null)
+  const out = [
+    { k: 'Source', v: val('module') || 'Requests' },
+    { k: 'Measure', v: `Count of records${filters.length ? ' matching the conditions below' : ''}` },
+    groupBy ? { k: 'Grouped by', v: groupBy } : null,
+    { k: 'Window', v: val('created date') || 'the dashboard time filter' },
+    { k: 'Drawn as', v: kindLabel },
+  ].filter(Boolean)
+  return { rows: out, filters }
 }
-// turn the chosen pick into a real tile on the chosen board
+// turn the built spec into a real tile on the chosen board
 function addTheWidget() {
   const d = draft.value.targetBoard || draft.value.dash
-  const p = draft.value.pick
-  const kindOverride = draft.value.chartKind
-  let tile
-  if (p.type === 'chart' || (kindOverride && kindOverride !== 'keep')) {
-    const ch = p.spec ? { ...p.spec.chart } : { ...specFromText(draft.value.intent).chart }
-    if (kindOverride && kindOverride !== 'keep') ch.kind = kindOverride
-    tile = chart(p.title.replace(/ · (headline|records)$/, ''), ch, draft.value.intent)
-  } else if (p.type === 'kpi') {
-    tile = kpi(p.title.replace(/ · headline$/, ''), 128, '', { dir: 'up', pct: 6 }, 'warn', draft.value.intent)
-  } else {
-    tile = shortcut(p.title.replace(/ · records$/, ''), ['Subject', 'Requester', 'Status', 'Priority'], [
-      ['VPN down for finance team', 'Arnav Desai', 'In Progress', 'Urgent'],
-      ['Email delivery delayed', 'Sarah Chen', 'Open', 'High'],
-      ['Payroll app 500 error', 'Neha Gupta', 'In Progress', 'High'],
-    ], draft.value.intent)
-  }
+  const bld = draft.value.build
+  const tile = chart(bld.title, { ...bld.chart }, draft.value.intent)
   tile.prov = 'user'
   d.tiles.push(tile); d.updated = new Date().toISOString()
-  const blk = push('cw-done', { phase: 'thinking', tile: null, dash: d, settled: false })
-  runThinking(blk, ['Configuring the widget', 'Placing it on the board'], () => {
-    blk.tile = tile; blk.settled = true
+  const cfg = configLines(bld)
+  const blk = push('cw-done', { phase: 'thinking', tile: null, dash: d, cfg: null, settled: false })
+  runThinking(blk, ['Applying the conditions', 'Configuring the widget', 'Placing it on the board'], () => {
+    blk.tile = tile; blk.cfg = cfg; blk.settled = true
     toast(`Added “${tile.title}” to ${d.name}`, 'success')
     setTimeout(() => pushNextSteps(
       `That’s “${tile.title}” on “${d.name}” — the preview above is exactly how it renders on the board.`,
@@ -452,12 +448,16 @@ function answerAsk(b, opt, custom) {
   if (b.askId === 'cat') { draft.value.category = val === '__skip' ? '' : val; setTimeout(askVisibility, 350); return }
   if (b.askId === 'vis') { draft.value.access = val === '__skip' ? 'private' : val; setTimeout(createTheDashboard, 400); return }
   if (b.askId === 'wdash') {
-    draft.value.targetBoard = store.dashboards.find((d) => d.id === val) || draft.value.dash
-    if (draft.value.pick.type !== 'chart') setTimeout(askWidgetType, 350)
-    else setTimeout(addTheWidget, 350)
-    return
+    let target = store.dashboards.find((d) => d.id === val)
+    // typed a name rather than picking a board → create that dashboard and use it
+    if (!target) {
+      target = createDashboard({ name: b.answered, access: 'private', category: '', description: 'Created with ServiceOps AI' })
+      draft.value.dash = target
+      draft.value.createdBoard = true
+    }
+    draft.value.targetBoard = target
+    setTimeout(addTheWidget, 350)
   }
-  if (b.askId === 'wtype') { draft.value.chartKind = val === '__skip' ? 'keep' : val; setTimeout(addTheWidget, 350) }
 }
 
 function dispatch(intent, text) {
@@ -472,7 +472,7 @@ function dispatch(intent, text) {
 }
 
 // ---- contextual Follow ups (change with the block / what the user asked) ----
-const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-picks', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
+const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-build', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
@@ -601,6 +601,7 @@ const AWAIT_PH = {
   'dash-intent': 'Describe what this dashboard is for…',
   'dash-refine': 'Tell me what to add or change…',
   'widget-intent': 'Describe the widget and the data it should show…',
+  'widget-refine': 'Tell me what to change about it…',
 }
 const placeholder = computed(() => AWAIT_PH[awaiting.value] || activeAction.value?.placeholder || DEFAULT_PH)
 // exactly one popup at a time: the palette wins, else the picked command's suggestions
@@ -656,6 +657,7 @@ function submit() {
   if (awaiting.value === 'dash-intent') { dashIntent(text); return }
   if (awaiting.value === 'dash-refine') { refineDash(text); return }
   if (awaiting.value === 'widget-intent') { widgetIntent(text); return }
+  if (awaiting.value === 'widget-refine') { awaiting.value = null; refineWidget(text); return }
   pushUser(cmd ? `${cmd.label}: ${text}` : text)
   dispatch(cmd ? CMD_INTENT[cmd.key] : routeIntent(text), text)
 }
@@ -926,37 +928,50 @@ watch(() => props.role, () => {
           <button class="lnk-row" @click="useWidgetPrompt()"><Icon name="wand" :size="13" /> Write the prompt for me</button>
         </template>
 
-        <!-- widget: the ways we could build it -->
-        <template v-else-if="b.kind === 'cw-picks'">
-          <div class="reasoning"><span class="rz-dot" /> Three ways to show this — pick one</div>
-          <div class="blk-h"><Icon name="wand" :size="14" /> Suggested widgets</div>
-          <div class="opts">
-            <button v-for="p in b.picks" :key="p.id" class="opt" @click="pickWidget(p)">
-              <span class="opt-ic"><Icon :name="p.type === 'chart' ? 'chart-bar' : p.type === 'kpi' ? 'bolt' : 'list'" :size="16" /></span>
-              <div><b>{{ p.title }}</b><span>{{ p.why }}</span></div>
-            </button>
+        <!-- widget: the one the AI built — preview, chart-type preference, add or change -->
+        <template v-else-if="b.kind === 'cw-build'">
+          <div class="reasoning"><span class="rz-dot" /> Configured from your description</div>
+          <div class="blk-h"><Icon name="wand" :size="14" /> Here’s the widget</div>
+          <div class="wprev">
+            <div class="wp-h"><b>{{ b.title }}</b><span class="pv">Preview</span></div>
+            <ChartTile :chart="b.chart" :legend="true" :height="150" />
           </div>
-          <div v-if="b.picks[0] && b.picks[0].spec" class="wprev">
-            <div class="wp-h"><b>{{ b.picks[0].title }}</b><span class="pv">Preview</span></div>
-            <ChartTile :chart="b.picks[0].spec.chart" :legend="true" :height="140" />
+          <div class="chipsrow mini kindrow">
+            <button
+              v-for="k in WIDGET_KINDS" :key="k.id" class="sg" :class="{ go: b.chart.kind === k.id }"
+              @click="setBuildKind(b, k.id)"
+            >{{ k.label }}</button>
+          </div>
+          <p class="say muted-say">Add it as it is, or tell me what to change.</p>
+          <div class="doneacts">
+            <button class="add" @click="confirmWidget(b)">
+              <Icon name="plus" :size="14" /> Add{{ draft.dash ? ` to “${draft.dash.name}”` : ' to a dashboard' }}
+            </button>
+            <button class="mini-cta" @click="changeWidget()">Change something <Icon name="chevron-right" :size="13" /></button>
           </div>
         </template>
 
         <!-- widget: added — with the real thing previewed inline, as it renders on the board -->
         <template v-else-if="b.kind === 'cw-done'">
-          <div class="calm"><Icon name="check" :size="16" /> Added <b class="nm">{{ b.tile.title }}</b> to <b>{{ b.dash.name }}</b>.</div>
+          <div class="calm">
+            <Icon name="check" :size="16" /> Added <b class="nm">{{ b.tile.title }}</b> to <b>{{ b.dash.name }}</b><span v-if="draft.createdBoard"> — a new dashboard I created for it</span>.
+          </div>
           <div class="wprev">
             <div class="wp-h"><b>{{ b.tile.title }}</b><span class="pv">Live preview</span></div>
-            <ChartTile v-if="b.tile.type === 'chart'" :chart="b.tile.chart" :legend="true" :height="150" />
-            <div v-else-if="b.tile.type === 'kpi'" class="kpiprev">
-              <b>{{ b.tile.value }}{{ b.tile.unit }}</b><span>{{ b.tile.title }}</span>
-            </div>
-            <div v-else class="tblprev">
-              <table>
-                <thead><tr><th v-for="c in b.tile.columns" :key="c">{{ c }}</th></tr></thead>
-                <tbody><tr v-for="(r, ri) in b.tile.rows.slice(0, 3)" :key="ri"><td v-for="(cell, ci) in r" :key="ci">{{ cell }}</td></tr></tbody>
-              </table>
-            </div>
+            <ChartTile :chart="b.tile.chart" :legend="true" :height="150" />
+          </div>
+          <!-- spell the configuration back so "added" is checkable, not just claimed -->
+          <div v-if="b.cfg" class="cfg">
+            <div class="cfg-h">How it’s configured</div>
+            <div v-for="(r, ri) in b.cfg.rows" :key="ri" class="cfg-r"><span>{{ r.k }}</span><b>{{ r.v }}</b></div>
+            <template v-if="b.cfg.filters.length">
+              <div class="cfg-h cond">Conditions</div>
+              <div class="chips">
+                <span v-for="(c, ci) in b.cfg.filters" :key="ci" class="dchip">
+                  <b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}
+                </span>
+              </div>
+            </template>
           </div>
         </template>
 
@@ -1260,6 +1275,15 @@ tr:last-child td { border-bottom: none; }
 .needs { display: flex; flex-direction: column; gap: 5px; margin: 8px 0 12px; padding: 9px 11px; background: var(--surface-2); border-radius: 9px; }
 .need { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); }
 .need-n { flex: none; width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center; background: var(--surface); color: var(--muted); font-size: 9.5px; font-weight: 700; }
+/* the configuration, spelled back after adding */
+.cfg { margin-top: 11px; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; display: flex; flex-direction: column; gap: 5px; }
+.cfg-h { font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.cfg-h.cond { margin-top: 7px; }
+.cfg-r { display: flex; align-items: baseline; gap: 10px; font-size: 11.5px; }
+.cfg-r span { flex: none; width: 74px; color: var(--muted); }
+.cfg-r b { flex: 1; min-width: 0; color: var(--ink); font-weight: 600; }
+/* chart-type preference pills sit tight under the preview */
+.kindrow { margin-top: 9px; }
 /* inline previews of what was just built */
 .kpiprev { padding: 20px 14px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .kpiprev b { font-size: 34px; font-weight: 500; letter-spacing: -1px; color: var(--ink); }
