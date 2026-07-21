@@ -193,15 +193,18 @@ function openBoard(d) { emit('update:open', false); router.push(`/dashboard/${d.
  * The user states an INTENT in their own words; the AI drafts from it, names it
  * if they didn't, then asks only the two things it genuinely cannot infer
  * (category, visibility) as numbered question cards. Nothing else blocks them. */
+// Presented in the same full-width option style as the panel's greeting, because
+// this is the user's first encounter with the creation flow and the options need
+// to read as the primary way in — not as afterthought chips.
 const DASH_STARTERS = [
-  'A service-desk board for SLA breaches and overdue work',
-  'An executive view of backlog, MTTR and CSAT',
-  'A NOC wallboard for network and asset health',
+  { label: 'A service-desk board for SLA breaches and overdue work', icon: 'flag' },
+  { label: 'An executive view of backlog, MTTR and CSAT', icon: 'auto-graph' },
+  { label: 'A NOC wallboard for network and asset health', icon: 'layout' },
 ]
 const WIDGET_STARTERS = [
-  'SLA breaches this week by team',
-  'Backlog trend over the last 6 months',
-  'Open tickets by priority',
+  { label: 'SLA breaches this week by team', icon: 'chart-bar' },
+  { label: 'Backlog trend over the last 6 months', icon: 'chart-line' },
+  { label: 'Open tickets by priority', icon: 'chart-donut' },
 ]
 /* "Write the prompt for me" — rather than dumping a blank template, the AI states
  * what it needs to know and offers a few ANGLES; picking one writes the whole prompt. */
@@ -885,8 +888,10 @@ watch(() => props.role, () => {
         <template v-else-if="b.kind === 'cd-intent'">
           <div class="blk-h"><Icon name="layout" :size="14" /> New dashboard</div>
           <p class="say">Tell me what this dashboard is <b>for</b> — the question you want it to answer every morning. Write it in the box below and I’ll draft it; if you don’t name it, I’ll name it for you.</p>
-          <div class="chipsrow mini">
-            <button v-for="s in DASH_STARTERS" :key="s" class="sg" @click="dashIntent(s)">{{ s }}</button>
+          <div class="ea-ctas starters">
+            <button v-for="s in DASH_STARTERS" :key="s.label" class="ea-cta wrap" @click="dashIntent(s.label)">
+              <Icon :name="s.icon" :size="16" /> <span>{{ s.label }}</span>
+            </button>
           </div>
           <button class="lnk-row" @click="useDashPrompt()"><Icon name="wand" :size="13" /> Write the prompt for me</button>
         </template>
@@ -922,8 +927,10 @@ watch(() => props.role, () => {
         <template v-else-if="b.kind === 'cw-intent'">
           <div class="blk-h"><Icon name="chart-bar" :size="14" /> New widget</div>
           <p class="say">Describe what it should show and which data it should come from{{ draft.dash ? ` on “${draft.dash.name}”` : '' }} — write it below and I’ll configure it.</p>
-          <div class="chipsrow mini">
-            <button v-for="s in WIDGET_STARTERS" :key="s" class="sg" @click="widgetIntent(s)">{{ s }}</button>
+          <div class="ea-ctas starters">
+            <button v-for="s in WIDGET_STARTERS" :key="s.label" class="ea-cta wrap" @click="widgetIntent(s.label)">
+              <Icon :name="s.icon" :size="16" /> <span>{{ s.label }}</span>
+            </button>
           </div>
           <button class="lnk-row" @click="useWidgetPrompt()"><Icon name="wand" :size="13" /> Write the prompt for me</button>
         </template>
@@ -1414,6 +1421,10 @@ tr:last-child td { border-bottom: none; }
 .ea-cta { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border: none; border-radius: 10px; background: var(--ai-grad-soft); color: var(--ink); font-weight: 500; font-size: 13px; text-align: left; }
 .ea-cta :deep(.ico) { color: var(--ai); flex: none; }
 .ea-cta:hover { background: var(--ai-soft); }
+/* same option style reused at creation time; starters wrap since they're sentences */
+.ea-ctas.starters { margin: 10px 0 6px; gap: 8px; }
+.ea-cta.wrap { height: auto; min-height: 44px; padding: 11px 14px; line-height: 1.4; align-items: flex-start; }
+.ea-cta.wrap :deep(.ico) { margin-top: 1px; }
 
 /* suggested next actions */
 .na-h { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin: 13px 0 8px; }
