@@ -12,6 +12,10 @@ This repo is **published publicly** and auto-deploys to GitHub Pages. It is the 
 larger analysis workspace that is public — the planning docs, the limitations register, and
 credentials live in the parent workspace **outside this folder** and must never be copied in here.
 
+## Deployment
+Repo: https://github.com/zenichakalasiya/ServiceOps_Dashboard
+Live URL: https://zenichakalasiya.github.io/ServiceOps_Dashboard/
+
 ## Commands
 
 ```bash
@@ -70,8 +74,20 @@ only the components actually used registered to keep the bundle small. Tables us
 (headless) so `tokens.css` keeps owning the markup instead of fighting a vendor theme.
 
 **Styling** is plain CSS with design tokens in `src/styles/tokens.css` (full **light + dark**
-themes; the topbar toggles `store.ui.theme`). No CSS framework. Icons are Material Symbols routed
-through `src/components/ui/Icon.vue` (name → ligature map).
+themes; the topbar toggles `store.ui.theme`). No CSS framework. The typeface is **Inter**
+(loaded in `index.html`, exposed as `--font`). Icons are Material Symbols routed through
+`src/components/ui/Icon.vue` (name → ligature map).
+
+**The AI gradient is tokenised — use the tokens, never hand-rolled gradients:**
+- `--ai-grad` — the vivid identity gradient (blue → purple → pink, `0 / 24.52 / 100%`). Used
+  **only** for icon glyphs (`background-clip: text`) and solid primary buttons.
+- `--ai-grad-line` — the same ramp at 80% alpha, for **gradient borders** on primary CTAs
+  (`linear-gradient(var(--surface),var(--surface)) padding-box, var(--ai-grad-line) border-box`
+  over a `1.5px solid transparent` border).
+- `--ai-grad-soft` — an 8%-over-white wash, for **secondary** CTAs, suggested items and AI
+  summary surfaces.
+- Follow-up pills are deliberately **monochrome** (`--surface-2`) — colour there competes with
+  the answer above it.
 
 **Popovers/menus** that a card's `overflow:hidden` would clip are **teleported to `<body>`** and
 positioned in viewport coordinates — follow that pattern for any new floating UI.
@@ -95,6 +111,40 @@ positioned in viewport coordinates — follow that pattern for any new floating 
 | `components/dashboard/WidgetBuilderModal.vue` | Create/edit a tile. |
 | `components/dashboard/AddWidgetModal.vue` | The tile library — tabs, module/type filters, usage badge. |
 | `components/ui/FilterMenu.vue` | Shared two-level filter: OR within a field, AND across fields. |
+| `components/ai/AiAssistant.vue` | The whole AI side panel — composer, thread, creation flows. |
+| `components/ai/AiSummaryCard.vue` | The upfront AI Summary banner + its 3 CTAs. |
+| `data/aiEngine.js` | **Deterministic, no-LLM** engine: facts, anomalies, explanations, briefings. |
+| `data/aiAssistant.js` | Intent routing, tile/fact resolution, description → widget spec. |
+
+## The AI assistant (`components/ai/AiAssistant.vue`)
+
+**Grounded, no LLM.** `data/aiEngine.js` computes *every* number deterministically (z-score
+anomalies, breach counts, deltas, chart breakdowns). Nothing is invented, so the panel degrades
+cleanly with no model attached — a language model would only rephrase.
+
+**The composer** has no inline form fields. There is one input at the bottom; everything types
+there:
+- The `+` button (or typing `/`) opens a compact **command palette** — icon + name only.
+- Picking a command drops it in as a **chip**, swaps the placeholder to that command's, and
+  opens its suggestions. Those suggestions **fade out the moment the user types their own
+  prompt**. The palette and the suggestion list share **one** transitioned element so they stay
+  mutually exclusive (two sibling `<transition>`s raced and could hang).
+- An `awaiting` ref routes the next submitted message into a live creation step, and the
+  placeholder speaks for that step.
+
+**Every answer thinks, then streams.** `runThinking()` steps through grounded reasoning lines
+(pending → spinner → check), then `streamText()` reveals prose word-by-word and `revealItems()`
+staggers lists. All of it honours `prefers-reduced-motion` (skips straight to the result).
+
+**Creation is intent-led.** Describe what a dashboard is *for*; the AI drafts a widget plan,
+**names it if you didn't**, then asks only the two things it can't infer (category, visibility)
+as numbered question cards. Widgets: describe the data → one built widget with a live preview and
+minimal chart-type pills → add it, or say what to change. Typing a **new** name in "where should
+it go?" creates that dashboard.
+
+**Numbered next steps** appear only after a task that leaves a real decision (dashboard created,
+widget added). Contextual **follow-ups** appear only on answers that invite a next question
+(`FOLLOWUP_KINDS`). Don't add both to the same block.
 
 ## Locking rules (predefined content)
 
@@ -118,3 +168,13 @@ positioned in viewport coordinates — follow that pattern for any new floating 
   DOM to explain why.
 - **Verify UI changes in a real browser.** Several bugs here (a self-deleting chip, a card-clipped
   popover, a broken row rule) were invisible to DOM inspection and to the build.
+- **Two sibling `<transition>` elements toggled in the same tick can race** — both mount at once
+  and a leave animation hangs with `enter-from` still applied, so the node never unmounts. If two
+  popovers are mutually exclusive, render them through **one** transitioned element.
+- **Legend click-to-toggle is universal.** `legendClickable` in `ChartTile.vue` is `true` for
+  every chart; the `hidden`/`plotted` machinery already handles side (pie/donut) and bottom
+  (cartesian) legends. Don't re-gate it by cardinality.
+- **`tileFromText` must prefer the LONGEST title match.** With a plain `.find()`, "Open Requests
+  By Priority" resolved to the *"Open Requests"* KPI and silently explained the wrong widget.
+- **A fact passed to the drill needs a real `tileId`** — without it there's no widget to
+  spotlight and the block renders empty.
