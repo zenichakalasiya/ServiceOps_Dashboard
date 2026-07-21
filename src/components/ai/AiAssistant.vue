@@ -14,13 +14,14 @@ import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
-import { chart } from '../../data/mock.js'
+import { chart, kpi, shortcut } from '../../data/mock.js'
 
 const props = defineProps({ board: Object, role: String, open: Boolean })
 const emit = defineEmits(['update:open', 'role', 'cite'])
 const router = useRouter()
+const route = useRoute()
 
 const thread = ref([])
 const input = ref('')
@@ -302,7 +303,89 @@ function dashIntent(text) {
 }
 // the user wants to refine before we commit
 function refineDash(text) { const t = (text || '').trim(); if (!t) return; dashIntent(`${draft.value.intent}. Also: ${t}`) }
-function continueDash() { awaiting.value = null; askCategory() }
+/* Approving the draft doesn't jump to the admin questions — most people came here to
+ * BUILD something. Create the board now (with defaults) so widgets can be placed into
+ * it and we can navigate to it; category and visibility are asked at the very end. */
+function continueDash() {
+  awaiting.value = null
+  const d = createDashboard({
+    name: draft.value.name, access: 'private', category: '',
+    description: draft.value.intent || 'Created with ServiceOps AI',
+  })
+  draft.value.dash = d
+  draft.value.built = []
+  push('cd-widgets')
+  awaiting.value = 'dash-widget'
+  focusComposer()
+}
+
+// the widget vocabulary we offer — shown as a small palette, and clickable to hint a type
+const WIDGET_TYPES = [
+  { id: 'bar', label: 'Column', hint: 'Compare across groups' },
+  { id: 'hbar', label: 'Bar', hint: 'Long category names' },
+  { id: 'line', label: 'Line', hint: 'Trend over time' },
+  { id: 'donut', label: 'Doughnut', hint: 'Share of a whole' },
+  { id: 'kpi', label: 'KPI', hint: 'One headline number' },
+  { id: 'shortcut', label: 'Shortcut', hint: 'Records as a table' },
+]
+function preferType(id) { draft.value.preferKind = draft.value.preferKind === id ? null : id }
+
+// let the wording pick the form when the user hasn't
+function inferKind(text, spec) {
+  const t = text.toLowerCase()
+  if (/\b(kpi|headline|how many|total number|single number|counter)\b/.test(t)) return 'kpi'
+  if (/\b(list|table|records|rows|shortcut|worklist)\b/.test(t)) return 'shortcut'
+  return spec.chart.kind
+}
+function buildTileFrom(text, prefer) {
+  const spec = specFromText(text)
+  const kind = prefer || inferKind(text, spec)
+  const vals = spec.chart.series?.[0]?.values || []
+  const total = vals.reduce((a, b) => a + b, 0)
+  let tile
+  if (kind === 'kpi') {
+    tile = kpi(spec.title, total || 128, '', { dir: 'up', pct: 6 }, 'warn', text)
+  } else if (kind === 'shortcut') {
+    tile = shortcut(spec.title, ['Subject', 'Requester', 'Status', 'Priority'], [
+      ['VPN down for finance team', 'Arnav Desai', 'In Progress', 'Urgent'],
+      ['Email delivery delayed', 'Sarah Chen', 'Open', 'High'],
+      ['Payroll app 500 error', 'Neha Gupta', 'In Progress', 'High'],
+      ['SSO login failing for HR', 'Rahul Shukla', 'Open', 'Medium'],
+    ], text)
+  } else {
+    tile = chart(spec.title, { ...spec.chart, kind }, text)
+  }
+  tile.prov = 'user'
+  tile._chips = spec.chips || []
+  return tile
+}
+// build one widget straight into the new board, then hand the floor back for another
+function dashWidget(text) {
+  const t = (text || '').trim(); if (!t) return
+  awaiting.value = null
+  pushUser(t)
+  const blk = push('cd-widget', { phase: 'thinking', tile: null, cfg: null, settled: false })
+  runThinking(blk, ['Reading what you want to show', 'Choosing the clearest way to draw it', 'Configuring and placing it'], () => {
+    const tile = buildTileFrom(t, draft.value.preferKind)
+    const d = draft.value.dash
+    d.tiles.push(tile); d.updated = new Date().toISOString()
+    draft.value.built.push(tile)
+    blk.tile = tile
+    blk.cfg = tile.type === 'chart' ? configLines({ title: tile.title, chart: tile.chart, chips: tile._chips }) : null
+    blk.settled = true
+    awaiting.value = 'dash-widget'
+  })
+}
+function moreWidgets() { awaiting.value = 'dash-widget'; focusComposer() }
+// take them TO the board so they can see what was built, keeping the panel open
+function finishWidgets() {
+  awaiting.value = null
+  const d = draft.value.dash
+  if (d && route.params.id !== d.id) router.push(`/dashboard/${d.id}`)
+  setTimeout(() => push('cd-recap', { dash: d, built: [...(draft.value.built || [])] }), 450)
+}
+function confirmRecap() { awaiting.value = null; askCategory() }
+function changeRecap() { awaiting.value = 'dash-widget'; focusComposer() }
 
 function askCategory() {
   awaiting.value = null
@@ -325,21 +408,23 @@ function askVisibility() {
     otherPh: '', skippable: true,
   })
 }
-function createTheDashboard() {
-  const d = createDashboard({
-    name: draft.value.name,
-    access: draft.value.access || 'private',
-    category: draft.value.category === '__skip' ? '' : draft.value.category,
-    description: draft.value.intent || 'Created with ServiceOps AI',
-  })
-  draft.value.dash = d
-  const blk = push('cd-done', { phase: 'thinking', dash: null, namedByAi: draft.value.namedByAi, settled: false })
-  runThinking(blk, ['Creating the dashboard', 'Applying category and visibility', 'Finishing up'], () => {
+// The board already exists (created when the draft was approved) — this applies the
+// two answers to it and closes the flow out.
+function finishDashboard() {
+  const d = draft.value.dash
+  d.category = draft.value.category === '__skip' ? '' : draft.value.category
+  d.access = draft.value.access || 'private'
+  d.updated = new Date().toISOString()
+  const n = (draft.value.built || []).length
+  const blk = push('cd-done', { phase: 'thinking', dash: null, namedByAi: draft.value.namedByAi, built: n, settled: false })
+  runThinking(blk, ['Applying category and visibility', 'Finishing up'], () => {
     blk.dash = d; blk.settled = true
     setTimeout(() => pushNextSteps(
-      `“${d.name}” is live and empty — the widgets are the next thing that makes it useful.`,
+      n
+        ? `“${d.name}” is built and live with ${n} widget${n === 1 ? '' : 's'} on it.`
+        : `“${d.name}” is live — it just doesn’t have any widgets yet.`,
       [
-        { title: 'Add a widget', body: 'Describe what it should show and I’ll build and place it.', run: 'addwidget' },
+        { title: n ? 'Add another widget' : 'Add a widget', body: 'Describe what it should show and I’ll build and place it.', run: 'addwidget' },
         { title: 'Share it with your team', body: `It’s currently ${d.access}. I can open it up to a group or specific technicians.`, run: 'share' },
         { title: 'Schedule a digest', body: 'Email a snapshot of this board on a daily or weekly cadence.', run: 'schedule' },
       ],
@@ -451,7 +536,7 @@ function answerAsk(b, opt, custom) {
   b.answered = custom === '__skip' ? 'Skipped' : (opt ? opt.label : custom)
   pushUser(b.answered)
   if (b.askId === 'cat') { draft.value.category = val === '__skip' ? '' : val; setTimeout(askVisibility, 350); return }
-  if (b.askId === 'vis') { draft.value.access = val === '__skip' ? 'private' : val; setTimeout(createTheDashboard, 400); return }
+  if (b.askId === 'vis') { draft.value.access = val === '__skip' ? 'private' : val; setTimeout(finishDashboard, 400); return }
   if (b.askId === 'wdash') {
     // "a new dashboard" with no name yet → ask for the name in the composer
     if (val === '__new') { awaiting.value = 'newboard-name'; focusComposer(); setTimeout(() => push('cw-newboard'), 250); return }
@@ -489,7 +574,7 @@ function dispatch(intent, text) {
 }
 
 // ---- contextual Follow ups (change with the block / what the user asked) ----
-const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-build', 'cw-newboard', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
+const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-widgets', 'cd-widget', 'cd-recap', 'cd-done', 'cw-intent', 'cw-build', 'cw-newboard', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
@@ -620,6 +705,7 @@ const AWAIT_PH = {
   'widget-intent': 'Describe the widget and the data it should show…',
   'widget-refine': 'Tell me what to change about it…',
   'newboard-name': 'Name the new dashboard…',
+  'dash-widget': 'Describe a widget to add to this dashboard…',
 }
 const placeholder = computed(() => AWAIT_PH[awaiting.value] || activeAction.value?.placeholder || DEFAULT_PH)
 // exactly one popup at a time: the palette wins, else the picked command's suggestions
@@ -677,6 +763,7 @@ function submit() {
   if (awaiting.value === 'widget-intent') { widgetIntent(text); return }
   if (awaiting.value === 'widget-refine') { awaiting.value = null; refineWidget(text); return }
   if (awaiting.value === 'newboard-name') { newBoardNamed(text); return }
+  if (awaiting.value === 'dash-widget') { dashWidget(text); return }
   pushUser(cmd ? `${cmd.label}: ${text}` : text)
   dispatch(cmd ? CMD_INTENT[cmd.key] : routeIntent(text), text)
 }
@@ -938,9 +1025,69 @@ watch(() => props.role, () => {
           </div>
         </template>
 
+        <!-- dashboard: build its widgets, before any admin questions -->
+        <template v-else-if="b.kind === 'cd-widgets'">
+          <div class="blk-h"><Icon name="chart-bar" :size="14" /> Now let’s fill it</div>
+          <p class="say">“<b>{{ draft.name }}</b>” is created. Tell me what to put on it — describe a widget and I’ll pick the clearest way to draw it. You can add as many as you like, one message at a time.</p>
+          <div class="sub-h">What I can build <span class="muted">tap one to prefer it</span></div>
+          <div class="wtypes">
+            <button
+              v-for="w in WIDGET_TYPES" :key="w.id" class="wtype" :class="{ on: draft.preferKind === w.id }"
+              @click="preferType(w.id)"
+            >
+              <span class="wt-g" :class="w.id" />
+              <span class="wt-l">{{ w.label }}</span>
+              <span class="wt-h">{{ w.hint }}</span>
+            </button>
+          </div>
+          <div class="chipsrow mini">
+            <button class="sg" @click="finishWidgets()">Skip — no widgets for now</button>
+          </div>
+        </template>
+
+        <!-- dashboard: a widget just built into it -->
+        <template v-else-if="b.kind === 'cd-widget'">
+          <div class="calm"><Icon name="check" :size="16" /> Added <b class="nm">{{ b.tile.title }}</b> to the board.</div>
+          <div class="wprev">
+            <div class="wp-h"><b>{{ b.tile.title }}</b><span class="pv">Live preview</span></div>
+            <ChartTile v-if="b.tile.type === 'chart'" :chart="b.tile.chart" :legend="true" :height="150" />
+            <div v-else-if="b.tile.type === 'kpi'" class="kpiprev"><b>{{ b.tile.value }}{{ b.tile.unit }}</b><span>{{ b.tile.title }}</span></div>
+            <div v-else class="tblprev">
+              <table>
+                <thead><tr><th v-for="c in b.tile.columns" :key="c">{{ c }}</th></tr></thead>
+                <tbody><tr v-for="(r, ri) in b.tile.rows.slice(0, 3)" :key="ri"><td v-for="(cell, ci) in r" :key="ci">{{ cell }}</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div v-if="b.cfg" class="cfg">
+            <div class="cfg-h">How it’s configured</div>
+            <div v-for="(r, ri) in b.cfg.rows" :key="ri" class="cfg-r"><span>{{ r.k }}</span><b>{{ r.v }}</b></div>
+          </div>
+          <div class="chipsrow mini">
+            <button class="sg" @click="moreWidgets()">Add another widget</button>
+            <button class="sg go" @click="finishWidgets()">That’s everything — show me the dashboard</button>
+          </div>
+        </template>
+
+        <!-- dashboard: everything built, on the board itself -->
+        <template v-else-if="b.kind === 'cd-recap'">
+          <div class="reasoning"><span class="rz-dot" /> You’re looking at it now</div>
+          <div class="blk-h"><Icon name="check" :size="14" /> Here’s what I built</div>
+          <p class="say">“<b>{{ b.dash.name }}</b>” now has <b>{{ b.built.length }}</b> widget{{ b.built.length === 1 ? '' : 's' }} on it:</p>
+          <ul class="sum-list">
+            <li v-for="(t, ti) in b.built" :key="ti"><b>{{ t.title }}</b> — {{ t.type === 'chart' ? `${t.chart.kind} chart` : t.type === 'kpi' ? 'headline number' : 'record list' }}</li>
+            <li v-if="!b.built.length">Nothing yet — it’s an empty board for now.</li>
+          </ul>
+          <p class="say muted-say">Have a look at the canvas behind this panel. If anything’s off, tell me and I’ll change it — otherwise I just need two last things.</p>
+          <div class="chipsrow mini">
+            <button class="sg go" @click="confirmRecap()">Looks good — finish setup</button>
+            <button class="sg" @click="changeRecap()">Change something</button>
+          </div>
+        </template>
+
         <!-- dashboard: created -->
         <template v-else-if="b.kind === 'cd-done'">
-          <div class="calm"><Icon name="check" :size="16" /> Created <b class="nm">{{ b.dash.name }}</b>.</div>
+          <div class="calm"><Icon name="check" :size="16" /> <b class="nm">{{ b.dash.name }}</b> is set up<span v-if="b.built"> with {{ b.built }} widget{{ b.built === 1 ? '' : 's' }}</span>.</div>
           <p v-if="b.namedByAi" class="say muted-say">I named it for you — open it and rename from the board header if you'd like something else.</p>
           <div class="doneacts">
             <button class="add" @click="openBoard(b.dash)"><Icon name="open-in" :size="14" /><span>Open it</span></button>
@@ -1326,6 +1473,22 @@ tr:last-child td { border-bottom: none; }
 .needs { display: flex; flex-direction: column; gap: 5px; margin: 8px 0 12px; padding: 9px 11px; background: var(--surface-2); border-radius: 9px; }
 .need { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); }
 .need-n { flex: none; width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center; background: var(--surface); color: var(--muted); font-size: 9.5px; font-weight: 700; }
+/* the widget vocabulary — a small, clean palette rather than a form */
+.wtypes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 10px; }
+.wtype { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); text-align: left; }
+.wtype:hover { border-color: var(--ai-border); background: var(--ai-softer); }
+.wtype.on { border-color: var(--ai); background: var(--ai-softer); }
+.wt-l { font-size: 11.5px; font-weight: 600; color: var(--ink); }
+.wt-h { font-size: 9.5px; color: var(--muted); line-height: 1.3; }
+/* a tiny glyph that hints at each form, drawn in CSS so it costs nothing */
+.wt-g { width: 26px; height: 16px; margin-bottom: 2px; opacity: .85; }
+.wt-g.bar { background: linear-gradient(to top, var(--ai) 40%, transparent 40%), linear-gradient(to top, var(--ai) 70%, transparent 70%), linear-gradient(to top, var(--ai) 55%, transparent 55%); background-size: 6px 100%, 6px 100%, 6px 100%; background-position: 0 100%, 10px 100%, 20px 100%; background-repeat: no-repeat; }
+.wt-g.hbar { background: linear-gradient(to right, var(--ai) 60%, transparent 60%), linear-gradient(to right, var(--ai) 90%, transparent 90%), linear-gradient(to right, var(--ai) 40%, transparent 40%); background-size: 100% 4px, 100% 4px, 100% 4px; background-position: 0 1px, 0 7px, 0 13px; background-repeat: no-repeat; }
+.wt-g.line { background: linear-gradient(45deg, transparent 45%, var(--ai) 45%, var(--ai) 58%, transparent 58%); }
+.wt-g.donut { width: 16px; height: 16px; border-radius: 50%; border: 4px solid var(--ai); }
+.wt-g.kpi { font-size: 0; position: relative; }
+.wt-g.kpi::after { content: '128'; font-size: 11px; font-weight: 700; color: var(--ai); letter-spacing: -.3px; }
+.wt-g.shortcut { background: linear-gradient(to right, var(--ai) 100%, transparent 0); background-size: 100% 3px; background-position: 0 1px, 0 7px, 0 13px; background-repeat: no-repeat; box-shadow: 0 6px 0 -3px var(--ai), 0 12px 0 -3px var(--ai); }
 /* the configuration, spelled back after adding */
 .cfg { margin-top: 11px; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; display: flex; flex-direction: column; gap: 5px; }
 .cfg-h { font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
