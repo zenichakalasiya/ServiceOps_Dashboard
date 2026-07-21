@@ -385,22 +385,24 @@ function refineWidget(text) { const t = (text || '').trim(); if (!t) return; wid
 // add it as-is: straight onto the board we're already on, otherwise ask which one
 function confirmWidget(b) {
   draft.value.build = { title: b.title, chart: { ...b.chart }, chips: b.chips || [] }
-  if (draft.value.dash) { draft.value.targetBoard = draft.value.dash; addTheWidget(); return }
   askWidgetWhere()
 }
+/* Almost everyone wants the widget on the board they're already looking at, so the
+ * question is a straight two-way choice — this board, or a new one — not a list of
+ * every dashboard. Picking "a new dashboard" then asks only for its name. */
+function currentBoard() { return draft.value.dash || props.board }
 function askWidgetWhere() {
   awaiting.value = null
-  const cur = draft.value.dash
-  const boards = otherBoards().filter((d) => d.id !== cur?.id).slice(0, 4)
+  const cur = currentBoard()
   push('ask', {
     askId: 'wdash', step: 1, total: 1, other: '',
     q: 'Where should it go?',
-    sub: 'Pick a board, or type a name and I’ll create that dashboard for it.',
+    sub: `I’ll place it at the end of the board.`,
     options: [
-      cur ? { label: `Add to “${cur.name}”`, value: cur.id } : null,
-      ...boards.map((d) => ({ label: `Add to “${d.name}”`, value: d.id })),
-    ].filter(Boolean),
-    otherPh: 'Create a new dashboard called…', skippable: false,
+      { label: `Add to “${cur.name}” (this dashboard)`, value: cur.id },
+      { label: 'Add to a new dashboard', value: '__new' },
+    ],
+    otherPh: 'Or name a new dashboard…', skippable: false,
   })
 }
 // Spell the configuration back, so "added" is verifiable rather than a claim.
@@ -451,16 +453,28 @@ function answerAsk(b, opt, custom) {
   if (b.askId === 'cat') { draft.value.category = val === '__skip' ? '' : val; setTimeout(askVisibility, 350); return }
   if (b.askId === 'vis') { draft.value.access = val === '__skip' ? 'private' : val; setTimeout(createTheDashboard, 400); return }
   if (b.askId === 'wdash') {
+    // "a new dashboard" with no name yet → ask for the name in the composer
+    if (val === '__new') { awaiting.value = 'newboard-name'; focusComposer(); setTimeout(() => push('cw-newboard'), 250); return }
     let target = store.dashboards.find((d) => d.id === val)
-    // typed a name rather than picking a board → create that dashboard and use it
-    if (!target) {
-      target = createDashboard({ name: b.answered, access: 'private', category: '', description: 'Created with ServiceOps AI' })
-      draft.value.dash = target
-      draft.value.createdBoard = true
-    }
+    // typed a name rather than picking → create that dashboard and use it
+    if (!target) target = makeBoardFor(b.answered)
     draft.value.targetBoard = target
     setTimeout(addTheWidget, 350)
   }
+}
+// create the board the widget is about to land on
+function makeBoardFor(name) {
+  const d = createDashboard({ name: (name || '').trim() || 'New dashboard', access: 'private', category: '', description: 'Created with ServiceOps AI' })
+  draft.value.dash = d
+  draft.value.createdBoard = true
+  return d
+}
+function newBoardNamed(text) {
+  const t = (text || '').trim(); if (!t) return
+  awaiting.value = null
+  pushUser(t)
+  draft.value.targetBoard = makeBoardFor(t)
+  setTimeout(addTheWidget, 350)
 }
 
 function dispatch(intent, text) {
@@ -475,7 +489,7 @@ function dispatch(intent, text) {
 }
 
 // ---- contextual Follow ups (change with the block / what the user asked) ----
-const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-build', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
+const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-build', 'cw-newboard', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
@@ -605,6 +619,7 @@ const AWAIT_PH = {
   'dash-refine': 'Tell me what to add or change…',
   'widget-intent': 'Describe the widget and the data it should show…',
   'widget-refine': 'Tell me what to change about it…',
+  'newboard-name': 'Name the new dashboard…',
 }
 const placeholder = computed(() => AWAIT_PH[awaiting.value] || activeAction.value?.placeholder || DEFAULT_PH)
 // exactly one popup at a time: the palette wins, else the picked command's suggestions
@@ -661,6 +676,7 @@ function submit() {
   if (awaiting.value === 'dash-refine') { refineDash(text); return }
   if (awaiting.value === 'widget-intent') { widgetIntent(text); return }
   if (awaiting.value === 'widget-refine') { awaiting.value = null; refineWidget(text); return }
+  if (awaiting.value === 'newboard-name') { newBoardNamed(text); return }
   pushUser(cmd ? `${cmd.label}: ${text}` : text)
   dispatch(cmd ? CMD_INTENT[cmd.key] : routeIntent(text), text)
 }
@@ -965,6 +981,11 @@ watch(() => props.role, () => {
             </button>
             <button class="mini-cta" @click="changeWidget()">Change something <Icon name="chevron-right" :size="13" /></button>
           </div>
+        </template>
+
+        <!-- widget: name the new board it should land on -->
+        <template v-else-if="b.kind === 'cw-newboard'">
+          <p class="say">What should the new dashboard be called? I’ll create it and drop the widget straight in.</p>
         </template>
 
         <!-- widget: added — with the real thing previewed inline, as it renders on the board -->

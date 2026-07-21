@@ -243,7 +243,8 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           :style="{ top: aiPos.top + 'px', left: aiPos.left + 'px' }"
           @mouseenter="keepAiHover" @mouseleave="closeAiHoverSoon"
         >
-          <div class="wai-h"><span class="wai-spark"><Icon name="sparkles" :size="14" /></span> AI summary · <span class="ellip">{{ tile.title }}</span></div>
+          <!-- no widget name here: you're hovering that widget, so repeating it is noise -->
+          <div class="wai-h"><span class="wai-spark"><Icon name="sparkles" :size="14" /></span> AI summary</div>
           <p class="wai-sum">{{ brief.summary }}</p>
           <div class="wai-acts">
             <button v-for="a in brief.actions" :key="a.label" class="wai-a" @click="runWidgetAction(a)">{{ a.label }}</button>
@@ -444,8 +445,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .wai-sum { margin: 10px 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 /* two actions, side by side */
 .wai-acts { display: flex; flex-direction: row; gap: 6px; }
-.wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--ai-border); border-radius: 8px; background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 11.5px; text-align: center; }
-.wai-a:hover { background: var(--ai-soft); border-color: var(--ai); }
+/* same rounded-pill treatment as the AI Summary card's CTAs */
+.wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--ai-border); border-radius: var(--r-pill); background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 12px; text-align: center; }
+.wai-a:hover { border-color: var(--ai); background: var(--ai-soft); }
 .wai-enter-active, .wai-leave-active { transition: opacity .14s ease; }
 .wai-enter-from, .wai-leave-to { opacity: 0; }
 .spin { animation: sp 0.75s linear infinite; } @keyframes sp { to { transform: rotate(360deg); } }
