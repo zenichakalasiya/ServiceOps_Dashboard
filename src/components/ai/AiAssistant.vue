@@ -203,9 +203,38 @@ const WIDGET_STARTERS = [
   'Backlog trend over the last 6 months',
   'Open tickets by priority',
 ]
-// When the user asks us to write the prompt, hand back the shape we actually need.
-const DASH_PROMPT_TEMPLATE = 'Build a dashboard for [who it is for] that answers [the question they ask every day]. Track [the 3–4 metrics that matter], broken down by [team / priority / status], over [the time window]. Flag anything that [breaches SLA / breaks out of its normal range].'
-const WIDGET_PROMPT_TEMPLATE = 'Show [the measure] for [the records], grouped by [field], over [time window], as a [chart type]. Highlight [the threshold that matters].'
+/* "Write the prompt for me" — rather than dumping a blank template, the AI states
+ * what it needs to know and offers a few ANGLES; picking one writes the whole prompt. */
+const PROMPT_HELP = {
+  dash: {
+    intro: 'Happy to write it. A good dashboard prompt answers five things — pick the angle you think in and I’ll write the whole prompt for you.',
+    needs: ['Who is it for?', 'What question should it answer every morning?', 'Which 3–4 numbers matter?', 'Over what time window?', 'What should it flag?'],
+    approaches: [
+      { id: 'role', title: 'Start from a role', body: 'I’ll write it around a persona — an L1 technician, a team lead or an executive.' },
+      { id: 'question', title: 'Start from a question', body: 'I’ll write it around the one thing you want answered at the start of each shift.' },
+      { id: 'metrics', title: 'Start from the metrics', body: 'I’ll write it around the numbers you already check every day.' },
+    ],
+    prompts: {
+      role: 'Build a dashboard for an L1 service-desk technician who starts their shift by checking what is at risk. Track overdue requests, requests due in the next 24 hours, unassigned work and urgent open requests, broken down by priority and technician, over the last 7 days. Flag anything breaching SLA today.',
+      question: 'Build a dashboard that answers “what will breach SLA today, and who is on it?”. Track SLA-breaching and due-soon requests grouped by priority and assignee, over today and the last 7 days. Flag anything that has no owner.',
+      metrics: 'Build a dashboard tracking open requests, overdue requests, average resolution time and CSAT, broken down by team and priority, over the last 30 days. Flag any metric that breaks out of its normal range.',
+    },
+  },
+  widget: {
+    intro: 'Happy to write it. A widget prompt needs four things — pick how you want to frame it and I’ll write the whole prompt.',
+    needs: ['What are we measuring?', 'Grouped by which field?', 'Over what time window?', 'What threshold matters?'],
+    approaches: [
+      { id: 'compare', title: 'Compare across groups', body: 'One measure split by team, priority or status — best read as a column chart.' },
+      { id: 'trend', title: 'Track it over time', body: 'One measure across months or days — best read as a line.' },
+      { id: 'share', title: 'Show the share of a whole', body: 'How a total splits across a handful of categories — best read as a doughnut.' },
+    ],
+    prompts: {
+      compare: 'Show the count of SLA-breaching requests grouped by team, over this week, as a column chart. Highlight any team above 5.',
+      trend: 'Show open request volume over the last 6 months as a line chart, so I can see whether the backlog is growing.',
+      share: 'Show open requests grouped by priority as a doughnut, so I can see the urgent share at a glance.',
+    },
+  },
+}
 
 // name the board from the intent — honouring an explicit "called X", else choosing one
 function nameFromIntent(text) {
@@ -249,7 +278,9 @@ function planFromIntent(text) {
 // ---- dashboard flow ----
 function focusComposer() { nextTick(() => inputEl.value?.focus()) }
 function startDash() { draft.value = { mode: 'dash' }; push('cd-intent'); awaiting.value = 'dash-intent'; focusComposer() }
-function useDashPrompt() { input.value = DASH_PROMPT_TEMPLATE; focusComposer() }
+function askPromptHelp(which) { push('prompt-help', { which, ...PROMPT_HELP[which] }) }
+function writePrompt(b, ap) { input.value = PROMPT_HELP[b.which].prompts[ap.id]; focusComposer() }
+function useDashPrompt() { askPromptHelp('dash') }
 function dashIntent(text) {
   const t = (text || '').trim(); if (!t) return
   awaiting.value = null
@@ -302,12 +333,31 @@ function createTheDashboard() {
   const blk = push('cd-done', { phase: 'thinking', dash: null, namedByAi: draft.value.namedByAi, settled: false })
   runThinking(blk, ['Creating the dashboard', 'Applying category and visibility', 'Finishing up'], () => {
     blk.dash = d; blk.settled = true
+    setTimeout(() => pushNextSteps(
+      `“${d.name}” is live and empty — the widgets are the next thing that makes it useful.`,
+      [
+        { title: 'Add a widget', body: 'Describe what it should show and I’ll build and place it.', run: 'addwidget' },
+        { title: 'Share it with your team', body: `It’s currently ${d.access}. I can open it up to a group or specific technicians.`, run: 'share' },
+        { title: 'Schedule a digest', body: 'Email a snapshot of this board on a daily or weekly cadence.', run: 'schedule' },
+      ],
+    ), 700)
   })
+}
+
+/* Numbered next steps — written as prose, offered ONLY after a task that genuinely
+ * leaves a decision open. Informational answers (a summary, an explanation) don't
+ * get one; they keep their lighter contextual follow-ups instead. */
+function pushNextSteps(intro, steps) { push('nextsteps', { intro, steps }) }
+function runNextStep(s) {
+  if (s.run === 'addwidget' || s.run === 'another') { pushUser(s.title); startWidget(); return }
+  if (s.run === 'open') { openBoard(draft.value.targetBoard || draft.value.dash); return }
+  if (s.run === 'recast') { pushUser(s.title); pushNote('Change a chart’s type'); return }
+  pushUser(s.title); pushNote(s.run === 'schedule' ? 'Schedule a daily summary' : 'Share this dashboard')
 }
 
 // ---- widget flow (same shape, reachable on its own or straight after a board) ----
 function startWidget() { draft.value = { ...draft.value, mode: 'widget' }; push('cw-intent'); awaiting.value = 'widget-intent'; focusComposer() }
-function useWidgetPrompt() { input.value = WIDGET_PROMPT_TEMPLATE; focusComposer() }
+function useWidgetPrompt() { askPromptHelp('widget') }
 function widgetIntent(text) {
   const t = (text || '').trim(); if (!t) return
   awaiting.value = null
@@ -382,6 +432,14 @@ function addTheWidget() {
   runThinking(blk, ['Configuring the widget', 'Placing it on the board'], () => {
     blk.tile = tile; blk.settled = true
     toast(`Added “${tile.title}” to ${d.name}`, 'success')
+    setTimeout(() => pushNextSteps(
+      `That’s “${tile.title}” on “${d.name}” — the preview above is exactly how it renders on the board.`,
+      [
+        { title: 'Add another widget', body: 'Keep building the board out while the context is fresh.', run: 'another' },
+        { title: 'Change how it’s drawn', body: 'Switch it between line, column, bar or doughnut.', run: 'recast' },
+        { title: 'Open the dashboard', body: 'See it in place alongside the other widgets.', run: 'open' },
+      ],
+    ), 700)
   })
 }
 
@@ -414,9 +472,13 @@ function dispatch(intent, text) {
 }
 
 // ---- contextual Follow ups (change with the block / what the user asked) ----
-const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-picks', 'cw-done', 'ask']
+const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-done', 'cw-intent', 'cw-picks', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
+/* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
+ * explanation, an investigation. A templated note or a generated widget already
+ * ends with its own actions, so piling generic follow-ups underneath is noise. */
+const FOLLOWUP_KINDS = ['summary', 'changes', 'analyzing', 'explain', 'drill']
 function isAnswer(b) {
-  if (b.kind === 'user' || CREATE_FLOW_KINDS.includes(b.kind)) return false
+  if (!FOLLOWUP_KINDS.includes(b.kind)) return false
   if (b.phase && b.phase !== 'done') return false   // still thinking
   if (b.settled === false) return false              // still streaming/revealing
   return true
@@ -880,13 +942,53 @@ watch(() => props.role, () => {
           </div>
         </template>
 
-        <!-- widget: added -->
+        <!-- widget: added — with the real thing previewed inline, as it renders on the board -->
         <template v-else-if="b.kind === 'cw-done'">
           <div class="calm"><Icon name="check" :size="16" /> Added <b class="nm">{{ b.tile.title }}</b> to <b>{{ b.dash.name }}</b>.</div>
-          <div class="doneacts">
-            <button class="add" @click="openBoard(b.dash)"><Icon name="open-in" :size="14" /> Open the dashboard</button>
-            <button class="mini-cta" @click="startWidget">Add another <Icon name="chevron-right" :size="13" /></button>
+          <div class="wprev">
+            <div class="wp-h"><b>{{ b.tile.title }}</b><span class="pv">Live preview</span></div>
+            <ChartTile v-if="b.tile.type === 'chart'" :chart="b.tile.chart" :legend="true" :height="150" />
+            <div v-else-if="b.tile.type === 'kpi'" class="kpiprev">
+              <b>{{ b.tile.value }}{{ b.tile.unit }}</b><span>{{ b.tile.title }}</span>
+            </div>
+            <div v-else class="tblprev">
+              <table>
+                <thead><tr><th v-for="c in b.tile.columns" :key="c">{{ c }}</th></tr></thead>
+                <tbody><tr v-for="(r, ri) in b.tile.rows.slice(0, 3)" :key="ri"><td v-for="(cell, ci) in r" :key="ci">{{ cell }}</td></tr></tbody>
+              </table>
+            </div>
           </div>
+        </template>
+
+        <!-- numbered next steps, written as prose (only after a task that leaves a decision) -->
+        <template v-else-if="b.kind === 'nextsteps'">
+          <p class="say">{{ b.intro }}</p>
+          <p class="say">Would you like me to take any of these next steps?</p>
+          <ol class="nsteps">
+            <li v-for="(s, si) in b.steps" :key="si">
+              <button class="nstep" @click="runNextStep(s)">
+                <b>{{ s.title }}</b><span> — {{ s.body }}</span>
+              </button>
+            </li>
+          </ol>
+          <p class="say muted-say">What would you like to do next?</p>
+        </template>
+
+        <!-- "write the prompt for me" — the questions we need, and angles to answer them -->
+        <template v-else-if="b.kind === 'prompt-help'">
+          <div class="blk-h"><Icon name="wand" :size="14" /> Let me write it</div>
+          <p class="say">{{ b.intro }}</p>
+          <div class="needs">
+            <div v-for="(n, ni) in b.needs" :key="ni" class="need"><span class="need-n">{{ ni + 1 }}</span>{{ n }}</div>
+          </div>
+          <ol class="nsteps">
+            <li v-for="ap in b.approaches" :key="ap.id">
+              <button class="nstep" @click="writePrompt(b, ap)">
+                <b>{{ ap.title }}</b><span> — {{ ap.body }}</span>
+              </button>
+            </li>
+          </ol>
+          <p class="say muted-say">Pick one and I’ll drop the finished prompt into the box below — edit it however you like before sending.</p>
         </template>
 
         <!-- the one question card used by every mandatory question -->
@@ -1145,6 +1247,27 @@ tr:last-child td { border-bottom: none; }
 .lnk-row { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; border: none; background: transparent; color: var(--ai-ink); font-weight: 600; font-size: 11.5px; padding: 4px 0; }
 .lnk-row :deep(.ico) { color: var(--ai); }
 .lnk-row:hover { text-decoration: underline; }
+
+/* numbered next steps / prompt angles — prose list, each line actionable */
+.nsteps { margin: 4px 0 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; }
+.nsteps li { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.nsteps li::marker { color: var(--muted); font-weight: 600; }
+.nstep { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 3px 6px 3px 2px; border-radius: 7px; font: inherit; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); cursor: pointer; }
+.nstep b { color: var(--ink); font-weight: 600; }
+.nstep:hover { background: var(--ai-softer); }
+.nstep:hover b { color: var(--ai-ink); }
+/* what the AI needs to know before it can write a prompt */
+.needs { display: flex; flex-direction: column; gap: 5px; margin: 8px 0 12px; padding: 9px 11px; background: var(--surface-2); border-radius: 9px; }
+.need { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); }
+.need-n { flex: none; width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center; background: var(--surface); color: var(--muted); font-size: 9.5px; font-weight: 700; }
+/* inline previews of what was just built */
+.kpiprev { padding: 20px 14px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.kpiprev b { font-size: 34px; font-weight: 500; letter-spacing: -1px; color: var(--ink); }
+.kpiprev span { font-size: 11.5px; color: var(--muted); }
+.tblprev { padding: 4px 10px 10px; overflow-x: auto; }
+.tblprev table { width: 100%; font-size: 11px; }
+.tblprev th { font-size: 9.5px; }
+.tblprev td { padding: 5px 7px; }
 
 /* ===== the question card (one per mandatory question) ===== */
 .askc { border: 1px solid var(--ai-border); border-radius: 12px; background: var(--surface); box-shadow: var(--sh-sm); padding: 11px; display: flex; flex-direction: column; gap: 6px; }
