@@ -326,7 +326,7 @@ const WIDGET_TYPES = [
   { id: 'line', label: 'Line', hint: 'Trend over time' },
   { id: 'donut', label: 'Doughnut', hint: 'Share of a whole' },
   { id: 'kpi', label: 'KPI', hint: 'One headline number' },
-  { id: 'shortcut', label: 'Shortcut', hint: 'Records as a table' },
+  { id: 'shortcut', label: 'Shortcut', hint: 'Records as a table', icon: 'table' },
 ]
 function preferType(id) { draft.value.preferKind = draft.value.preferKind === id ? null : id }
 
@@ -1035,7 +1035,8 @@ watch(() => props.role, () => {
               v-for="w in WIDGET_TYPES" :key="w.id" class="wtype" :class="{ on: draft.preferKind === w.id }"
               @click="preferType(w.id)"
             >
-              <span class="wt-g" :class="w.id" />
+              <Icon v-if="w.icon" :name="w.icon" :size="18" class="wt-i" />
+              <span v-else class="wt-g" :class="w.id" />
               <span class="wt-l">{{ w.label }}</span>
               <span class="wt-h">{{ w.hint }}</span>
             </button>
@@ -1488,7 +1489,8 @@ tr:last-child td { border-bottom: none; }
 .wt-g.donut { width: 16px; height: 16px; border-radius: 50%; border: 4px solid var(--ai); }
 .wt-g.kpi { font-size: 0; position: relative; }
 .wt-g.kpi::after { content: '128'; font-size: 11px; font-weight: 700; color: var(--ai); letter-spacing: -.3px; }
-.wt-g.shortcut { background: linear-gradient(to right, var(--ai) 100%, transparent 0); background-size: 100% 3px; background-position: 0 1px, 0 7px, 0 13px; background-repeat: no-repeat; box-shadow: 0 6px 0 -3px var(--ai), 0 12px 0 -3px var(--ai); }
+/* a real table glyph reads better than anything drawable in CSS */
+.wt-i { height: 16px; margin-bottom: 2px; color: var(--ai); display: grid; place-items: center; }
 /* the configuration, spelled back after adding */
 .cfg { margin-top: 11px; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; display: flex; flex-direction: column; gap: 5px; }
 .cfg-h { font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
