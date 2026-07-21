@@ -271,53 +271,138 @@ function followUpsFor(b) {
   return [{ label: 'What needs attention', intent: 'summary' }, { label: 'What changed since last visit', intent: 'changes' }]
 }
 
-// ---- action bar (Find / Create / Edit / Analyze / Prioritize / Schedule) ----
+// ---- commands (reached from the composer's + button, or by typing "/") ----
+// Each carries the placeholder the composer adopts once it's picked, plus the
+// suggestion list that opens with it — and hides again the moment the user types.
 const ACTIONS = [
-  { key: 'find', label: 'Find', icon: 'search', prompts: [
+  { key: 'find', label: 'Find', icon: 'search', hint: 'Search records & changes', placeholder: 'Find tickets, records or changes…', prompts: [
     { label: 'Find tickets breaching SLA today', intent: 'drill' },
     { label: 'Find the P1 requests assigned to me', intent: 'drill' },
     { label: 'Search this dashboard for Overdue', intent: 'explain' },
     { label: 'Find what changed since last visit', intent: 'changes' },
   ] },
-  { key: 'create', label: 'Create', icon: 'plus', prompts: [
+  { key: 'create', label: 'Create', icon: 'plus', hint: 'Build a widget or dashboard', placeholder: 'Describe the dashboard or widget to build…', prompts: [
     { label: 'Create a widget for SLA breaches by team', intent: 'create' },
     { label: 'Create a backlog trend chart', intent: 'create' },
     { label: 'Create a new dashboard', intent: 'createstart' },
     { label: 'Generate a widget from a description', intent: 'createstart' },
   ] },
-  { key: 'edit', label: 'Edit', icon: 'edit', prompts: [
+  { key: 'edit', label: 'Edit', icon: 'edit', hint: 'Change a widget or layout', placeholder: 'Tell me what to change…', prompts: [
     { label: 'Change a chart’s type to line', intent: 'note' },
     { label: 'Group the KPI widgets together', intent: 'note' },
     { label: 'Edit the dashboard time filter', intent: 'note' },
   ] },
-  { key: 'analyze', label: 'Analyze', icon: 'auto-graph', prompts: [
+  { key: 'analyze', label: 'Analyze', icon: 'auto-graph', hint: 'Explain what the data shows', placeholder: 'What should I analyze?', prompts: [
     { label: 'Analyze what needs attention', intent: 'summary' },
     { label: 'Why did Overdue spike?', intent: 'explain' },
     { label: 'What changed since last visit', intent: 'changes' },
     { label: 'Summarize this dashboard', intent: 'analyzing' },
   ] },
-  { key: 'prioritize', label: 'Prioritize', icon: 'flag', prompts: [
+  { key: 'prioritize', label: 'Prioritize', icon: 'flag', hint: 'Rank what to work on', placeholder: 'What should I prioritize?', prompts: [
     { label: 'Prioritize the P1s breaching today', intent: 'drill' },
     { label: 'Rank overdue tickets by impact', intent: 'drill' },
     { label: 'What should I work on first?', intent: 'summary' },
   ] },
-  { key: 'schedule', label: 'Schedule', icon: 'calendar2', prompts: [
+  { key: 'schedule', label: 'Schedule', icon: 'calendar2', hint: 'Digests, alerts & reminders', placeholder: 'What should I schedule?', prompts: [
     { label: 'Schedule a daily summary email', intent: 'note' },
     { label: 'Block time to clear overdue work', intent: 'note' },
     { label: 'Alert me when P1 backlog exceeds 10', intent: 'note' },
   ] },
 ]
-const actionOpen = ref(null)
-const activeAction = computed(() => ACTIONS.find((a) => a.key === actionOpen.value) || null)
-function toggleAction(k) { actionOpen.value = actionOpen.value === k ? null : k }
-function runPrompt(p) { actionOpen.value = null; pushUser(p.label); dispatch(p.intent, p.label) }
+// ---- panel ⋯ menu (ServiceOps-appropriate set) ----
+const menuOpen = ref(false)
+const PANEL_MENU = [
+  { key: 'history', label: 'History', icon: 'history' },
+  { key: 'share', label: 'Share', icon: 'share' },
+  { key: 'copy', label: 'Copy as Markdown', icon: 'copy' },
+  { key: 'export', label: 'Export chat', icon: 'download' },
+  { key: 'settings', label: 'Settings', icon: 'settings' },
+  { key: 'clear', label: 'Clear conversation', icon: 'trash', danger: true },
+]
+// what the thread reads as in Markdown — used by both Copy and Export
+function threadMarkdown() {
+  const lines = [`# ServiceOps AI · ${props.board.name}`, '']
+  thread.value.forEach((b) => {
+    if (b.kind === 'user') { lines.push(`**You:** ${b.text}`, ''); return }
+    if (b.shownLines?.length) { lines.push(...b.shownLines.map((l) => `> ${l}`), ''); return }
+    if (b.points?.length) { b.points.forEach((g) => { lines.push(`### ${g.title}`); g.points.forEach((p) => lines.push(`- ${p}`)); lines.push('') }); return }
+    if (b.facts?.length) { b.facts.forEach((f) => lines.push(`- ${f.text} _(${f.chip})_`)); lines.push(''); return }
+    if (b.text) { lines.push(`> ${b.text}`, '') }
+  })
+  return lines.join('\n')
+}
+function runPanelMenu(m) {
+  menuOpen.value = false
+  if (m.key === 'clear') { thread.value = []; activeAction.value = null; showSuggest.value = false; toast('Conversation cleared'); return }
+  if (m.key === 'copy') { navigator.clipboard?.writeText(threadMarkdown()); toast('Copied the conversation as Markdown', 'success'); return }
+  if (m.key === 'export') { toast('Exporting this conversation…'); return }
+  if (m.key === 'history') { toast('Chat history runs on-prem — opening your past conversations'); return }
+  if (m.key === 'share') { toast('Share this conversation with a technician or group'); return }
+  toast('AI settings — model, grounding and on-prem options')
+}
+
+const DEFAULT_PH = 'Ask, build and act across your stack'
+// which intent a typed prompt takes once a command is selected
+const CMD_INTENT = { find: 'drill', create: 'create', edit: 'note', analyze: 'explain', prioritize: 'drill', schedule: 'note' }
+
+const cmdOpen = ref(false)        // the command palette (+ button / "/")
+const cmdIndex = ref(0)           // keyboard highlight
+const activeAction = ref(null)    // the picked command — shows as a chip in the composer
+const showSuggest = ref(false)    // its suggestion list; hides as soon as the user types
+const inputEl = ref(null)
+
+const placeholder = computed(() => activeAction.value?.placeholder || DEFAULT_PH)
+// exactly one popup at a time: the palette wins, else the picked command's suggestions
+const popupOpen = computed(() => cmdOpen.value || !!(activeAction.value && showSuggest.value))
+// typing "/find" filters the palette down as you go
+const slashQuery = computed(() => (input.value.startsWith('/') ? input.value.slice(1).trim().toLowerCase() : ''))
+const cmdList = computed(() => {
+  const q = slashQuery.value
+  return q ? ACTIONS.filter((a) => a.label.toLowerCase().startsWith(q) || a.key.startsWith(q)) : ACTIONS
+})
+
+function toggleCmd() {
+  cmdOpen.value = !cmdOpen.value; cmdIndex.value = 0
+  if (cmdOpen.value) { showSuggest.value = false; nextTick(() => inputEl.value?.focus()) }
+}
+function pickCommand(a) {
+  activeAction.value = a
+  cmdOpen.value = false
+  input.value = ''             // drop the "/query" that opened the palette
+  showSuggest.value = true     // its suggestions open with it…
+  nextTick(() => inputEl.value?.focus())
+}
+function clearCommand() { activeAction.value = null; showSuggest.value = false; nextTick(() => inputEl.value?.focus()) }
+
+function onInput() {
+  if (input.value.startsWith('/')) { cmdOpen.value = true; cmdIndex.value = 0; return }
+  cmdOpen.value = false
+  // …and fade away the moment the user starts writing their own prompt
+  if (input.value.trim()) showSuggest.value = false
+}
+function onKeydown(e) {
+  if (cmdOpen.value && cmdList.value.length) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); cmdIndex.value = (cmdIndex.value + 1) % cmdList.value.length; return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); cmdIndex.value = (cmdIndex.value - 1 + cmdList.value.length) % cmdList.value.length; return }
+    if (e.key === 'Enter') { e.preventDefault(); pickCommand(cmdList.value[cmdIndex.value]); return }
+    if (e.key === 'Escape') { e.preventDefault(); cmdOpen.value = false; return }
+  }
+  if (e.key === 'Escape') { showSuggest.value = false; return }
+  // backspace on an empty composer pops the command chip off
+  if (e.key === 'Backspace' && !input.value && activeAction.value) clearCommand()
+}
+function runPrompt(p) { showSuggest.value = false; activeAction.value = null; pushUser(p.label); dispatch(p.intent, p.label) }
 
 // ---- interactions ----
 function submit() {
-  const text = input.value.trim(); if (!text) return
+  const text = input.value.trim()
+  if (!text || text.startsWith('/')) return
+  const cmd = activeAction.value
   input.value = ''
-  pushUser(text)
-  dispatch(routeIntent(text), text)
+  showSuggest.value = false
+  activeAction.value = null
+  pushUser(cmd ? `${cmd.label}: ${text}` : text)
+  dispatch(cmd ? CMD_INTENT[cmd.key] : routeIntent(text), text)
 }
 function suggest(s) { pushUser(s.label); dispatch(s.intent, s.label) }
 // One action per fact: Investigate → spotlight the widget + a written briefing + 3 actions
@@ -368,8 +453,19 @@ watch(() => props.role, () => {
       <div class="ah-l"><span class="spk"><Icon name="sparkles" :size="16" /></span>
         <div><div class="ah-t">ServiceOps AI</div><div class="ah-sub">{{ board.name }} · {{ board.tiles.length }} widgets</div></div>
       </div>
-      <button class="x" @click="emit('update:open', false)"><Icon name="x" :size="17" /></button>
+      <div class="ah-r">
+        <button class="x" title="More" @click.stop="menuOpen = !menuOpen"><Icon name="dots-v" :size="17" /></button>
+        <button class="x" title="Close" @click="emit('update:open', false)"><Icon name="x" :size="17" /></button>
+        <transition name="actpop">
+          <div v-if="menuOpen" class="ahmenu" @click.stop>
+            <button v-for="m in PANEL_MENU" :key="m.key" class="ahm-item" :class="{ danger: m.danger }" @click="runPanelMenu(m)">
+              <Icon :name="m.icon" :size="15" /> {{ m.label }}
+            </button>
+          </div>
+        </transition>
+      </div>
     </div>
+    <div v-if="menuOpen" class="ahmenu-back" @click="menuOpen = false" />
 
     <!-- thread -->
     <div ref="bodyEl" class="ab">
@@ -637,24 +733,47 @@ watch(() => props.role, () => {
       </div>
     </div>
 
-    <!-- action bar + popup (opens ABOVE the chips), then the chat input -->
+    <!-- composer: + / "/" command palette, the picked command's suggestions, then the input -->
     <div class="af">
+      <!-- ONE popup slot: the command palette, or the picked command's suggestions.
+           Sharing a single transitioned element keeps them mutually exclusive and
+           avoids two sibling transitions racing each other on rapid toggles. -->
       <transition name="actpop">
-        <div v-if="activeAction" class="actpop">
-          <div class="actpop-h"><Icon :name="activeAction.icon" :size="14" /> {{ activeAction.label }}<button class="apx" @click="actionOpen = null"><Icon name="x" :size="14" /></button></div>
-          <button v-for="p in activeAction.prompts" :key="p.label" class="actprompt" @click="runPrompt(p)">
-            <Icon :name="activeAction.icon" :size="14" /> {{ p.label }}
-          </button>
+        <div v-if="popupOpen" class="actpop" :class="{ cmdpop: cmdOpen }">
+          <!-- command palette (from + or typing "/") -->
+          <template v-if="cmdOpen">
+            <div class="actpop-h"><Icon name="bolt" :size="14" /> Commands<span class="cmd-tip">↑↓ then ↵</span><button class="apx" @click="cmdOpen = false"><Icon name="x" :size="14" /></button></div>
+            <button
+              v-for="(a, i) in cmdList" :key="a.key" class="cmditem" :class="{ sel: i === cmdIndex }"
+              @click="pickCommand(a)" @mouseenter="cmdIndex = i"
+            >
+              <span class="cmd-ic"><Icon :name="a.icon" :size="15" /></span>
+              <span class="cmd-l">{{ a.label }}</span>
+              <span class="cmd-h">{{ a.hint }}</span>
+            </button>
+            <div v-if="!cmdList.length" class="cmd-none">No command matches “{{ slashQuery }}”</div>
+          </template>
+
+          <!-- the picked command's suggestions — fade out once the user writes their own -->
+          <template v-else>
+            <div class="actpop-h"><Icon :name="activeAction.icon" :size="14" /> {{ activeAction.label }}<button class="apx" @click="showSuggest = false"><Icon name="x" :size="14" /></button></div>
+            <button v-for="p in activeAction.prompts" :key="p.label" class="actprompt" @click="runPrompt(p)">
+              <Icon :name="activeAction.icon" :size="14" /> {{ p.label }}
+            </button>
+          </template>
         </div>
       </transition>
-      <div class="actionbar">
-        <button v-for="a in ACTIONS" :key="a.key" class="actchip" :class="{ on: actionOpen === a.key }" @click="toggleAction(a.key)">
-          <Icon :name="a.icon" :size="14" /> {{ a.label }}
-        </button>
-      </div>
+
       <div class="inbox">
-        <button class="attach" title="Attach"><Icon name="attach" :size="16" /></button>
-        <input v-model="input" placeholder="Type your message…" @keyup.enter="submit" />
+        <button class="plusbtn" :class="{ on: cmdOpen }" title="Commands" @click="toggleCmd"><Icon name="plus" :size="17" /></button>
+        <span v-if="activeAction" class="cmdchip">
+          <Icon :name="activeAction.icon" :size="12" /> {{ activeAction.label }}
+          <button class="ccx" title="Remove command" @click="clearCommand"><Icon name="x" :size="11" /></button>
+        </span>
+        <input
+          ref="inputEl" v-model="input" :placeholder="placeholder"
+          @input="onInput" @keydown="onKeydown" @keyup.enter="submit"
+        />
         <button class="send" :class="{ ready: input.trim() }" :disabled="!input.trim()" @click="submit"><Icon name="send" :size="15" /></button>
       </div>
     </div>
@@ -670,6 +789,17 @@ watch(() => props.role, () => {
 .ah-sub { font-size: 11.5px; color: var(--muted); }
 .x { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 3px; border-radius: 7px; }
 .x:hover { background: var(--surface-2); color: var(--ink); }
+/* header ⋯ menu */
+.ah-r { position: relative; display: flex; align-items: center; gap: 2px; }
+.ahmenu-back { position: fixed; inset: 0; z-index: 40; }
+.ahmenu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 194px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); display: flex; flex-direction: column; }
+.ahm-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; border-radius: 7px; padding: 8px 9px; font-size: 12.5px; color: var(--ink); }
+.ahm-item :deep(.ico) { color: var(--muted); flex: none; }
+.ahm-item:hover { background: var(--ai-softer); color: var(--ai-ink); }
+.ahm-item:hover :deep(.ico) { color: var(--ai); }
+.ahm-item.danger { color: var(--red); }
+.ahm-item.danger :deep(.ico) { color: var(--red); }
+.ahm-item.danger:hover { background: var(--red-soft); color: var(--red); }
 
 .ab { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
 .blk { animation: rise .2s ease both; }
@@ -720,7 +850,13 @@ watch(() => props.role, () => {
 .think-orb { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; animation: orbpulse 1.3s ease-in-out infinite; }
 @keyframes orbpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.42); } 50% { box-shadow: 0 0 0 8px rgba(139,92,246,0); } }
 .think-main { flex: 1; min-width: 0; padding-top: 2px; }
-.think-t { font-size: 13px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: baseline; }
+/* the label shimmers left→right in the AI gradient while it's thinking */
+.think-t { font-size: 13px; font-weight: 600; display: inline-flex; align-items: baseline;
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 20%, #731efb 42%, #f911e3 52%, var(--muted) 74%, var(--muted) 100%);
+  background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 2.1s linear infinite; }
+@keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .think-t { animation: none; color: var(--ink); background: none; -webkit-text-fill-color: currentColor; } }
 .think-dots { display: inline-flex; gap: 3px; margin-left: 5px; align-self: flex-end; margin-bottom: 4px; }
 .think-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--ai); animation: andot 1.2s infinite; }
 .think-dots i:nth-child(2) { animation-delay: .2s; } .think-dots i:nth-child(3) { animation-delay: .4s; }
@@ -840,15 +976,15 @@ tr:last-child td { border-bottom: none; }
 .fu:hover .fu-arrow { color: var(--ai); }
 /* footer input */
 .af { border-top: 1px solid var(--border); padding: 10px 14px 12px; }
-/* action bar */
-.actionbar { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 9px; scrollbar-width: none; }
-.actionbar::-webkit-scrollbar { display: none; }
-/* minimal chips — plain surface + border, no gradient; AI accent only on hover/active */
-.actchip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); font-size: 12px; font-weight: 600; color: var(--ink-2); flex: none; }
-.actchip :deep(.ico) { color: var(--muted); }
-.actchip:hover { border-color: var(--ai-border); background: var(--ai-softer); color: var(--ai-ink); }
-.actchip:hover :deep(.ico), .actchip.on :deep(.ico) { color: var(--ai); }
-.actchip.on { border-color: var(--ai); background: var(--ai-soft); color: var(--ai-ink); }
+/* command palette (from the + button, or by typing "/") */
+.cmd-tip { margin-left: auto; margin-right: 8px; font-size: 9.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted-2); }
+.cmditem { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; border-radius: 8px; padding: 8px 9px; cursor: pointer; }
+.cmditem.sel { background: var(--ai-softer); }
+.cmd-ic { width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center; background: var(--ai-soft); color: var(--ai); }
+.cmditem.sel .cmd-ic { background: var(--ai-grad); color: #fff; }
+.cmd-l { font-size: 12.5px; font-weight: 600; color: var(--ink); flex: none; }
+.cmd-h { font-size: 11px; color: var(--muted); margin-left: auto; text-align: right; }
+.cmd-none { padding: 10px 9px; font-size: 12px; color: var(--muted); }
 .actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
 .actpop-enter-active, .actpop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .actpop-enter-from, .actpop-leave-to { opacity: 0; transform: translateY(8px); }
@@ -863,10 +999,24 @@ tr:last-child td { border-bottom: none; }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .sg { border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
 .sg:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); }
-.inbox { display: flex; align-items: center; gap: 6px; height: 44px; border: 1px solid var(--ai-border); border-radius: 11px; padding: 0 6px 0 8px; background: var(--surface); }
+/* composer — a light sweep rides the top edge so the field reads as "live" */
+.inbox { position: relative; display: flex; align-items: center; gap: 6px; min-height: 46px; border: 1px solid var(--ai-border); border-radius: 12px; padding: 6px 6px 6px 7px; background: var(--surface); }
+.inbox::before {
+  content: ''; position: absolute; top: -1px; left: 18%; right: 18%; height: 2px; border-radius: 2px;
+  background: var(--ai-grad); filter: blur(2.5px); pointer-events: none;
+  animation: sweep 3.4s ease-in-out infinite;
+}
+@keyframes sweep { 0%, 100% { opacity: .18; transform: scaleX(.55); } 50% { opacity: .9; transform: scaleX(1); } }
 .inbox:focus-within { border-color: var(--ai); box-shadow: 0 0 0 3px var(--ai-soft); }
-.attach { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; flex: none; }
-.attach:hover { background: var(--surface-2); color: var(--ink); }
+.inbox:focus-within::before { opacity: 1; animation: none; }
+.plusbtn { width: 32px; height: 32px; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); border-radius: 50%; display: grid; place-items: center; flex: none; transition: border-color .14s, background .14s, color .14s; }
+.plusbtn:hover, .plusbtn.on { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
+/* the picked command sits in the field as a chip, ahead of what you type */
+.cmdchip { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 24px; padding: 0 5px 0 9px; border-radius: var(--r-pill); background: var(--ai-grad-soft); border: 1px solid var(--ai-border); color: var(--ai-ink); font-size: 11.5px; font-weight: 600; }
+.cmdchip :deep(.ico) { color: var(--ai); }
+.ccx { border: none; background: transparent; color: var(--ai-ink); display: grid; place-items: center; padding: 2px; border-radius: 4px; opacity: .65; }
+.ccx:hover { opacity: 1; background: var(--ai-soft); }
+@media (prefers-reduced-motion: reduce) { .inbox::before { animation: none; opacity: .5; } }
 .inbox input { flex: 1; border: none; outline: none; background: transparent; font-size: 13px; font-family: inherit; color: var(--ink); }
 .send { width: 32px; height: 32px; border: none; border-radius: 8px; background: var(--surface-2); color: var(--muted); display: grid; place-items: center; flex: none; transition: background .14s, color .14s; }
 .send.ready { background: var(--ai-grad); color: #fff; }
