@@ -359,21 +359,68 @@ function buildTileFrom(text, prefer) {
   tile._chips = spec.chips || []
   return tile
 }
-// build one widget straight into the new board, then hand the floor back for another
+/* "Add three widgets: X, Y and Z" should build three. Only split on separators the
+ * user clearly meant as a list — a bare "and" is far more often part of one phrase
+ * ("SLA breaches and overdue work") than a list boundary, so it's only trusted when
+ * a count was stated. */
+const NUM_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 }
+function statedCount(text) {
+  const d = text.match(/\b(\d+)\s+(?:more\s+)?(widgets?|kpis?|charts?|shortcuts?|tiles?)\b/i)
+  if (d) return Math.min(parseInt(d[1], 10), 8)
+  const w = text.match(/\b(two|three|four|five|six|seven|eight)\s+(?:more\s+)?(?:widgets?|kpis?|charts?|shortcuts?|tiles?)\b/i)
+  return w ? NUM_WORDS[w[1].toLowerCase()] : null
+}
+function isDescriptive(s) {
+  const t = s.trim().toLowerCase()
+  if (t.length < 6) return false
+  return !/^(widgets?|kpis?|charts?|shortcuts?|tiles?|please|thanks|them|those|these)$/.test(t)
+}
+function splitWidgetRequests(text) {
+  // drop a leading "create 3 widgets:" style preamble
+  const body = String(text).replace(
+    /^\s*(?:please\s+)?(?:can you\s+)?(?:create|add|build|make|generate|put)\s+(?:me\s+)?(?:\d+|a|an|some|a few|two|three|four|five|six|seven|eight)?\s*(?:more\s+)?(?:widgets?|kpis?|charts?|shortcuts?|tiles?)?\s*(?:that|which|for|showing|to show|:|—|-)?\s*/i, '')
+  const strong = /\s*(?:\r?\n+|;|•|•|\s\d+[.)]\s+)\s*/
+  let parts = body.split(strong)
+  // a stated count licenses comma / "and" splitting too
+  if (parts.length < 2 && statedCount(text)) parts = body.split(/\s*,\s*and\s+|\s*,\s*|\s+and\s+/i)
+  parts = parts.map((s) => s.trim().replace(/^[-–—]\s*/, '')).filter(isDescriptive)
+  return parts.length ? parts : (isDescriptive(body) ? [body.trim()] : [])
+}
+
+// build one or many widgets straight into the new board
 function dashWidget(text) {
   const t = (text || '').trim(); if (!t) return
   awaiting.value = null
   pushUser(t)
-  const blk = push('cd-widget', { phase: 'thinking', tile: null, cfg: null, settled: false })
+  const want = statedCount(t)
+  const items = splitWidgetRequests(t)
+  // asked for widgets but never said what they should show → ask rather than guess
+  if (!items.length) {
+    push('cd-need', { want: want || 1, have: 0 })
+    awaiting.value = 'dash-widget'; focusComposer(); return
+  }
+  buildWidgetQueue(items, 0, want && want > items.length ? want - items.length : 0)
+}
+function buildWidgetQueue(list, i, shortBy) {
+  if (i >= list.length) {
+    // built what was clear; now ask for whatever they counted but didn't describe
+    if (shortBy > 0) push('cd-need', { want: shortBy, have: list.length, partial: true })
+    awaiting.value = 'dash-widget'
+    return
+  }
+  const blk = push('cd-widget', {
+    phase: 'thinking', tile: null, cfg: null, settled: false,
+    idx: i + 1, total: list.length, last: i === list.length - 1 && shortBy === 0,
+  })
   runThinking(blk, ['Reading what you want to show', 'Choosing the clearest way to draw it', 'Configuring and placing it'], () => {
-    const tile = buildTileFrom(t, draft.value.preferKind)
+    const tile = buildTileFrom(list[i], draft.value.preferKind)
     const d = draft.value.dash
     d.tiles.push(tile); d.updated = new Date().toISOString()
     draft.value.built.push(tile)
     blk.tile = tile
     blk.cfg = tile.type === 'chart' ? configLines({ title: tile.title, chart: tile.chart, chips: tile._chips }) : null
     blk.settled = true
-    awaiting.value = 'dash-widget'
+    setTimeout(() => buildWidgetQueue(list, i + 1, shortBy), 400)
   })
 }
 function moreWidgets() { awaiting.value = 'dash-widget'; focusComposer() }
@@ -574,7 +621,7 @@ function dispatch(intent, text) {
 }
 
 // ---- contextual Follow ups (change with the block / what the user asked) ----
-const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-widgets', 'cd-widget', 'cd-recap', 'cd-done', 'cw-intent', 'cw-build', 'cw-newboard', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
+const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-widgets', 'cd-widget', 'cd-need', 'cd-recap', 'cd-done', 'cw-intent', 'cw-build', 'cw-newboard', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
@@ -1046,9 +1093,20 @@ watch(() => props.role, () => {
           </div>
         </template>
 
+        <!-- dashboard: I need more before I can build what was asked for -->
+        <template v-else-if="b.kind === 'cd-need'">
+          <div class="blk-h"><Icon name="info" :size="14" /> I need a bit more</div>
+          <p v-if="b.partial" class="say">That’s the {{ b.have }} I could read clearly. You asked for <b>{{ b.want }}</b> more — tell me what {{ b.want === 1 ? 'it' : 'they' }} should show and I’ll build {{ b.want === 1 ? 'it' : 'them' }} too.</p>
+          <p v-else class="say">Happy to build {{ b.want === 1 ? 'it' : `all ${b.want}` }} — I just need to know what {{ b.want === 1 ? 'it' : 'each one' }} should show. Describe {{ b.want === 1 ? 'it' : 'them' }} below, one per line.</p>
+          <p class="say muted-say">For example: “overdue requests by team”, “backlog trend over 6 months”, “a list of the open P1s”.</p>
+        </template>
+
         <!-- dashboard: a widget just built into it -->
         <template v-else-if="b.kind === 'cd-widget'">
-          <div class="calm"><Icon name="check" :size="16" /> Added <b class="nm">{{ b.tile.title }}</b> to the board.</div>
+          <div class="calm">
+            <Icon name="check" :size="16" /> Added <b class="nm">{{ b.tile.title }}</b> to the board.
+            <span v-if="b.total > 1" class="ofn">{{ b.idx }} of {{ b.total }}</span>
+          </div>
           <div class="wprev">
             <div class="wp-h"><b>{{ b.tile.title }}</b><span class="pv">Live preview</span></div>
             <ChartTile v-if="b.tile.type === 'chart'" :chart="b.tile.chart" :legend="true" :height="150" />
@@ -1064,7 +1122,8 @@ watch(() => props.role, () => {
             <div class="cfg-h">How it’s configured</div>
             <div v-for="(r, ri) in b.cfg.rows" :key="ri" class="cfg-r"><span>{{ r.k }}</span><b>{{ r.v }}</b></div>
           </div>
-          <div class="chipsrow mini">
+          <!-- only after the LAST of a batch, so a 3-widget request doesn't repeat these -->
+          <div v-if="b.last" class="chipsrow mini">
             <button class="sg" @click="moreWidgets()">Add another widget</button>
             <button class="sg go" @click="finishWidgets()">That’s everything — show me the dashboard</button>
           </div>
@@ -1455,6 +1514,7 @@ tr:last-child td { border-bottom: none; }
 .nm { color: var(--ai-ink); font-weight: 700; background: var(--ai-grad-soft); border: 1px solid var(--ai-border); border-radius: 6px; padding: 1px 7px; }
 .named { margin-top: 10px; }
 .nm-note { color: var(--muted); font-size: 11.5px; margin-left: 5px; }
+.ofn { margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .muted-say { color: var(--muted); font-size: 11.5px; margin-top: -2px; }
 .doneacts { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 10px; }
 .doneacts .add, .doneacts .mini-cta { margin-top: 0; }
