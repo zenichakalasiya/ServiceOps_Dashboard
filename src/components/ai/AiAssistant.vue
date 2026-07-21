@@ -879,7 +879,7 @@ watch(() => props.role, () => {
           </div>
           <p class="why"><Icon name="bulb" :size="12" /> {{ b.spec.why }}</p>
           <button class="add" :disabled="b.added" @click="addWidget(b)">
-            <Icon :name="b.added ? 'check' : 'plus'" :size="14" /> {{ b.added ? 'Added to dashboard' : 'Add to dashboard' }}
+            <Icon :name="b.added ? 'check' : 'plus'" :size="14" /><span>{{ b.added ? 'Added to dashboard' : 'Add to dashboard' }}</span>
           </button>
         </template>
 
@@ -927,7 +927,7 @@ watch(() => props.role, () => {
           <div class="calm"><Icon name="check" :size="16" /> Created <b class="nm">{{ b.dash.name }}</b>.</div>
           <p v-if="b.namedByAi" class="say muted-say">I named it for you — open it and rename from the board header if you'd like something else.</p>
           <div class="doneacts">
-            <button class="add" @click="openBoard(b.dash)"><Icon name="open-in" :size="14" /> Open it</button>
+            <button class="add" @click="openBoard(b.dash)"><Icon name="open-in" :size="14" /><span>Open it</span></button>
             <button class="mini-cta" @click="startWidget">Add a widget with AI <Icon name="chevron-right" :size="13" /></button>
           </div>
         </template>
@@ -961,7 +961,7 @@ watch(() => props.role, () => {
           <p class="say muted-say">Add it as it is, or tell me what to change.</p>
           <div class="doneacts">
             <button class="add" @click="confirmWidget(b)">
-              <Icon name="plus" :size="14" /> Add{{ draft.dash ? ` to “${draft.dash.name}”` : ' to a dashboard' }}
+              <Icon name="plus" :size="14" /><span>{{ draft.dash ? `Add to “${draft.dash.name}”` : 'Add to a dashboard' }}</span>
             </button>
             <button class="mini-cta" @click="changeWidget()">Change something <Icon name="chevron-right" :size="13" /></button>
           </div>
@@ -1271,8 +1271,16 @@ tr:last-child td { border-bottom: none; }
 .rec { color: var(--green); font-weight: 700; }
 .why { display: flex; align-items: flex-start; gap: 5px; margin: 9px 0 0; font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 7px; padding: 8px 10px; line-height: 1.45; }
 .why > :first-child { color: var(--amber); flex: none; margin-top: 1px; }
-.add { display: inline-flex; align-items: center; gap: 6px; margin-top: 11px; height: 32px; padding: 0 14px; border: none; border-radius: 8px; background: var(--ai-grad); color: #fff; font-weight: 600; font-size: 12.5px; }
-.add:disabled { background: var(--green); opacity: 1; }
+/* Primary AI CTA — a gradient BORDER and gradient label on a white fill, never a
+   solid gradient slab. The label needs its own <span> because the border trick
+   already owns the button's `background`. */
+.add { display: inline-flex; align-items: center; gap: 7px; margin-top: 11px; height: 34px; padding: 0 16px; font-weight: 600; font-size: 12.5px;
+  border: 1.5px solid transparent; border-radius: var(--r-pill);
+  background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; }
+.add span, .add :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.add:hover { background: linear-gradient(var(--ai-softer), var(--ai-softer)) padding-box, var(--ai-grad-line) border-box; }
+.add:disabled { background: linear-gradient(var(--green-soft), var(--green-soft)) padding-box, linear-gradient(var(--green), var(--green)) border-box; opacity: 1; }
+.add:disabled span, .add:disabled :deep(.ico) { background: none; -webkit-text-fill-color: var(--green); color: var(--green); }
 /* ===== create flow ===== */
 /* the AI-chosen name, called out in the sentence that announces it */
 .nm { color: var(--ai-ink); font-weight: 700; background: var(--ai-grad-soft); border: 1px solid var(--ai-border); border-radius: 6px; padding: 1px 7px; }

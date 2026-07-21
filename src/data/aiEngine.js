@@ -157,6 +157,12 @@ export function dashboardNarrative(board, role = 'technician') {
 // (the ClickUp-Brain style): "what this covers" + "how it reads right now".
 export function dashboardSummaryPoints(board, role = 'technician') {
   const t = board.tiles || []
+  // A board the user just created has nothing to describe yet — say that plainly
+  // rather than inventing a reading of widgets that don't exist.
+  if (!t.length) return [
+    { title: 'What this dashboard covers', points: [`“${board.name}” has no widgets yet — there’s nothing for me to read.`] },
+    { title: 'What to do next', points: ['Add a widget and I’ll summarise what it shows, flag anything unusual, and track how it moves.'] },
+  ]
   const kpis = t.filter((x) => x.type === 'kpi')
   const charts = t.filter((x) => x.type === 'chart')
   const shorts = t.filter((x) => x.type === 'shortcut')
@@ -436,6 +442,20 @@ export function changesSinceLastVisit(board) {
     widget: wl.title, dir: 'up', delta: '+4 new', value: `${wl.rows.length} open`,
     severity: 'bad', note: '4 new P1 requests were assigned to you since your last visit',
   })
+  // A new or freshly-built board has no earlier snapshot — report that honestly
+  // instead of rendering an empty diff.
+  if (!items.length) {
+    const n = (board.tiles || []).length
+    items.push({
+      widget: board.name, dir: 'up', delta: n ? 'new' : '—',
+      value: n ? `${n} widget${n === 1 ? '' : 's'}` : 'empty',
+      severity: 'good',
+      note: n
+        ? 'This board is new, so there’s no earlier snapshot to compare against yet. I’ll start tracking movement from here.'
+        : 'Nothing to compare yet — add a widget and I’ll track how it moves.',
+    })
+    return { lastVisit: 'no earlier snapshot', items }
+  }
   // rank so the things that need action lead
   const rank = { bad: 0, warn: 1, good: 2 }
   items.sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3))

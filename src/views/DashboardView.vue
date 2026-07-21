@@ -125,8 +125,10 @@ const showLegendDemo = false
 const ls = computed(() => store.ui.legendStyle)
 
 // ---- AI: the Summary card is always upfront; every CTA opens the ServiceOps AI side panel.
-// The panel + card run off a stable demo board so the anomaly/summary story is always there.
-const aiBoard = demoBoard()
+// The AI reads the board you are ACTUALLY on. A dashboard the user just created has no
+// canned story, so the engine summarises whatever it finds there (and says so when it's
+// empty) rather than describing a demo board that isn't on screen.
+const aiBoard = computed(() => d.value || demoBoard())
 const aiRole = ref('technician')
 const aiPanel = ref(null)
 function openAi() { store.ui.aiPanelOpen = true }
@@ -635,7 +637,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 
       <!-- AI Summary — always upfront on the board (the ServiceOps reference), with its
            three deep-dive CTAs on the right; each opens the ServiceOps AI side panel. -->
-      <AiSummaryCard v-if="!loadingBoard && d.tiles.length" :board="aiBoard" @ask="onCardAsk" />
+      <!-- shown even on an empty board: a dashboard the user just created still needs
+           the AI entry point, and the card says plainly that there's nothing to read yet -->
+      <AiSummaryCard v-if="!loadingBoard" :board="aiBoard" @ask="onCardAsk" />
 
       <!-- loading skeleton (P2·9) -->
       <div v-if="loadingBoard" class="grid">

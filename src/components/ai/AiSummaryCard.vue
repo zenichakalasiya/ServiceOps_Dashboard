@@ -21,8 +21,11 @@ const emit = defineEmits(['ask'])
 
 const attention = computed(() => computeFacts(props.board).filter((f) => f.severity === 'bad' || f.severity === 'warn'))
 const teaser = computed(() => {
+  const tiles = props.board.tiles || []
+  // an empty board isn't "healthy" — it has nothing to read
+  if (!tiles.length) return `“${props.board.name}” has no widgets yet — add one and I’ll start summarising it.`
   const n = attention.value.length
-  if (!n) return `“${props.board.name}” looks healthy — all widgets are within range.`
+  if (!n) return `“${props.board.name}” looks healthy — all ${tiles.length} widgets are within range.`
   const top = attention.value[0]
   return `${n} thing${n > 1 ? 's' : ''} need attention on “${props.board.name}” — top of the list: ${top.text}.`
 })
@@ -50,7 +53,7 @@ const CTAS = [
         v-for="c in CTAS" :key="c.intent" class="ac-cta" :class="{ primary: c.primary }"
         @click="emit('ask', c.intent, c.label)"
       >
-        <Icon :name="c.icon" :size="15" /> {{ c.label }}
+        <Icon :name="c.icon" :size="15" /><span>{{ c.label }}</span>
       </button>
     </div>
   </section>
@@ -79,7 +82,9 @@ const CTAS = [
 .ac-cta :deep(.ico) { color: var(--ai); }
 .ac-cta:hover { border-color: var(--ai); background: var(--ai-soft); }
 /* primary CTA — a gradient BORDER (blue→purple→pink) over a white fill */
+/* primary: gradient border AND gradient label on a white fill */
 .ac-cta.primary { border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; }
+.ac-cta.primary span, .ac-cta.primary :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .ac-cta.primary:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 
 @media (max-width: 860px) { .ac-ctas { width: 100%; } }
