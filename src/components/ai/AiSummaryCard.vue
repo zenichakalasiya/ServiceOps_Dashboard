@@ -63,7 +63,8 @@ const CTAS = [
   background: var(--ai-grad-card); padding: 13px 16px; margin-bottom: 14px;
 }
 .ac-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
-.ac-spark { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
+.ac-spark { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--ai-softer); }
+.ac-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .ac-copy { min-width: 0; }
 .ac-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--ink); }
 .ac-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--ai-grad); color: #fff; font-size: 11px; font-weight: 700; }

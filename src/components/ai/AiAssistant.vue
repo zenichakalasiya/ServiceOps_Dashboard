@@ -682,6 +682,15 @@ function spark(a) {
   const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2)
   return { W, H, line: 'M' + h.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' L'), last: { x: x(h.length - 1), y: y(a.value) }, meanY: y(a.mean) }
 }
+/* Emphasise the load-bearing parts of a sentence — counts, percentages and the
+ * widget names in quotes — so a paragraph can be skimmed rather than read whole.
+ * The text is engine-generated (never user input), and is escaped first regardless. */
+function hl(s) {
+  return String(s == null ? '' : s)
+    .replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+    .replace(/“([^”]+)”/g, '<b>“$1”</b>')
+    .replace(/(^|[\s(])([+−-]?\d[\d,.]*\s?%?)(?=$|[\s,.;:)])/g, '$1<b>$2</b>')
+}
 const dotClass = (s) => (s === 'bad' ? 'bad' : s === 'warn' ? 'warn' : 'info')
 
 // external trigger — no auto-summary; the panel opens to the greeting empty state.
@@ -773,7 +782,7 @@ watch(() => props.role, () => {
               <div v-if="fi < b.shown" class="fact reveal" @mouseenter="emit('cite', f.tileId)" @mouseleave="emit('cite', null)">
                 <span class="dot" :class="dotClass(f.severity)" />
                 <div class="fb">
-                  <div class="ftext">{{ f.text }}</div>
+                  <div class="ftext" v-html="hl(f.text)" />
                   <div class="fmeta">
                     <span class="cite"><Icon name="chart-bar" :size="11" /> {{ f.chip }}</span>
                     <button class="lnk" @click="investigate(f)">Investigate →</button>
@@ -810,7 +819,7 @@ watch(() => props.role, () => {
           <div class="blk-h"><Icon name="sparkles" :size="14" /> Dashboard summary</div>
           <div v-for="(g, gi) in b.points" :key="gi" class="sum-grp">
             <div class="sum-gt">{{ g.title }}</div>
-            <ul class="sum-list"><li v-for="(p, pi) in g.points" :key="pi">{{ p }}</li></ul>
+            <ul class="sum-list"><li v-for="(p, pi) in g.points" :key="pi" v-html="hl(p)" /></ul>
           </div>
         </template>
 
@@ -820,8 +829,8 @@ watch(() => props.role, () => {
           <div class="blk-h" :class="b.anomaly ? b.anomaly.severity : ''">
             <Icon :name="b.anomaly ? 'alert' : 'info'" :size="14" /> {{ b.tile.title }}
           </div>
-          <p v-for="(line, i) in b.shownLines" :key="i" class="say">{{ line }}</p>
-          <p v-if="b.cur" class="say">{{ b.cur }}<span class="caret" /></p>
+          <p v-for="(line, i) in b.shownLines" :key="i" class="say" v-html="hl(line)" />
+          <p v-if="b.cur" class="say"><span v-html="hl(b.cur)" /><span class="caret" /></p>
           <transition name="reveal">
             <div v-if="b.showExtras">
               <div v-if="b.anomaly" class="spark">
@@ -844,8 +853,8 @@ watch(() => props.role, () => {
           <transition name="reveal">
             <div v-if="b.showSpot && b.widget" class="spot"><Icon name="target" :size="12" /> Spotlighted <b>“{{ b.widget }}”</b> on the dashboard</div>
           </transition>
-          <p v-for="(line, i) in b.shownLines" :key="i" class="say">{{ line }}</p>
-          <p v-if="b.cur" class="say">{{ b.cur }}<span class="caret" /></p>
+          <p v-for="(line, i) in b.shownLines" :key="i" class="say" v-html="hl(line)" />
+          <p v-if="b.cur" class="say"><span v-html="hl(b.cur)" /><span class="caret" /></p>
         </template>
 
         <!-- P4 build -->
@@ -1105,7 +1114,9 @@ watch(() => props.role, () => {
 .asst { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--surface); }
 .ah { display: flex; align-items: center; justify-content: space-between; padding: 13px 14px; border-bottom: 1px solid var(--border); }
 .ah-l { display: flex; gap: 10px; align-items: center; }
-.spk { width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
+/* AI icons are gradient GLYPHS on a soft tile, not white-on-solid orbs */
+.spk { width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-softer); }
+.spk :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .ah-t { font-weight: 600; font-size: 15px; }
 .ah-sub { font-size: 11.5px; color: var(--muted); }
 .x { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 3px; border-radius: 7px; }
@@ -1122,13 +1133,14 @@ watch(() => props.role, () => {
 .ahm-item.danger :deep(.ico) { color: var(--red); }
 .ahm-item.danger:hover { background: var(--red-soft); color: var(--red); }
 
-.ab { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
+/* generous rhythm — the thread is read, not scanned, so answers need room */
+.ab { flex: 1; overflow: auto; padding: 18px 16px 22px; display: flex; flex-direction: column; gap: 22px; }
 .blk { animation: rise .2s ease both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .blk { animation: none; } }
 .user { display: flex; justify-content: flex-end; }
 .user span { background: var(--surface-2); color: var(--ink); font-size: 12.5px; font-weight: 500; padding: 8px 13px; border-radius: 13px 13px 3px 13px; max-width: 85%; }
-.blk-h { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; margin-bottom: 9px; }
+.blk-h { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; margin-bottom: 12px; }
 .blk-h.bad > :first-child { color: var(--red); } .blk-h.warn > :first-child { color: var(--amber); }
 .blk-h > :first-child { color: var(--ai); }
 .updated { margin-left: auto; font-size: 10.5px; font-weight: 400; color: var(--muted); }
@@ -1139,7 +1151,8 @@ watch(() => props.role, () => {
 .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex: none; }
 .dot.bad { background: var(--red); } .dot.warn { background: var(--amber); } .dot.info { background: var(--blue); }
 .fb { flex: 1; min-width: 0; }
-.ftext { font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+.ftext { font-size: 12.5px; font-weight: 500; line-height: 1.45; }
+.ftext b { color: var(--ink); font-weight: 600; }
 .fmeta { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
 .cite { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border); padding: 1px 7px; border-radius: var(--r-pill); }
 .lnk { border: none; background: transparent; color: var(--primary-700); font-weight: 600; font-size: 11.5px; padding: 0; }
@@ -1168,7 +1181,8 @@ watch(() => props.role, () => {
 .chgc.hasnote .chgc-val::after { content: "ⓘ"; color: var(--muted-2); font-weight: 400; margin-left: 5px; font-size: 10.5px; }
 /* ===== realistic "thinking" phase — pulsing orb + reasoning steps ===== */
 .think { display: flex; gap: 11px; padding: 4px 0 6px; }
-.think-orb { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; animation: orbpulse 1.3s ease-in-out infinite; }
+.think-orb { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--ai-softer); animation: orbpulse 1.3s ease-in-out infinite; }
+.think-orb :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 @keyframes orbpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.42); } 50% { box-shadow: 0 0 0 8px rgba(139,92,246,0); } }
 .think-main { flex: 1; min-width: 0; padding-top: 2px; }
 /* the label shimmers left→right in the AI gradient while it's thinking */
@@ -1199,7 +1213,8 @@ watch(() => props.role, () => {
 .reveal-enter-from { opacity: 0; transform: translateY(6px); }
 @media (prefers-reduced-motion: reduce) { .think-orb, .think-dots i, .tspin, .caret, .reveal { animation: none; } }
 /* explain */
-.say { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.say { margin: 0 0 12px; font-size: 12.5px; line-height: 1.62; color: var(--ink-2); }
+.say b { color: var(--ink); font-weight: 600; }
 .say:first-of-type { color: var(--ink); }
 /* "spotlighted a widget on the board" note — the written answer points AT the tile */
 .spot { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 11.5px; color: var(--ai-ink); background: var(--ai-grad-soft); border: 1px solid var(--ai-border); border-radius: var(--r-pill); padding: 4px 11px; }
@@ -1344,22 +1359,24 @@ tr:last-child td { border-bottom: none; }
 .pick.new { color: var(--ai-ink); border-style: dashed; }
 .sg.on { background: var(--ai-soft); border-color: var(--ai); color: var(--ai-ink); }
 /* reasoning line */
-.reasoning { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+.reasoning { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); margin-bottom: 12px; }
 .rz-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ai-grad); flex: none; }
 /* grouped summary points */
-.sum-grp { margin-bottom: 12px; }
+.sum-grp { margin-bottom: 16px; }
 .sum-gt { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
 .sum-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.sum-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.sum-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.62; color: var(--ink-2); }
+.sum-list li b { color: var(--ink); font-weight: 600; }
 .sum-list li::before { content: ''; position: absolute; left: 3px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--ai); }
 /* contextual Follow ups (ClickUp-style vertical rows) */
-.fu-sec { margin-top: 12px; }
+.fu-sec { margin-top: 16px; }
 .fu-h { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .fu-list { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.fu { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; text-align: left; border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); padding: 8px 14px; font-size: 12.5px; font-weight: 500; color: var(--ink); }
+/* follow-ups stay monochrome — colour here competes with the answer above it */
+.fu { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--r-pill); padding: 8px 14px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
 .fu .fu-arrow { color: var(--muted-2); transform: rotate(0deg); flex: none; }
-.fu:hover { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
-.fu:hover .fu-arrow { color: var(--ai); }
+.fu:hover { border-color: var(--border-strong); background: var(--surface); color: var(--ink); }
+.fu:hover .fu-arrow { color: var(--ink-2); }
 /* footer input */
 .af { border-top: 1px solid var(--border); padding: 10px 14px 12px; }
 /* command palette — compact: icon + name, sized to its content, not the panel */

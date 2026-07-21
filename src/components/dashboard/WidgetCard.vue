@@ -439,7 +439,8 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .wai-card.up { transform: translateY(-100%); }
 .wai-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .wai-h .ellip { color: var(--ai-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wai-spark { width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }
+.wai-spark { width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center; background: var(--ai-softer); }
+.wai-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .wai-sum { margin: 10px 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 /* two actions, side by side */
 .wai-acts { display: flex; flex-direction: row; gap: 6px; }
