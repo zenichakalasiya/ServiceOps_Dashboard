@@ -60,7 +60,7 @@ const CTAS = [
 .ai-card {
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
   border: 1px solid var(--ai-border); border-radius: var(--r-lg);
-  background: var(--ai-grad-soft); padding: 13px 16px; margin-bottom: 14px;
+  background: var(--ai-grad-card); padding: 13px 16px; margin-bottom: 14px;
 }
 .ac-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
 .ac-spark { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--ai-grad); color: #fff; }

@@ -28,6 +28,8 @@
   --ai-grad: linear-gradient(90deg, #4cb1fe 0%, #731efb 41.49%, #f911e3 100%);
   --ai-grad-line: linear-gradient(90deg, rgba(76,177,254,.8) 0%, rgba(115,30,251,.8) 41.49%, rgba(249,17,227,.8) 100%);
   --ai-grad-soft: linear-gradient(90deg, #e9f6ff 0%, #eee4fe 41.49%, #fee2fc 100%);
+  /* even lighter tone of each gradient colour — for the AI summary card */
+  --ai-grad-card: linear-gradient(90deg, #f1f9ff 0%, #f4edfe 41.49%, #feecfd 100%);
 
   /* Neutrals — ServiceOps token source */
   --bg: #f9fafb;               /* Light BG / Card Foreground */
@@ -78,6 +80,7 @@
   --ai-grad: linear-gradient(90deg, #4cb1fe 0%, #8b5cf6 41.49%, #f472b6 100%);
   --ai-grad-line: linear-gradient(90deg, rgba(76,177,254,.85) 0%, rgba(139,92,246,.85) 41.49%, rgba(244,114,182,.85) 100%);
   --ai-grad-soft: linear-gradient(90deg, #212f41 0%, #271d40 41.49%, #371b3d 100%);
+  --ai-grad-card: linear-gradient(90deg, #1c2632 0%, #201b32 41.49%, #281a30 100%);
 
   --bg: #14141c;
   --surface: #1d1d27;

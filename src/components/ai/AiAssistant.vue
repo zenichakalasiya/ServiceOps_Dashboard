@@ -831,11 +831,12 @@ tr:last-child td { border-bottom: none; }
 /* action bar */
 .actionbar { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 9px; scrollbar-width: none; }
 .actionbar::-webkit-scrollbar { display: none; }
-.actchip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); font-size: 12px; font-weight: 600; color: var(--ink-2); flex: none; }
+/* minimal chips — plain surface + border, no gradient; AI accent only on hover/active */
+.actchip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-pill); font-size: 12px; font-weight: 600; color: var(--ink-2); flex: none; }
 .actchip :deep(.ico) { color: var(--muted); }
-.actchip:hover { border-color: var(--ai); color: var(--ai-ink); }
+.actchip:hover { border-color: var(--ai-border); background: var(--ai-softer); color: var(--ai-ink); }
 .actchip:hover :deep(.ico), .actchip.on :deep(.ico) { color: var(--ai); }
-.actchip.on { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
+.actchip.on { border-color: var(--ai); background: var(--ai-soft); color: var(--ai-ink); }
 .actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
 .actpop-enter-active, .actpop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .actpop-enter-from, .actpop-leave-to { opacity: 0; transform: translateY(8px); }
