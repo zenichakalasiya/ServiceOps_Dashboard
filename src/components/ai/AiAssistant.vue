@@ -13,7 +13,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
-import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
+import { routeIntent, tileFromText, factFromText, specFromText, resolveWidget, applyGroupBy, GROUP_DIMS, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
 import { chart, kpi, shortcut } from '../../data/mock.js'
@@ -330,22 +330,12 @@ const WIDGET_TYPES = [
 ]
 function preferType(id) { draft.value.preferKind = draft.value.preferKind === id ? null : id }
 
-// let the wording pick the form when the user hasn't
-function inferKind(text, spec) {
-  const t = text.toLowerCase()
-  if (/\b(kpi|headline|how many|total number|single number|counter)\b/.test(t)) return 'kpi'
-  if (/\b(list|table|records|rows|shortcut|worklist)\b/.test(t)) return 'shortcut'
-  return spec.chart.kind
-}
-function buildTileFrom(text, prefer) {
-  const spec = specFromText(text)
-  const kind = prefer || inferKind(text, spec)
-  const vals = spec.chart.series?.[0]?.values || []
-  const total = vals.reduce((a, b) => a + b, 0)
+// turn a resolved spec into a real tile of the right form
+function tileFromSpec(spec, text) {
   let tile
-  if (kind === 'kpi') {
-    tile = kpi(spec.title, total || 128, '', { dir: 'up', pct: 6 }, 'warn', text)
-  } else if (kind === 'shortcut') {
+  if (spec.kind === 'kpi') {
+    tile = kpi(spec.title, spec.total || 128, '', { dir: 'up', pct: 6 }, 'warn', text)
+  } else if (spec.kind === 'shortcut') {
     tile = shortcut(spec.title, ['Subject', 'Requester', 'Status', 'Priority'], [
       ['VPN down for finance team', 'Arnav Desai', 'In Progress', 'Urgent'],
       ['Email delivery delayed', 'Sarah Chen', 'Open', 'High'],
@@ -353,7 +343,7 @@ function buildTileFrom(text, prefer) {
       ['SSO login failing for HR', 'Rahul Shukla', 'Open', 'Medium'],
     ], text)
   } else {
-    tile = chart(spec.title, { ...spec.chart, kind }, text)
+    tile = chart(spec.title, { ...spec.chart, kind: spec.kind }, text)
   }
   tile.prov = 'user'
   tile._chips = spec.chips || []
@@ -408,12 +398,22 @@ function buildWidgetQueue(list, i, shortBy) {
     awaiting.value = 'dash-widget'
     return
   }
+  const spec = resolveWidget(list[i], draft.value.preferKind)
+  // it can't invent a grouping — pause the queue and ask, then resume
+  if (spec.missing.length) {
+    draft.value.pending = { list, i, shortBy, text: list[i], spec }
+    askGroupBy(spec, list.length > 1 ? `${i + 1} of ${list.length}` : '')
+    return
+  }
+  placeWidget(spec, list[i], list, i, shortBy)
+}
+function placeWidget(spec, text, list, i, shortBy) {
   const blk = push('cd-widget', {
     phase: 'thinking', tile: null, cfg: null, settled: false,
     idx: i + 1, total: list.length, last: i === list.length - 1 && shortBy === 0,
   })
   runThinking(blk, ['Reading what you want to show', 'Choosing the clearest way to draw it', 'Configuring and placing it'], () => {
-    const tile = buildTileFrom(list[i], draft.value.preferKind)
+    const tile = tileFromSpec(spec, text)
     const d = draft.value.dash
     d.tiles.push(tile); d.updated = new Date().toISOString()
     draft.value.built.push(tile)
@@ -421,6 +421,17 @@ function buildWidgetQueue(list, i, shortBy) {
     blk.cfg = tile.type === 'chart' ? configLines({ title: tile.title, chart: tile.chart, chips: tile._chips }) : null
     blk.settled = true
     setTimeout(() => buildWidgetQueue(list, i + 1, shortBy), 400)
+  })
+}
+// the one thing a description often leaves out: what to group by
+function askGroupBy(spec, progress) {
+  awaiting.value = null
+  push('ask', {
+    askId: 'wgroup', step: 1, total: 1, other: '',
+    q: `How should I group “${spec.title}”?`,
+    sub: `That's the one thing I can't read from your description${progress ? ` · widget ${progress}` : ''}.`,
+    options: GROUP_DIMS.slice(0, 6).map((d) => ({ label: `By ${d.label.toLowerCase()}`, value: d.id })),
+    otherPh: 'Or name another field…', skippable: false,
   })
 }
 function moreWidgets() { awaiting.value = 'dash-widget'; focusComposer() }
@@ -584,6 +595,15 @@ function answerAsk(b, opt, custom) {
   pushUser(b.answered)
   if (b.askId === 'cat') { draft.value.category = val === '__skip' ? '' : val; setTimeout(askVisibility, 350); return }
   if (b.askId === 'vis') { draft.value.access = val === '__skip' ? 'private' : val; setTimeout(finishDashboard, 400); return }
+  if (b.askId === 'wgroup') {
+    const p = draft.value.pending
+    if (!p) return
+    draft.value.pending = null
+    const dim = GROUP_DIMS.find((d) => d.id === val) || GROUP_DIMS.find((d) => d.label.toLowerCase() === String(val).toLowerCase())
+    const spec = dim ? applyGroupBy(p.spec, dim.id, p.text) : { ...p.spec, missing: [] }
+    setTimeout(() => placeWidget(spec, p.text, p.list, p.i, p.shortBy), 350)
+    return
+  }
   if (b.askId === 'wdash') {
     // "a new dashboard" with no name yet → ask for the name in the composer
     if (val === '__new') { awaiting.value = 'newboard-name'; focusComposer(); setTimeout(() => push('cw-newboard'), 250); return }

@@ -62,6 +62,130 @@ export function factFromText(board, text) {
   return { kind: 'breach', chip: 'My Open P1 Requests', text: 'P1 requests breaching SLA today', severity: 'bad' }
 }
 
+/* ============================================================================
+ * resolveWidget — turn a plain description into a REAL, configured widget.
+ *
+ * Reads the module, the filters, the grouping dimension, the time window and the
+ * form from the user's own words, then generates data shaped like that dimension
+ * (a priority split descends; a month series trends; a team split is uneven).
+ * Whatever it genuinely cannot infer comes back in `missing`, so the flow can ask
+ * instead of guessing. Deterministic: the same sentence always builds the same
+ * widget — a language model would only rephrase the title.
+ * ========================================================================== */
+export const GROUP_DIMS = [
+  { id: 'priority', label: 'Priority', labels: ['Low', 'Medium', 'High', 'Urgent'] },
+  { id: 'status', label: 'Status', labels: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'] },
+  { id: 'team', label: 'Team', labels: ['Helpdesk', 'Network', 'Apps', 'Infra', 'Field Ops'] },
+  { id: 'technician', label: 'Technician', labels: ['yash', 'Juli Gopani', 'ahmedraza', 'Keya', 'Stuti', 'Unassigned'] },
+  { id: 'category', label: 'Category', labels: ['Hardware', 'Software', 'Network', 'Access', 'Email'] },
+  { id: 'site', label: 'Site', labels: ['Ahmedabad', 'Pune', 'Bengaluru', 'Remote'] },
+  { id: 'month', label: 'Month', labels: MON },
+  { id: 'day', label: 'Day of week', labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] },
+]
+const DIM_RE = {
+  priority: /\bby priority|per priority|priority (?:split|breakdown|wise)|across priorit/i,
+  status: /\bby status|per status|status (?:split|breakdown|wise)/i,
+  team: /\bby team|per team|across teams|team ?wise|by group/i,
+  technician: /\bby (?:technician|assignee|agent|engineer)|per (?:technician|assignee|agent)|who is working/i,
+  category: /\bby category|per category|by type|category ?wise/i,
+  site: /\bby (?:site|location|office|region)|per (?:site|location|office)/i,
+  month: /\bby month|per month|monthly|over (?:the )?(?:last|past) \d+ months?|month ?wise|over time/i,
+  day: /\bby day|per day|daily|day of week|weekday/i,
+}
+const MODULES = [
+  { id: 'asset', label: 'Assets', re: /\basset|hardware|laptop|desktop|server|device|patch|vulnerab/i },
+  { id: 'change', label: 'Changes', re: /\bchange|release|deploy|rollout/i },
+  { id: 'problem', label: 'Problems', re: /\bproblem|root cause/i },
+  { id: 'task', label: 'Tasks', re: /\btask/i },
+  { id: 'request', label: 'Requests', re: /.*/ },
+]
+const FILTERS = [
+  { re: /overdue|past due/i, word: 'Overdue', chip: { field: 'Due', op: 'is', value: 'Overdue' } },
+  { re: /breach|\bsla\b/i, word: 'SLA-breaching', chip: { field: 'SLA', op: 'is', value: 'Breaching' } },
+  { re: /unassigned|no owner|nobody/i, word: 'Unassigned', chip: { field: 'Assignee', op: 'is', value: 'Unassigned' } },
+  { re: /\bp1\b|urgent|critical/i, word: 'Urgent', chip: { field: 'Priority', op: '=', value: 'Urgent' } },
+  { re: /\bopen\b|outstanding|backlog/i, word: 'Open', chip: { field: 'Status', op: '=', value: 'Open' } },
+  { re: /resolved|closed|completed/i, word: 'Resolved', chip: { field: 'Status', op: '=', value: 'Resolved' } },
+]
+const WINDOWS = [
+  { re: /today/i, value: 'Today' },
+  { re: /this week|last 7 days/i, value: 'This week' },
+  { re: /this month|last 30 days/i, value: 'Last 30 days' },
+  { re: /(?:last|past) (\d+) months?/i, value: (m) => `Last ${m[1]} months` },
+  { re: /this (?:quarter|year)/i, value: 'This year' },
+]
+// a stable pseudo-random from the text, so the same prompt always builds the same widget
+function seedOf(s) { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0x7fffffff; return h }
+function valuesFor(dimId, labels, seed) {
+  const r = (i) => (seed >> (i % 11)) * (i + 7) % 97
+  if (dimId === 'priority') return labels.map((_, i) => Math.max(6, 130 - i * 34 + (r(i) % 17)))
+  if (dimId === 'status') return [96, 54, 30, 42, 26].map((v, i) => Math.max(5, v + (r(i) % 15) - 7))
+  if (dimId === 'month' || dimId === 'day') {
+    let v = 90 + (seed % 60)
+    return labels.map((_, i) => { v = Math.max(12, v + ((r(i) % 29) - 12)); return v })
+  }
+  // team / technician / category / site — an uneven spread with a clear leader
+  return labels.map((_, i) => Math.max(3, 62 - i * 8 + (r(i) % 21)))
+}
+function detectDim(t) { return GROUP_DIMS.find((d) => DIM_RE[d.id] && DIM_RE[d.id].test(t)) || null }
+function detectForm(t, dim) {
+  if (/\bkpi\b|headline|how many|total number|single number|counter|^count\b/i.test(t)) return 'kpi'
+  if (/\blist\b|\btable\b|records|rows|worklist|shortcut/i.test(t)) return 'shortcut'
+  if (dim && (dim.id === 'month' || dim.id === 'day')) return 'line'
+  if (/trend|over time|growth/i.test(t)) return 'line'
+  if (/share|split|proportion|breakdown|percentage|pie|doughnut|donut/i.test(t)) return 'donut'
+  if (dim && dim.id === 'priority') return 'donut'
+  return 'bar'
+}
+export function resolveWidget(text, preferKind) {
+  const t = String(text || '').trim()
+  const mod = MODULES.find((m) => m.re.test(t))
+  const filters = FILTERS.filter((f) => f.re.test(t))
+  const dim = detectDim(t)
+  const form = preferKind || detectForm(t, dim)
+  const winHit = WINDOWS.find((w) => w.re.test(t))
+  const win = winHit ? (typeof winHit.value === 'function' ? winHit.value(t.match(winHit.re)) : winHit.value) : null
+  const measure = [...new Set(filters.map((f) => f.word))].join(' ')
+  const subject = `${measure} ${mod.label}`.trim()
+  const needsGroup = ['bar', 'hbar', 'line', 'donut'].includes(form)
+  const missing = needsGroup && !dim ? ['groupBy'] : []
+
+  const chips = [
+    { field: 'Module', op: '=', value: mod.label },
+    ...filters.map((f) => f.chip),
+    win ? { field: 'Created date', op: 'in', value: win } : null,
+    dim ? { field: 'Group by', op: '', value: dim.label } : null,
+  ].filter(Boolean)
+
+  const title = dim
+    ? `${subject} by ${dim.label.toLowerCase()}`
+    : form === 'kpi' ? subject : `${subject}${win ? ` · ${win.toLowerCase()}` : ''}`
+
+  const spec = {
+    title, kind: form, module: mod.label, groupBy: dim ? dim.id : null,
+    window: win, filters, chips, missing,
+    why: form === 'line' ? 'A line chart shows movement over time.'
+      : form === 'donut' ? 'A doughnut shows parts of a whole.'
+      : form === 'kpi' ? 'A single number, when the level is what matters.'
+      : form === 'shortcut' ? 'The records themselves, as a list you can act on.'
+      : 'A column chart compares one value across named groups.',
+  }
+  if (dim) {
+    const seed = seedOf(t + dim.id)
+    spec.chart = { kind: form === 'kpi' || form === 'shortcut' ? 'bar' : form, labels: [...dim.labels], series: [{ name: subject || 'Count', values: valuesFor(dim.id, dim.labels, seed) }] }
+    spec.total = spec.chart.series[0].values.reduce((a, b) => a + b, 0)
+  }
+  return spec
+}
+// apply an answer for something the description didn't say
+export function applyGroupBy(spec, dimId, text) {
+  const dim = GROUP_DIMS.find((d) => d.id === dimId)
+  if (!dim) return spec
+  const next = resolveWidget(`${text} by ${dim.label}`, spec.kind)
+  next.missing = []
+  return next
+}
+
 // ---- P4: description → widget spec, grounded to the catalog (no-LLM matcher) ----
 const clone = (o) => JSON.parse(JSON.stringify(o))
 const SPECS = {
