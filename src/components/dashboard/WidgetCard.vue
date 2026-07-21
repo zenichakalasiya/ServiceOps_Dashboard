@@ -256,8 +256,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
     <teleport to="body">
       <transition name="fade">
         <span v-if="infoHover" class="tt info-tt" :style="{ top: infoPos.top + 'px', left: infoPos.left + 'px' }">
-          <b class="tt-prov">{{ provMeta.label }}</b>
-          <span v-if="tile.info" class="tt-desc">{{ tile.info }}</span>
+          <!-- description leads; provenance rides below it as a pill -->
+          <span class="tt-desc">{{ tile.info || 'No description has been added for this widget yet.' }}</span>
+          <span class="tt-tag" :class="prov">{{ provMeta.label }}</span>
         </span>
       </transition>
     </teleport>
@@ -417,13 +418,15 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .tile:hover .draghandle { opacity: 1; }
 .pinbadge { display: inline-grid; place-items: center; color: var(--primary); flex: none; transform: rotate(35deg); }
 .title { font-weight: 600; font-size: var(--tile-title, 13.5px); }
-/* provenance + description shown in the info-icon tooltip */
-.tt-prov { display: block; font-weight: 600; color: #fff; }
-.tt-desc { display: block; font-weight: 400; margin-top: 4px; color: rgba(255,255,255,.78); }
+/* info-icon tooltip: the DESCRIPTION leads, provenance sits under it as a left-aligned pill */
+.tt-desc { font-weight: 400; color: rgba(255,255,255,.88); line-height: 1.45; }
+.tt-tag { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .2px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); color: #fff; }
+.tt-tag.predefined { background: rgba(139,92,246,.3); border-color: rgba(139,92,246,.55); color: #ded3ff; }
+.tt-tag.shared { background: rgba(76,177,254,.26); border-color: rgba(76,177,254,.5); color: #cfe8ff; }
 .info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; opacity: 0; transition: opacity .14s; }
 .tile:hover .info { opacity: 1; }
 .info:hover { color: var(--primary); }
-.info-tt { position: fixed; z-index: 200; width: 240px; }
+.info-tt { position: fixed; z-index: 200; width: 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .right { display: flex; align-items: center; gap: 1px; opacity: 0; transition: opacity .14s; }
 .tile:hover .right, .tile.searching .right { opacity: 1; }
 .ti { width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; }

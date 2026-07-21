@@ -285,6 +285,132 @@ function chartSummary(ch, series, labels) {
   return `${labels[maxI] || 'The top category'} is highest at ${fmt(v[maxI])} (${topPct}% of ${fmt(total)}) across ${labels.length} categories${nonZero < labels.length ? `, though only ${nonZero} have any activity` : ''}.`
 }
 
+// Detect a semantic dimension from a chart's labels, so the explanation can REASON
+// about it (priority breaches fastest, status = working backlog), not just recite %.
+function semanticKind(labels) {
+  const s = labels.map((l) => String(l).toLowerCase())
+  if (s.some((l) => /\b(urgent|high|medium|low)\b|\bp[1-4]\b/.test(l))) return 'priority'
+  if (s.some((l) => /open|in progress|pending|resolved|closed|on hold|new/.test(l))) return 'status'
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// explainTile — the deep, reasoned answer for ANY widget (KPI / chart / shortcut).
+// Returns { tile, anomaly, lines[] }: a few grounded sentences that state the number,
+// break down the shape of the data, and REASON about what it means — the substance
+// behind "Explain …". Everything is computed here; a language model would only rephrase.
+// ---------------------------------------------------------------------------
+export function explainTile(tile) {
+  const t = tile || {}
+  const u = t.unit || ''
+  const fmt = (n) => (Math.round(n * 10) / 10).toLocaleString()
+  const out = []
+
+  // ---- KPI ----
+  if (t.type === 'kpi') {
+    const a = anomalyFor(t)
+    const wow = t.delta ? `, ${t.delta.dir === 'up' ? 'up' : t.delta.dir === 'down' ? 'down' : 'flat'} ${t.delta.pct}% vs last week` : ''
+    out.push(`${t.title} is currently ${t.value}${u}${wow}.`)
+    if (a) {
+      out.push(`That's ${a.pctVsMean > 0 ? 'well above' : 'well below'} its usual ~${a.mean}${u} — a ${a.pctVsMean > 0 ? '+' : ''}${a.pctVsMean}% deviation.`)
+      out.push(`Reasoning: across the last ${(t.history || []).length} periods it moved around ${a.mean}${u}; ${t.value}${u} is about ${Math.abs(a.z)}× the normal week-to-week swing, which is why it reads as a real anomaly and not routine noise.`)
+      out.push(t.status === 'bad' ? 'Given its status, act on this now — start with the records behind it.' : 'Worth a look to confirm it isn’t the start of a trend.')
+    } else if (Array.isArray(t.history) && t.history.length >= 4) {
+      const mean = Math.round(t.history.reduce((s, x) => s + x, 0) / t.history.length)
+      out.push(`Its recent baseline is about ${mean}${u}, so ${t.value}${u} sits inside the normal week-to-week range — no anomaly here.`)
+      out.push(t.status === 'bad' ? 'It’s still flagged for attention, so keep it on your radar even though the movement itself is routine.' : t.status === 'warn' ? 'It’s in a watch state — close to the edge, but nothing is breaking pattern.' : 'Nothing here needs action right now.')
+    } else {
+      out.push(t.status === 'bad' ? 'It’s flagged as needing attention — this is one to act on rather than watch.' : t.status === 'warn' ? 'It’s in a watch state; keep an eye on it.' : 'It’s reading healthy.')
+    }
+    if (t.info) out.push(`For context, this counts ${String(t.info).replace(/\.$/, '').replace(/^[A-Z]/, (c) => c.toLowerCase())}.`)
+    return { tile: t, anomaly: a, lines: out }
+  }
+
+  // ---- SHORTCUT (record list) ----
+  if (t.type === 'shortcut') {
+    const rows = t.rows || [], cols = t.columns || []
+    const prIdx = cols.indexOf('Priority'), stIdx = cols.indexOf('Status')
+    out.push(`${t.title} lists ${rows.length} record${rows.length === 1 ? '' : 's'} right now.`)
+    if (prIdx >= 0) {
+      const byPr = {}
+      rows.forEach((r) => { const p = (r[prIdx] || '').trim(); if (p) byPr[p] = (byPr[p] || 0) + 1 })
+      const top = Object.entries(byPr).sort((a, b) => b[1] - a[1])
+      if (top.length) out.push(`By priority: ${top.map(([k, v]) => `${v} ${k}`).join(', ')}.`)
+      const urgent = rows.filter((r) => /p1|urgent/i.test(r[prIdx] || '')).length
+      if (urgent) out.push(`Reasoning: the ${urgent} highest-priority item${urgent === 1 ? '' : 's'} ${urgent === 1 ? 'is' : 'are'} what to clear first — they carry the tightest SLAs.`)
+    }
+    if (stIdx >= 0) {
+      const open = rows.filter((r) => /^open$|new/i.test((r[stIdx] || '').trim())).length
+      const prog = rows.filter((r) => /in progress|active/i.test(r[stIdx] || '')).length
+      if (open || prog) out.push(`${prog} already in progress, ${open} not yet started.`)
+    }
+    return { tile: t, anomaly: null, lines: out }
+  }
+
+  // ---- CHART ----
+  const ch = t.chart || {}
+  const series = ch.series || [], labels = ch.labels || []
+  const sem = semanticKind(labels)
+
+  // part-to-whole (pie / donut / funnel)
+  if (['pie', 'donut', 'funnel', 'pyramid'].includes(ch.kind)) {
+    const vals = series[0]?.values || []
+    const total = vals.reduce((a, b) => a + b, 0)
+    if (!total) { out.push(`${t.title} has no data in the current range.`); return { tile: t, anomaly: null, lines: out } }
+    const idx = vals.map((v, i) => i).sort((a, b) => vals[b] - vals[a])
+    const pct = (i) => Math.round((vals[i] / total) * 100)
+    const lead = idx[0], second = idx[1], last = idx[idx.length - 1]
+    out.push(`${t.title} splits ${fmt(total)} across ${idx.length} ${sem || 'categories'}.`)
+    out.push(`${labels[lead]} leads at ${pct(lead)}% (${fmt(vals[lead])})${second != null && vals[second] ? `, then ${labels[second]} at ${pct(second)}%` : ''}; the smallest is ${labels[last]} at ${pct(last)}%.`)
+    const topK = Math.min(3, idx.length)
+    const cumPct = Math.round((idx.slice(0, topK).reduce((s, i) => s + vals[i], 0) / total) * 100)
+    if (idx.length > 3) out.push(`The top ${topK} account for ${cumPct}% — ${cumPct >= 75 ? 'so a handful of categories drive the whole picture' : 'the load is fairly evenly spread'}.`)
+    if (sem === 'priority') {
+      const hi = labels.map((l, i) => ({ l: String(l).toLowerCase(), i })).filter((x) => /urgent|high|p1|p2/.test(x.l))
+      const hiPct = Math.round((hi.reduce((s, x) => s + vals[x.i], 0) / total) * 100)
+      out.push(`Reasoning: ${hiPct}% sits in the higher priorities (${hi.map((x) => labels[x.i]).join(' + ') || 'none'}). ${hiPct <= 25 ? 'That’s a healthy shape — most volume is low-priority, and the higher-priority slice is the one to watch since it breaches fastest.' : 'That’s a heavier high-priority load than ideal, so expect SLA pressure.'}`)
+    } else if (sem === 'status') {
+      const openish = labels.map((l, i) => ({ l: String(l).toLowerCase(), i })).filter((x) => /open|in progress|pending|new/.test(x.l))
+      const openPct = Math.round((openish.reduce((s, x) => s + vals[x.i], 0) / total) * 100)
+      out.push(`Reasoning: ${openPct}% is still in flight (${openish.map((x) => labels[x.i]).join(', ')}) — that’s the live backlog, versus the resolved/closed share that’s already cleared.`)
+    }
+    return { tile: t, anomaly: null, lines: out }
+  }
+
+  // multi-series bar/line
+  if (series.length >= 2) {
+    const tot = (s) => (s.values || []).reduce((a, b) => a + b, 0)
+    const sorted = [...series].sort((a, b) => tot(b) - tot(a))
+    const hi = sorted[0], lo = sorted[sorted.length - 1]
+    out.push(`${t.title} compares ${series.length} series across ${labels.length} points.`)
+    out.push(`${hi.name} carries the most overall (${fmt(tot(hi))}); ${lo.name} the least (${fmt(tot(lo))}).`)
+    let gapAt = 0, gapVal = -1
+    labels.forEach((_, i) => { const g = Math.abs((series[0].values?.[i] || 0) - (series[1].values?.[i] || 0)); if (g > gapVal) { gapVal = g; gapAt = i } })
+    if (gapVal > 0 && labels[gapAt]) out.push(`Reasoning: the series pull apart the most at ${labels[gapAt]} — that’s where the difference is worth a look.`)
+    return { tile: t, anomaly: null, lines: out }
+  }
+
+  // single-series
+  const s = series[0]
+  if (!s || !(s.values || []).some((v) => v)) { out.push(`${t.title} has no data in the current range.`); return { tile: t, anomaly: null, lines: out } }
+  const v = s.values, total = v.reduce((a, b) => a + b, 0)
+  const maxI = v.indexOf(Math.max(...v))
+  if (['line', 'area'].includes(ch.kind)) {
+    const first = v[0], lastv = v[v.length - 1]
+    const dir = lastv > first ? 'risen' : lastv < first ? 'fallen' : 'held flat'
+    const chg = first ? Math.round(((lastv - first) / first) * 100) : 0
+    out.push(`${t.title}: ${s.name} has ${dir}${dir !== 'held flat' ? ` ${Math.abs(chg)}%` : ''} over ${v.length} points, from ${fmt(first)} to ${fmt(lastv)}, peaking at ${fmt(v[maxI])}${labels[maxI] ? ` (${labels[maxI]})` : ''}.`)
+    out.push(`Reasoning: ${dir === 'risen' ? 'the upward slope means volume is building — worth getting ahead of.' : dir === 'fallen' ? 'the downward slope means it’s easing off.' : 'it’s stable, so there’s no trend to chase.'}`)
+    return { tile: t, anomaly: null, lines: out }
+  }
+  const topPct = Math.round((v[maxI] / total) * 100)
+  const nonZero = v.filter((x) => x > 0).length
+  out.push(`${t.title}: ${labels[maxI]} is highest at ${fmt(v[maxI])} (${topPct}% of ${fmt(total)}) across ${labels.length} categories.`)
+  if (nonZero < labels.length) out.push(`Only ${nonZero} of ${labels.length} categories have any activity in this range.`)
+  out.push(`Reasoning: ${topPct >= 40 ? `${labels[maxI]} dominates, so it’s the main driver here.` : 'the load is spread across several categories rather than concentrated in one.'}`)
+  return { tile: t, anomaly: null, lines: out }
+}
+
 // ---------------------------------------------------------------------------
 // "What changed since your last visit" — grounded in each KPI's own delta + status,
 // plus a worklist change. A fixed last-visit label keeps the demo honest without a clock.
@@ -366,16 +492,23 @@ function actionsFor(fact) {
 // no worklist behind it. Returns an array of sentences so the UI can render them as prose.
 export function drillNarrative(board, fact) {
   const wl = board.tiles.find((t) => t.type === 'shortcut')
-  const anomaly = fact.kind === 'anomaly' ? anomalyFor(board.tiles.find((t) => t.id === fact.tileId)) : null
+  const factTile = board.tiles.find((t) => t.id === fact.tileId)
   const out = []
 
-  // Lead with the "why" when this is an anomaly, so Investigate also answers Explain.
-  if (anomaly) out.push(anomaly.text)
+  // Lead with the metric's OWN reasoning — so investigating a KPI or chart answers with
+  // that widget's actual numbers, not only the worklist. (Skip when the fact IS a worklist.)
+  if (factTile && factTile.type !== 'shortcut') {
+    out.push(...explainTile(factTile).lines.slice(0, 2))
+  } else if (fact.kind === 'anomaly') {
+    const a = anomalyFor(factTile)
+    if (a) out.push(a.text)
+  }
 
   if (!wl) {
-    out.push('There is no record list behind this metric to open, so act on it from its source module.')
+    if (!out.length) out.push('There is no record list behind this metric to open, so act on it from its source module.')
     return out
   }
+  const relatedList = factTile && factTile.type !== 'shortcut'   // records come from a *related* list, not this tile
   const cols = wl.columns
   const iOf = (c) => cols.indexOf(c)
   const prIdx = iOf('Priority'), stIdx = iOf('Status'), dueIdx = iOf('Due'), subjIdx = iOf('Subject'), reqIdx = iOf('Requester')
@@ -390,7 +523,8 @@ export function drillNarrative(board, fact) {
   const open = stIdx >= 0 ? scoped.filter((r) => /^open$/i.test((r[stIdx] || '').trim())).length : 0
 
   // Sentence 1 — the shape of the record set.
-  const parts = [`${scoped.length} record${scoped.length === 1 ? '' : 's'} sit behind this in “${wl.title}”`]
+  const lead = relatedList ? `The closest record list, “${wl.title}”, holds ${scoped.length} item${scoped.length === 1 ? '' : 's'}` : `${scoped.length} record${scoped.length === 1 ? '' : 's'} sit behind this in “${wl.title}”`
+  const parts = [lead]
   if (p1) parts.push(`${p1} at P1`)
   if (dueToday.length) parts.push(`${dueToday.length} due today`)
   out.push(parts.join(', ') + '.')
