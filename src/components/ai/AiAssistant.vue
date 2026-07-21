@@ -175,6 +175,9 @@ function pushNote(text) {
 }
 // ---- P4 conversational CREATE flow (Generate with AI) ----
 const draft = ref({})
+// which create-flow step is waiting on the main composer (no inline inputs — the
+// user always writes in the one field at the bottom, guided by what the AI just said)
+const awaiting = ref(null)
 function push(kind, extra = {}) { thread.value.push({ id: ++bid, kind, ...extra }); scrollDown(); return thread.value[thread.value.length - 1] }
 const VIS = [{ v: 'public', label: 'Public — everyone' }, { v: 'private', label: 'Private — just me' }, { v: 'restricted', label: 'Restricted — chosen people' }]
 const otherBoards = () => store.dashboards.filter((d) => !d.archived)
@@ -244,10 +247,12 @@ function planFromIntent(text) {
 }
 
 // ---- dashboard flow ----
-function startDash() { draft.value = { mode: 'dash' }; push('cd-intent', { text: '' }) }
-function useDashPrompt(b) { b.text = DASH_PROMPT_TEMPLATE }
-function dashIntent(b) {
-  const t = (b.text || '').trim(); if (!t) return
+function focusComposer() { nextTick(() => inputEl.value?.focus()) }
+function startDash() { draft.value = { mode: 'dash' }; push('cd-intent'); awaiting.value = 'dash-intent'; focusComposer() }
+function useDashPrompt() { input.value = DASH_PROMPT_TEMPLATE; focusComposer() }
+function dashIntent(text) {
+  const t = (text || '').trim(); if (!t) return
+  awaiting.value = null
   pushUser(t)
   const nm = nameFromIntent(t)
   draft.value = { ...draft.value, mode: 'dash', intent: t, name: nm.name, namedByAi: nm.ours, category: categoryFromIntent(t) }
@@ -257,13 +262,16 @@ function dashIntent(b) {
     blk.namedByAi = draft.value.namedByAi
     blk.plan = planFromIntent(t)
     blk.settled = true
-    setTimeout(askCategory, 650)
+    // hand the floor back: refine by typing, or continue to the two questions
+    awaiting.value = 'dash-refine'
   })
 }
 // the user wants to refine before we commit
-function refineDash(b) { const t = (b.more || '').trim(); if (!t) return; b.more = ''; pushUser(t); dashIntent({ text: `${draft.value.intent}. Also: ${t}` }) }
+function refineDash(text) { const t = (text || '').trim(); if (!t) return; dashIntent(`${draft.value.intent}. Also: ${t}`) }
+function continueDash() { awaiting.value = null; askCategory() }
 
 function askCategory() {
+  awaiting.value = null
   const cats = (store.categories || []).filter(Boolean).slice(0, 4)
   push('ask', {
     askId: 'cat', step: 1, total: 2, other: '',
@@ -274,6 +282,7 @@ function askCategory() {
   })
 }
 function askVisibility() {
+  awaiting.value = null
   push('ask', {
     askId: 'vis', step: 2, total: 2, other: '',
     q: 'Who should be able to see it?',
@@ -297,10 +306,11 @@ function createTheDashboard() {
 }
 
 // ---- widget flow (same shape, reachable on its own or straight after a board) ----
-function startWidget() { draft.value = { ...draft.value, mode: 'widget' }; push('cw-intent', { text: '' }) }
-function useWidgetPrompt(b) { b.text = WIDGET_PROMPT_TEMPLATE }
-function widgetIntent(b) {
-  const t = (b.text || '').trim(); if (!t) return
+function startWidget() { draft.value = { ...draft.value, mode: 'widget' }; push('cw-intent'); awaiting.value = 'widget-intent'; focusComposer() }
+function useWidgetPrompt() { input.value = WIDGET_PROMPT_TEMPLATE; focusComposer() }
+function widgetIntent(text) {
+  const t = (text || '').trim(); if (!t) return
+  awaiting.value = null
   pushUser(t)
   draft.value.intent = t
   const blk = push('cw-picks', { phase: 'thinking', picks: [], settled: false })
@@ -318,6 +328,7 @@ function widgetPicks(text) {
 }
 function pickWidget(p) { draft.value.pick = p; pushUser(p.title); setTimeout(askWidgetWhere, 300) }
 function askWidgetWhere() {
+  awaiting.value = null
   const cur = draft.value.dash
   const boards = otherBoards().filter((d) => d.id !== cur?.id).slice(0, 3)
   const needsType = draft.value.pick.type !== 'chart'
@@ -333,6 +344,7 @@ function askWidgetWhere() {
   })
 }
 function askWidgetType() {
+  awaiting.value = null
   push('ask', {
     askId: 'wtype', step: 2, total: 2, other: '',
     q: 'Want to visualise it as a chart instead?',
@@ -522,7 +534,13 @@ const activeAction = ref(null)    // the picked command — shows as a chip in t
 const showSuggest = ref(false)    // its suggestion list; hides as soon as the user types
 const inputEl = ref(null)
 
-const placeholder = computed(() => activeAction.value?.placeholder || DEFAULT_PH)
+// the composer speaks for whatever the flow is waiting on
+const AWAIT_PH = {
+  'dash-intent': 'Describe what this dashboard is for…',
+  'dash-refine': 'Tell me what to add or change…',
+  'widget-intent': 'Describe the widget and the data it should show…',
+}
+const placeholder = computed(() => AWAIT_PH[awaiting.value] || activeAction.value?.placeholder || DEFAULT_PH)
 // exactly one popup at a time: the palette wins, else the picked command's suggestions
 const popupOpen = computed(() => cmdOpen.value || !!(activeAction.value && showSuggest.value))
 // typing "/find" filters the palette down as you go
@@ -572,6 +590,10 @@ function submit() {
   input.value = ''
   showSuggest.value = false
   activeAction.value = null
+  // a create-flow step is waiting on this message — it owns the input
+  if (awaiting.value === 'dash-intent') { dashIntent(text); return }
+  if (awaiting.value === 'dash-refine') { refineDash(text); return }
+  if (awaiting.value === 'widget-intent') { widgetIntent(text); return }
   pushUser(cmd ? `${cmd.label}: ${text}` : text)
   dispatch(cmd ? CMD_INTENT[cmd.key] : routeIntent(text), text)
 }
@@ -798,16 +820,11 @@ watch(() => props.role, () => {
         <!-- dashboard: state the intent (AI leads, user writes freely) -->
         <template v-else-if="b.kind === 'cd-intent'">
           <div class="blk-h"><Icon name="layout" :size="14" /> New dashboard</div>
-          <p class="say">Tell me what this dashboard is <b>for</b> — the question you want it to answer every morning. I’ll pick the widgets, and if you don’t name it, I’ll name it for you.</p>
-          <div class="formrow">
-            <input class="fin" v-model="b.text" placeholder="e.g. a board for my team’s SLA breaches and overdue work" @keyup.enter="dashIntent(b)" />
-            <button class="mini-cta" :disabled="!b.text.trim()" @click="dashIntent(b)">Build <Icon name="chevron-right" :size="13" /></button>
+          <p class="say">Tell me what this dashboard is <b>for</b> — the question you want it to answer every morning. Write it in the box below and I’ll draft it; if you don’t name it, I’ll name it for you.</p>
+          <div class="chipsrow mini">
+            <button v-for="s in DASH_STARTERS" :key="s" class="sg" @click="dashIntent(s)">{{ s }}</button>
           </div>
-          <div class="sub-h">Or start from one of these</div>
-          <div class="chipsrow">
-            <button v-for="s in DASH_STARTERS" :key="s" class="sg" @click="b.text = s; dashIntent(b)">{{ s }}</button>
-          </div>
-          <button class="lnk-row" @click="useDashPrompt(b)"><Icon name="wand" :size="13" /> Not sure how to phrase it? Write the prompt for me</button>
+          <button class="lnk-row" @click="useDashPrompt()"><Icon name="wand" :size="13" /> Write the prompt for me</button>
         </template>
 
         <!-- dashboard: what the AI drafted, with the name it chose highlighted -->
@@ -821,10 +838,9 @@ watch(() => props.role, () => {
             I’ve called it <b class="nm">{{ b.name }}</b>
             <span v-if="b.namedByAi" class="nm-note">— my suggestion, rename it any time.</span>
           </p>
-          <div class="sub-h">Anything missing?</div>
-          <div class="formrow">
-            <input class="fin" v-model="b.more" placeholder="Add anything I’ve missed and I’ll fold it in…" @keyup.enter="refineDash(b)" />
-            <button class="mini-cta" :disabled="!(b.more || '').trim()" @click="refineDash(b)">Improve <Icon name="chevron-right" :size="13" /></button>
+          <div class="chipsrow mini">
+            <button class="sg go" @click="continueDash()">Looks good — continue</button>
+            <button class="sg" @click="focusComposer()">Something’s missing</button>
           </div>
         </template>
 
@@ -841,16 +857,11 @@ watch(() => props.role, () => {
         <!-- widget: state the intent -->
         <template v-else-if="b.kind === 'cw-intent'">
           <div class="blk-h"><Icon name="chart-bar" :size="14" /> New widget</div>
-          <p class="say">Describe what it should show and which data it should come from{{ draft.dash ? ` on “${draft.dash.name}”` : '' }} — I’ll configure it.</p>
-          <div class="formrow">
-            <input class="fin" v-model="b.text" placeholder="e.g. SLA breaches this week, grouped by team" @keyup.enter="widgetIntent(b)" />
-            <button class="mini-cta" :disabled="!b.text.trim()" @click="widgetIntent(b)">Build <Icon name="chevron-right" :size="13" /></button>
+          <p class="say">Describe what it should show and which data it should come from{{ draft.dash ? ` on “${draft.dash.name}”` : '' }} — write it below and I’ll configure it.</p>
+          <div class="chipsrow mini">
+            <button v-for="s in WIDGET_STARTERS" :key="s" class="sg" @click="widgetIntent(s)">{{ s }}</button>
           </div>
-          <div class="sub-h">Or start from one of these</div>
-          <div class="chipsrow">
-            <button v-for="s in WIDGET_STARTERS" :key="s" class="sg" @click="b.text = s; widgetIntent(b)">{{ s }}</button>
-          </div>
-          <button class="lnk-row" @click="useWidgetPrompt(b)"><Icon name="wand" :size="13" /> Write the prompt for me</button>
+          <button class="lnk-row" @click="useWidgetPrompt()"><Icon name="wand" :size="13" /> Write the prompt for me</button>
         </template>
 
         <!-- widget: the ways we could build it -->
@@ -928,18 +939,16 @@ watch(() => props.role, () => {
            avoids two sibling transitions racing each other on rapid toggles. -->
       <transition name="actpop">
         <div v-if="popupOpen" class="actpop" :class="{ cmdpop: cmdOpen }">
-          <!-- command palette (from + or typing "/") -->
+          <!-- command palette (from + or typing "/") — icon + name, nothing else -->
           <template v-if="cmdOpen">
-            <div class="actpop-h"><Icon name="bolt" :size="14" /> Commands<span class="cmd-tip">↑↓ then ↵</span><button class="apx" @click="cmdOpen = false"><Icon name="x" :size="14" /></button></div>
             <button
               v-for="(a, i) in cmdList" :key="a.key" class="cmditem" :class="{ sel: i === cmdIndex }"
               @click="pickCommand(a)" @mouseenter="cmdIndex = i"
             >
-              <span class="cmd-ic"><Icon :name="a.icon" :size="15" /></span>
+              <Icon :name="a.icon" :size="15" />
               <span class="cmd-l">{{ a.label }}</span>
-              <span class="cmd-h">{{ a.hint }}</span>
             </button>
-            <div v-if="!cmdList.length" class="cmd-none">No command matches “{{ slashQuery }}”</div>
+            <div v-if="!cmdList.length" class="cmd-none">No match for “{{ slashQuery }}”</div>
           </template>
 
           <!-- the picked command's suggestions — fade out once the user writes their own -->
@@ -1199,15 +1208,15 @@ tr:last-child td { border-bottom: none; }
 .fu:hover .fu-arrow { color: var(--ai); }
 /* footer input */
 .af { border-top: 1px solid var(--border); padding: 10px 14px 12px; }
-/* command palette (from the + button, or by typing "/") */
-.cmd-tip { margin-left: auto; margin-right: 8px; font-size: 9.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted-2); }
-.cmditem { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; border-radius: 8px; padding: 8px 9px; cursor: pointer; }
+/* command palette — compact: icon + name, sized to its content, not the panel */
+.actpop.cmdpop { width: max-content; min-width: 168px; max-width: 230px; padding: 5px; }
+.cmditem { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; border: none; background: transparent; border-radius: 7px; padding: 7px 9px; cursor: pointer; }
+.cmditem :deep(.ico) { color: var(--muted); flex: none; }
 .cmditem.sel { background: var(--ai-softer); }
-.cmd-ic { width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center; background: var(--ai-soft); color: var(--ai); }
-.cmditem.sel .cmd-ic { background: var(--ai-grad); color: #fff; }
-.cmd-l { font-size: 12.5px; font-weight: 600; color: var(--ink); flex: none; }
-.cmd-h { font-size: 11px; color: var(--muted); margin-left: auto; text-align: right; }
-.cmd-none { padding: 10px 9px; font-size: 12px; color: var(--muted); }
+.cmditem.sel :deep(.ico) { color: var(--ai); }
+.cmd-l { font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.cmditem.sel .cmd-l { color: var(--ai-ink); font-weight: 600; }
+.cmd-none { padding: 9px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .actpop { border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-pop); padding: 8px; margin-bottom: 9px; }
 .actpop-enter-active, .actpop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .actpop-enter-from, .actpop-leave-to { opacity: 0; transform: translateY(8px); }
@@ -1221,6 +1230,11 @@ tr:last-child td { border-bottom: none; }
 .actprompt:hover :deep(.ico) { color: var(--ai); }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .sg { border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
+/* minimal suggestive actions — plain outline; the AI accent only on hover */
+.chipsrow.mini { gap: 6px; margin-bottom: 6px; }
+.chipsrow.mini .sg { background: transparent; border-color: var(--border); color: var(--ink-2); font-size: 11.5px; padding: 5px 11px; font-weight: 500; text-align: left; }
+.chipsrow.mini .sg:hover { border-color: var(--ai); background: var(--ai-softer); color: var(--ai-ink); }
+.chipsrow.mini .sg.go { border-color: var(--ai); color: var(--ai-ink); font-weight: 600; }
 .sg:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); }
 /* composer — a light sweep rides the top edge so the field reads as "live" */
 .inbox { position: relative; display: flex; align-items: center; gap: 6px; min-height: 46px; border: 1px solid var(--ai-border); border-radius: 12px; padding: 6px 6px 6px 7px; background: var(--surface); }
