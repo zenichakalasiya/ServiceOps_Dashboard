@@ -32,18 +32,23 @@ export const SUGGESTIONS = [
 // ---- intent routing (keyword-based; a small on-prem model swaps in later) ----
 export function routeIntent(text) {
   const t = text.toLowerCase().trim()
-  if (/^create|^build|^make|^add |describe|new widget|\bby (team|priority|type|month|day)\b|\btrend\b/.test(t)) return 'create'
-  if (/\bwhy\b|explain|anomal|spike|spiked|drop|surge|cause/.test(t)) return 'explain'
-  if (/breach|overdue|\blist\b|\bshow\b|which|drill|\bp1\b|due today|records/.test(t)) return 'drill'
-  if (/attention|summar|focus|urgent|going on|what.?s wrong|status|overview/.test(t)) return 'summary'
-  return 'summary'
+  // "create" must need a build verb — matching a bare "by priority" used to hijack
+  // "explain the trend in Open Requests By Priority" into the widget builder.
+  if (/^(create|build|make|add|generate|draft)\b|new widget|a widget|widget for|trend chart|chart (of|for)/.test(t)) return 'create'
+  if (/investigate|breach|overdue|\blist\b|\bshow\b|which|drill|\bp1\b|due today|records|top offenders/.test(t)) return 'drill'
+  if (/\bwhy\b|explain|anomal|spike|spiked|drop|surge|cause|\btrend\b|\bhow\b|tell me about|break ?down/.test(t)) return 'explain'
+  if (/attention|summar|focus|going on|what.?s wrong|status|overview/.test(t)) return 'summary'
+  return 'explain'   // a question about a widget explains it, rather than dumping a generic summary
 }
 
 // ---- explain / drill helpers: figure out which tile a prompt is about ----
 export function tileFromText(board, text) {
   const t = (text || '').toLowerCase()
-  return board.tiles.find((x) => x.title && t.includes(x.title.toLowerCase()))
-    || board.tiles.find((x) => x.metric && t.includes(x.metric))
+  // Prefer the MOST SPECIFIC title match: "Open Requests By Priority" must win over
+  // "Open Requests", or explaining a chart silently explains the KPI beside it.
+  const hits = board.tiles.filter((x) => x.title && t.includes(x.title.toLowerCase()))
+  if (hits.length) return hits.sort((a, b) => b.title.length - a.title.length)[0]
+  return board.tiles.find((x) => x.metric && t.includes(x.metric))
     || anomalies(board)[0]?.tile
     || board.tiles.find((x) => x.type === 'kpi')
 }

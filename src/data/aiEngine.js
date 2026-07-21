@@ -360,7 +360,7 @@ export function explainTile(tile) {
     const idx = vals.map((v, i) => i).sort((a, b) => vals[b] - vals[a])
     const pct = (i) => Math.round((vals[i] / total) * 100)
     const lead = idx[0], second = idx[1], last = idx[idx.length - 1]
-    out.push(`${t.title} splits ${fmt(total)} across ${idx.length} ${sem || 'categories'}.`)
+    out.push(`${t.title} splits ${fmt(total)} across ${idx.length} ${sem === 'priority' ? 'priorities' : sem === 'status' ? 'statuses' : 'categories'}.`)
     out.push(`${labels[lead]} leads at ${pct(lead)}% (${fmt(vals[lead])})${second != null && vals[second] ? `, then ${labels[second]} at ${pct(second)}%` : ''}; the smallest is ${labels[last]} at ${pct(last)}%.`)
     const topK = Math.min(3, idx.length)
     const cumPct = Math.round((idx.slice(0, topK).reduce((s, i) => s + vals[i], 0) / total) * 100)

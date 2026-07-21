@@ -12,7 +12,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
@@ -107,15 +107,25 @@ function pushSummary() {
     revealItems(b, 'shown', b.facts.length, 200, () => { b.settled = true })
   })
 }
-// P3 — explain: think, then STREAM the verdict, then reveal the sparkline/how/CTA
+// P3 — explain: think, then STREAM the full reasoned answer line-by-line, then the extras.
+// explainTile does the reasoning for ANY widget (KPI / chart / shortcut), so an "explain"
+// about a chart actually breaks the chart down instead of reciting a neighbouring KPI.
 function pushExplain(text) {
   const tile = tileFromText(props.board, text)
-  const b = push('explain', { phase: 'thinking', tile, anomaly: anomalyFor(tile), shownText: '', showExtras: false, settled: false })
+  const b = push('explain', { phase: 'thinking', tile, anomaly: null, lines: [], shownLines: [], cur: '', showExtras: false, settled: false })
   runThinking(b, THINK_STEPS.explain(), () => {
+    const ex = explainTile(tile)
+    b.anomaly = ex.anomaly
+    b.lines = ex.lines
     highlightWidget({ tileId: tile.id })
-    const full = b.anomaly ? b.anomaly.text
-      : `${tile.title} is ${tile.value}${tile.unit || ''}${tile.delta ? `, ${tile.delta.dir} ${tile.delta.pct}% vs last week` : ''} — within its normal range, not an anomaly.`
-    streamText(b, 'shownText', full, () => { setTimeout(() => { b.showExtras = true; b.settled = true; scrollDown() }, 200) })
+    streamExplain(b, 0)
+  })
+}
+function streamExplain(b, idx) {
+  if (idx >= b.lines.length) { setTimeout(() => { b.showExtras = true; b.settled = true; scrollDown() }, 200); return }
+  streamText(b, 'cur', b.lines[idx], () => {
+    b.shownLines.push(b.lines[idx]); b.cur = ''
+    setTimeout(() => streamExplain(b, idx + 1), 140)
   })
 }
 // P2 — investigate: think, spotlight the widget, STREAM the briefing line-by-line.
@@ -454,7 +464,8 @@ watch(() => props.role, () => {
           <div class="blk-h" :class="b.anomaly ? b.anomaly.severity : ''">
             <Icon :name="b.anomaly ? 'alert' : 'info'" :size="14" /> {{ b.tile.title }}
           </div>
-          <p class="say">{{ b.shownText }}<span v-if="!b.showExtras" class="caret" /></p>
+          <p v-for="(line, i) in b.shownLines" :key="i" class="say">{{ line }}</p>
+          <p v-if="b.cur" class="say">{{ b.cur }}<span class="caret" /></p>
           <transition name="reveal">
             <div v-if="b.showExtras">
               <div v-if="b.anomaly" class="spark">
@@ -465,7 +476,8 @@ watch(() => props.role, () => {
                 </svg>
               </div>
               <details v-if="b.anomaly" class="how"><summary><Icon name="info" :size="12" /> How was this calculated?</summary><div>{{ b.anomaly.how }}</div></details>
-              <button class="mini-cta" @click="investigate({ kind: 'anomaly', chip: b.tile.title })">Investigate <Icon name="chevron-right" :size="13" /></button>
+              <!-- carry the real tile through, or the drill has no widget to spotlight and renders empty -->
+              <button class="mini-cta" @click="investigate({ kind: b.anomaly ? 'anomaly' : 'delta', tileId: b.tile.id, chip: b.tile.title, text: `The records behind ${b.tile.title}` })">Investigate <Icon name="chevron-right" :size="13" /></button>
             </div>
           </transition>
         </template>
