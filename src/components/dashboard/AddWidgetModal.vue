@@ -209,10 +209,13 @@ function libDesc(l) {
   const kind = l.type === 'kpi' ? 'A headline KPI number' : l.type === 'shortcut' ? 'A record list / table' : 'A chart widget'
   return `${kind} from the ${l.module} module.`
 }
-const tip = ref({ show: false, text: '', top: 0, right: 0 })
+/* Provenance rides in the tooltip, under the description — the same shape the widget
+ * and dashboard info tooltips use. On the row it was a third thing competing with the
+ * type and the module for the same line. */
+const tip = ref({ show: false, text: '', prov: '', top: 0, right: 0 })
 function showTip(l, e) {
   const r = e.currentTarget.getBoundingClientRect()
-  tip.value = { show: true, text: libDesc(l), top: r.top + r.height / 2, right: window.innerWidth - r.left + 12 }
+  tip.value = { show: true, text: libDesc(l), prov: l.prov, top: r.top + r.height / 2, right: window.innerWidth - r.left + 12 }
 }
 function hideTip() { tip.value.show = false }
 const TAB_LABEL = { all: 'All', predefined: 'Predefined', user: 'Created by me', shared: 'Shared with me', trash: 'Trash' }
@@ -309,12 +312,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
                   >{{ usageOf(l).length }}</span>
                   <span v-if="isPlaced(l)" class="placed-tag"><Icon name="check" :size="11" /> On dashboard</span>
                 </div>
-                <!-- in All the provenance decides which actions the row gets, so it has
-                     to be visible on the row rather than implied by the tab you're on -->
-                <div class="lt-meta">
-                  {{ TYPE_LABEL[l.type] }} · {{ l.module }}
-                  <span v-if="tab === 'all'" class="prov-tag" :class="l.prov">{{ PROV_LABEL[l.prov] || l.prov }}</span>
-                </div>
+                <div class="lt-meta">{{ TYPE_LABEL[l.type] }} · {{ l.module }}</div>
               </div>
               <!-- Trash: Restore + Delete forever · other tabs: Duplicate / Edit / Delete -->
               <div v-if="isTrash" class="lt-acts always">
@@ -375,7 +373,11 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
     <!-- Row description tooltip — opens to the left of the hovered row, arrow points right -->
     <teleport to="body">
       <transition name="fade">
-        <div v-if="tip.show" class="lib-tip" :style="{ top: tip.top + 'px', right: tip.right + 'px' }">{{ tip.text }}<span class="lib-tip-arrow" /></div>
+        <div v-if="tip.show" class="lib-tip" :style="{ top: tip.top + 'px', right: tip.right + 'px' }">
+          <span class="lib-tip-desc">{{ tip.text }}</span>
+          <span v-if="tip.prov" class="tt-tag" :class="tip.prov">{{ PROV_LABEL[tip.prov] || tip.prov }}</span>
+          <span class="lib-tip-arrow" />
+        </div>
       </transition>
     </teleport>
 
@@ -439,12 +441,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .lcb { width: 16px; height: 16px; accent-color: var(--primary); flex: none; cursor: pointer; margin: 0; }
 .lt-main { flex: 1; min-width: 0; }
 .lt-name-row { display: flex; align-items: center; gap: 7px; } .lt-name { font-weight: 500; font-size: 13.5px; }
-.lt-meta { position: relative; display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-/* provenance pill — only rendered in the All tab, where the list is mixed */
-.prov-tag { font-size: 10px; font-weight: 600; letter-spacing: .2px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); flex: none; }
-.prov-tag.predefined { background: var(--primary-soft); border-color: transparent; color: var(--primary-700); }
-.prov-tag.user { background: var(--green-soft); border-color: transparent; color: var(--green); }
-.prov-tag.shared { background: var(--blue-soft, var(--surface-2)); border-color: transparent; color: var(--blue); }
+.lt-meta { position: relative; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 /* usage count — a pill on the widget's NAME */
 .use-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center;
   background: var(--primary-soft); color: var(--primary-700); border-radius: 999px;
@@ -463,6 +460,12 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .up-row:hover .up-go { opacity: 1; transform: none; }
 /* left-pointing description tooltip (teleported, fixed to viewport) */
 .lib-tip { position: fixed; z-index: 200; transform: translateY(-50%); width: 232px; background: #20223a; color: #fff; font-size: 11.5px; line-height: 1.45; padding: 8px 11px; border-radius: 8px; box-shadow: var(--sh-pop); pointer-events: none; text-align: left; }
+.lib-tip-desc { display: block; color: rgba(255,255,255,.88); }
+/* provenance as a tag under the description — mirrors WidgetCard's .tt-tag */
+.tt-tag { display: inline-flex; align-items: center; margin-top: 8px; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .2px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); color: #fff; }
+.tt-tag.predefined { background: rgba(139,92,246,.3); border-color: rgba(139,92,246,.55); color: #ded3ff; }
+.tt-tag.shared { background: rgba(76,177,254,.26); border-color: rgba(76,177,254,.5); color: #cfe8ff; }
+.tt-tag.user { background: rgba(31,157,99,.3); border-color: rgba(31,157,99,.55); color: #b9edd3; }
 .lib-tip-arrow { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 6px solid transparent; border-left-color: #20223a; }
 /* hover actions (Duplicate / Edit / Delete) — revealed on row hover */
 .lt-acts { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }

@@ -61,6 +61,36 @@ function typeBlock(t) {
   return null
 }
 
+/* ---- what the row above the preview offers ------------------------------------
+ * Creating, you pick a FAMILY — Widget, KPI or Shortcut. The chart kind is not a
+ * family: it's a property of the Widget family, so it lives in the config panel
+ * beside everything else that configures the widget.
+ *
+ * Editing, the row is only worth showing when something can actually be switched:
+ * Bar / Column / Line, which share a data shape. A Pie, KPI, Shortcut or clone gets
+ * NO row — a line of disabled tabs is a menu of things you can't have, and it only
+ * invites the question "why not". The note in the config panel answers that instead.
+ */
+const FAMILIES = [
+  { id: 'widget', label: 'Widget', icon: 'chart-bar', type: 'chart' },
+  { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi' },
+  { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut' },
+]
+const CHART_KINDS = TYPES.filter((t) => t.type === 'chart')
+// remembers which chart you were on, so leaving the Widget family and coming back
+// returns you to it rather than resetting to a default
+const lastChartId = ref(props.type.type === 'chart' ? props.type.id : 'column')
+const editTabs = computed(() => {
+  if (libMode.value || props.duplicate || !editing.value) return []
+  return SWITCH_IDS.includes(curType.value.id) ? TYPES.filter((t) => SWITCH_IDS.includes(t.id)) : []
+})
+const showFamilies = computed(() => !editing.value && !libMode.value && !props.duplicate)
+const familyOn = (f) => (f.type === 'chart' ? isChart.value : curType.value.type === f.type)
+function pickFamily(f) {
+  switchType(TYPES.find((t) => t.id === (f.type === 'chart' ? lastChartId.value : f.id)))
+}
+function pickKind(t) { lastChartId.value = t.id; switchType(t) }
+
 const isChart = computed(() => curType.value.type === 'chart')
 const isKpi = computed(() => curType.value.type === 'kpi')
 const isShortcut = computed(() => curType.value.type === 'shortcut')
@@ -250,13 +280,21 @@ function save(place) {
         <div class="bbody">
           <!-- LEFT: live preview (ServiceOps) -->
           <section class="preview">
-            <!-- switch tile type (updates preview + right-side config) -->
-            <div class="pv-tabs">
+            <!-- creating: pick a family. editing: only the swaps that are actually
+                 possible. Neither renders a disabled tab. -->
+            <div v-if="showFamilies" class="pv-tabs">
               <button
-                v-for="t in TYPES" :key="t.id" class="pv-tab"
-                :class="{ on: curType.id === t.id }"
-                :disabled="!!typeBlock(t)" :title="typeBlock(t) || `Show as ${t.label}`"
-                @click="switchType(t)"
+                v-for="f in FAMILIES" :key="f.id" class="pv-tab"
+                :class="{ on: familyOn(f) }" :title="`Build a ${f.label}`" @click="pickFamily(f)"
+              >
+                <Icon :name="f.icon" :size="16" /> {{ f.label }}
+              </button>
+            </div>
+            <div v-else-if="editTabs.length" class="pv-tabs">
+              <button
+                v-for="t in editTabs" :key="t.id" class="pv-tab"
+                :class="{ on: curType.id === t.id }" :title="`Show as ${t.label}`"
+                @click="pickKind(t)"
               >
                 <Icon :name="t.icon" :size="16" :class="{ rot90: t.id === 'bar' }" /> {{ t.label }}
               </button>
@@ -304,6 +342,19 @@ function save(place) {
                     <button class="seg-b" :class="{ on: cfg.sharedAccess==='edit' }" @click="cfg.sharedAccess='edit'">Edit</button>
                   </div>
                   <p class="hint" style="margin:6px 0 0">People you share this with can Edit only if you grant Edit access here.</p>
+                </div>
+                <!-- how the Widget is drawn — a property of the widget, so it sits with
+                     the rest of its configuration rather than in the family row above -->
+                <div v-if="showFamilies && isChart" class="fld" style="margin-top:12px">
+                  <label>Chart type</label>
+                  <div class="kinds">
+                    <button
+                      v-for="k in CHART_KINDS" :key="k.id" class="kind"
+                      :class="{ on: curType.id === k.id }" @click="pickKind(k)"
+                    >
+                      <Icon :name="k.icon" :size="15" :class="{ rot90: k.id === 'bar' }" /> {{ k.label }}
+                    </button>
+                  </div>
                 </div>
                 <template v-if="!isShortcut">
                   <div class="seg">
@@ -445,6 +496,13 @@ function save(place) {
 .pv-tab:disabled { opacity: .45; cursor: not-allowed; }
 .pv-tab.on:disabled { opacity: 1; }
 .pv-tab .rot90 { transform: rotate(90deg); }
+/* chart-kind picker in the config panel — the family row's little sibling, sized for
+   a 2-up grid so all four fit the narrow column without wrapping oddly */
+.kinds { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.kind { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 12.5px; }
+.kind:hover { background: var(--surface-2); }
+.kind.on { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--sh-sm); }
+.kind .rot90 { transform: rotate(90deg); }
 .pv-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; }
 .pv-canvas { flex: 1; display: grid; place-items: center; padding: 22px; min-height: 0; }
 .pv-canvas > * { width: 100%; }
