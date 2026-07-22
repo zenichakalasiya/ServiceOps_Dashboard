@@ -128,6 +128,32 @@ function valuesFor(dimId, labels, seed) {
   return labels.map((_, i) => Math.max(3, 62 - i * 8 + (r(i) % 21)))
 }
 function detectDim(t) { return GROUP_DIMS.find((d) => DIM_RE[d.id] && DIM_RE[d.id].test(t)) || null }
+/* A form the user named OUTRIGHT, as opposed to one we inferred. Needed because
+ * "add 4 KPIs: a, b, c, d" states the form once in the preamble — which the
+ * splitter strips — so each item would otherwise fall back to a bar chart. */
+export function explicitForm(text) {
+  const t = String(text || '')
+  if (/\bkpis?\b|headline|single number|\bcounters?\b/i.test(t)) return 'kpi'
+  if (/\bshortcuts?\b|\btables?\b|\blists?\b|records|rows|worklist/i.test(t)) return 'shortcut'
+  if (/\bline chart\b|\btrend line\b/i.test(t)) return 'line'
+  if (/\bdoughnut\b|\bdonut\b|\bpie\b/i.test(t)) return 'donut'
+  if (/\bbar chart\b/i.test(t)) return 'hbar'
+  if (/\bcolumn chart\b/i.test(t)) return 'bar'
+  return null
+}
+// how a KPI of each kind typically reads, so four counters don't all show 128
+const KPI_SHAPE = {
+  Overdue: { base: 14, spread: 26, status: 'bad', dir: 'up' },
+  'SLA-breaching': { base: 8, spread: 18, status: 'bad', dir: 'up' },
+  Unassigned: { base: 6, spread: 15, status: 'warn', dir: 'down' },
+  Urgent: { base: 4, spread: 13, status: 'bad', dir: 'up' },
+  Open: { base: 160, spread: 130, status: 'warn', dir: 'up' },
+  Resolved: { base: 90, spread: 110, status: 'good', dir: 'up' },
+}
+function kpiFacts(filters, seed) {
+  const s = KPI_SHAPE[filters[0]?.word] || { base: 40, spread: 90, status: 'warn', dir: 'up' }
+  return { value: s.base + (seed % s.spread), status: s.status, delta: { dir: s.dir, pct: 2 + (seed % 19) } }
+}
 function detectForm(t, dim) {
   if (/\bkpi\b|headline|how many|total number|single number|counter|^count\b/i.test(t)) return 'kpi'
   if (/\blist\b|\btable\b|records|rows|worklist|shortcut/i.test(t)) return 'shortcut'
@@ -174,6 +200,12 @@ export function resolveWidget(text, preferKind) {
     const seed = seedOf(t + dim.id)
     spec.chart = { kind: form === 'kpi' || form === 'shortcut' ? 'bar' : form, labels: [...dim.labels], series: [{ name: subject || 'Count', values: valuesFor(dim.id, dim.labels, seed) }] }
     spec.total = spec.chart.series[0].values.reduce((a, b) => a + b, 0)
+  }
+  // an ungrouped KPI still needs a believable number — and one that DIFFERS per
+  // condition, or four counters all read the same
+  if (form === 'kpi') {
+    const k = kpiFacts(filters, seedOf(t))
+    spec.kpi = dim ? { value: spec.total, status: k.status, delta: k.delta } : k
   }
   return spec
 }

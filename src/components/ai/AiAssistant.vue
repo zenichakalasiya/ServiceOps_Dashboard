@@ -13,7 +13,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
-import { routeIntent, tileFromText, factFromText, specFromText, resolveWidget, applyGroupBy, GROUP_DIMS, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
+import { routeIntent, tileFromText, factFromText, specFromText, resolveWidget, applyGroupBy, explicitForm, GROUP_DIMS, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
 import { chart, kpi, shortcut } from '../../data/mock.js'
@@ -334,7 +334,8 @@ function preferType(id) { draft.value.preferKind = draft.value.preferKind === id
 function tileFromSpec(spec, text) {
   let tile
   if (spec.kind === 'kpi') {
-    tile = kpi(spec.title, spec.total || 128, '', { dir: 'up', pct: 6 }, 'warn', text)
+    const k = spec.kpi || { value: spec.total || 128, status: 'warn', delta: { dir: 'up', pct: 6 } }
+    tile = kpi(spec.title, k.value, '', k.delta, k.status, text)
   } else if (spec.kind === 'shortcut') {
     tile = shortcut(spec.title, ['Subject', 'Requester', 'Status', 'Priority'], [
       ['VPN down for finance team', 'Arnav Desai', 'In Progress', 'Urgent'],
@@ -389,7 +390,14 @@ function dashWidget(text) {
     push('cd-need', { want: want || 1, have: 0 })
     awaiting.value = 'dash-widget'; focusComposer(); return
   }
+  // "add 4 KPIs: a, b, c, d" names the form ONCE, in the preamble the splitter
+  // removes — so carry it across the whole batch unless an item overrides it.
+  draft.value.batchForm = explicitForm(t)
   buildWidgetQueue(items, 0, want && want > items.length ? want - items.length : 0)
+}
+// item's own wording wins, then the batch preamble, then the palette hint
+function formFor(item) {
+  return explicitForm(item) || draft.value.batchForm || draft.value.preferKind || null
 }
 function buildWidgetQueue(list, i, shortBy) {
   if (i >= list.length) {
@@ -398,7 +406,7 @@ function buildWidgetQueue(list, i, shortBy) {
     awaiting.value = 'dash-widget'
     return
   }
-  const spec = resolveWidget(list[i], draft.value.preferKind)
+  const spec = resolveWidget(list[i], formFor(list[i]))
   // it can't invent a grouping — pause the queue and ask, then resume
   if (spec.missing.length) {
     draft.value.pending = { list, i, shortBy, text: list[i], spec }
