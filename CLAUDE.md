@@ -150,6 +150,11 @@ bare "and" is usually part of one phrase ("SLA breaches and overdue work"), not 
 Each widget is placed in sequence, labelled "n of m", with the add/finish pills only after the
 last one.
 
+**Form precedence is `item wording → batch preamble → palette hint → inferred`** (`formFor()`).
+This matters because the splitter *strips the preamble* — so "add 4 KPIs: a; b; c; d" states the
+form once, in the very text that gets removed. `explicitForm()` is read from the whole message and
+carried across the batch; anything an item names itself still wins.
+
 **`resolveWidget` (in `data/aiAssistant.js`) is what makes the output match the prompt.** It reads
 the module, the conditions, the grouping dimension (with that dimension's *real* labels), the time
 window and the form, then generates data shaped like the dimension — a priority split descends, a
@@ -161,9 +166,15 @@ builds the same widget. Anything it genuinely can't infer comes back in `spec.mi
 over the live dashboard, not a fixed demo board). A newly created or empty board is summarised
 honestly — "no widgets yet" — rather than borrowing another board's story.
 
+**KPI values come from the condition, not a constant.** `KPI_SHAPE` in `data/aiAssistant.js` gives
+overdue / SLA-breaching / unassigned / urgent / open / resolved their own plausible range, delta
+direction and status, seeded from the text. Without this, four counters built in one batch all
+read the same number.
+
 **Numbered next steps** appear only after a task that leaves a real decision (dashboard created,
 widget added). Contextual **follow-ups** appear only on answers that invite a next question
-(`FOLLOWUP_KINDS`). Don't add both to the same block.
+(`FOLLOWUP_KINDS`). **Rate / copy** (`hasFeedback`) sit under every finished answer but never under
+a question card or anything still awaiting input. Don't stack all three on one block.
 
 ## Locking rules (predefined content)
 
@@ -197,3 +208,9 @@ widget added). Contextual **follow-ups** appear only on answers that invite a ne
   By Priority" resolved to the *"Open Requests"* KPI and silently explained the wrong widget.
 - **A fact passed to the drill needs a real `tileId`** — without it there's no widget to
   spotlight and the block renders empty.
+- **Watch for CSS class collisions in `AiAssistant.vue`** — it's one large scoped stylesheet. A new
+  `.fb` (feedback button) silently inherited the existing `.fb` (summary fact body, `flex: 1`) and
+  stretched each icon to 147px. Grep the file for a class name before introducing it.
+- **The batch preamble is stripped before items are resolved** — any instruction stated once for
+  the whole message ("4 KPIs", "as shortcuts") must be captured from the *original* text, not from
+  the split fragments.

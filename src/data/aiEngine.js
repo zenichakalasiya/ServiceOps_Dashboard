@@ -417,6 +417,67 @@ export function explainTile(tile) {
   return { tile: t, anomaly: null, lines: out }
 }
 
+/* ---------------------------------------------------------------------------
+ * Answers for the follow-ups that used to be routed at a generic summary. Each
+ * one answers ITS OWN question, grounded in the same computed facts.
+ * ------------------------------------------------------------------------- */
+
+// "Draft a status update" — a copy-ready update, not a list of metrics
+export function statusUpdate(board, role = 'technician') {
+  const fs = facts(board, role)
+  const bad = fs.filter((f) => f.severity === 'bad')
+  const warn = fs.filter((f) => f.severity === 'warn')
+  const wl = board.tiles.find((t) => t.type === 'shortcut')
+  const head = bad[0] || warn[0] || null
+  const subject = head
+    ? `${board.name} — ${bad.length ? `${bad.length} item${bad.length > 1 ? 's' : ''} needing attention` : 'a few things to watch'}`
+    : `${board.name} — all clear`
+  const body = []
+  body.push(head
+    ? `Where we are: ${head.text}.${bad.length > 1 ? ` ${bad.length - 1} other item${bad.length > 2 ? 's are' : ' is'} also outside its normal range.` : ''}`
+    : `Where we are: every widget on “${board.name}” is reading within its normal range.`)
+  if (warn.length) body.push(`Also watching: ${warn.slice(0, 2).map((f) => f.chip).join(' and ')}.`)
+  if (wl) {
+    const prIdx = (wl.columns || []).indexOf('Priority')
+    const p1 = prIdx >= 0 ? (wl.rows || []).filter((r) => /p1|urgent/i.test(r[prIdx] || '')).length : 0
+    body.push(`Work in hand: ${(wl.rows || []).length} record${(wl.rows || []).length === 1 ? '' : 's'} on “${wl.title}”${p1 ? `, ${p1} at top priority` : ''}.`)
+  }
+  body.push(head
+    ? 'What happens next: the highest-priority items are being picked up first, and anything still unowned gets escalated.'
+    : 'What happens next: nothing needed right now — I’ll flag anything that breaks out of range.')
+  body.push('Next update: end of shift, or sooner if something breaches.')
+  return { subject, body }
+}
+
+// "Turn this into a recovery plan" — ordered steps, each with the reason it's there
+export function recoveryPlan(board, role = 'technician') {
+  const fs = facts(board, role)
+  const steps = []
+  const breach = fs.find((f) => f.kind === 'breach')
+  const anom = fs.find((f) => f.kind === 'anomaly')
+  const unassigned = board.tiles.find((t) => t.type === 'kpi' && /unassigned/i.test(t.title || ''))
+  if (breach) steps.push({ title: 'Clear what breaches today', body: `${breach.text}. Give each one an owner and a committed fix time before starting anything else — these are the only items with a deadline today.` })
+  if (anom) steps.push({ title: `Work out what moved ${anom.chip}`, body: `${anom.text} Confirm whether that's genuine demand or a routing change; adding capacity to a routing problem just moves the queue.` })
+  if (unassigned && Number(unassigned.value) > 0) steps.push({ title: 'Get everything owned', body: `${unassigned.value} items still have no assignee. Nothing recovers while work is unowned, so assign before you re-prioritise.` })
+  const rest = fs.filter((f) => f.kind === 'delta').slice(0, 1)
+  if (rest.length) steps.push({ title: `Stop ${rest[0].chip} drifting`, body: `${rest[0].text}. It isn't urgent today, but left alone it becomes next week's breach list.` })
+  steps.push({ title: 'Re-check in two hours', body: 'Come back to this board. If the counters haven’t moved, escalate rather than keep waiting — a flat recovery curve is the signal to ask for help.' })
+  const intro = fs.length
+    ? `Here's how I'd work “${board.name}” back to green, hardest deadline first:`
+    : `“${board.name}” is already within range — there's nothing to recover, so this is just how I'd keep it there:`
+  return { intro, steps }
+}
+
+// "What should I work on first?" — a ranked queue, with why each sits where it does
+export function workOrder(board, role = 'technician') {
+  return facts(board, role).slice(0, 5).map((f, i) => ({
+    rank: i + 1, text: f.text, chip: f.chip, severity: f.severity, tileId: f.tileId,
+    why: f.kind === 'breach' ? 'Tightest deadline — these are the ones that breach first.'
+      : f.kind === 'anomaly' ? 'Broke out of its normal range, so this isn’t routine load.'
+        : 'Moving the wrong way week-over-week.',
+  }))
+}
+
 // ---------------------------------------------------------------------------
 // "What changed since your last visit" — grounded in each KPI's own delta + status,
 // plus a worklist change. A fixed last-visit label keeps the demo honest without a clock.

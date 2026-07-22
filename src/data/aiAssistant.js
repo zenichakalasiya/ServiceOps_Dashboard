@@ -32,6 +32,10 @@ export const SUGGESTIONS = [
 // ---- intent routing (keyword-based; a small on-prem model swaps in later) ----
 export function routeIntent(text) {
   const t = text.toLowerCase().trim()
+  // these read like "summarise" but are different questions, so they go first
+  if (/status (?:update|report)|draft an update|write an update|comms update/.test(t)) return 'status'
+  if (/recovery plan|action plan|remediation plan|get (?:us |this )?back on track|plan to (?:fix|recover)/.test(t)) return 'plan'
+  if (/work on first|start with|where do i start|what should i do first|order my|my queue/.test(t)) return 'worklist'
   // "create" must need a build verb — matching a bare "by priority" used to hijack
   // "explain the trend in Open Requests By Priority" into the widget builder.
   if (/^(create|build|make|add|generate|draft)\b|new widget|a widget|widget for|trend chart|chart (of|for)/.test(t)) return 'create'

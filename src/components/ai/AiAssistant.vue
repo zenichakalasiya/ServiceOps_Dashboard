@@ -12,7 +12,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, statusUpdate, recoveryPlan, workOrder, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, specFromText, resolveWidget, applyGroupBy, explicitForm, GROUP_DIMS, SUGGESTIONS, KINDS } from '../../data/aiAssistant.js'
 import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
@@ -45,7 +45,7 @@ const THINK_STEPS = {
   changes: () => ['Loading your last-visit snapshot', 'Diffing every metric since then', 'Sorting by what moved the most'],
   analyzing: (n) => [`Reading ${n} widgets`, 'Checking SLA, backlog and anomaly signals', 'Composing a plain-language summary'],
 }
-const THINK_LABEL = { summary: 'Analyzing what needs attention', drill: 'Investigating', explain: 'Explaining this metric', changes: 'Comparing with your last visit', analyzing: 'Analyzing this dashboard' }
+const THINK_LABEL = { summary: 'Analyzing what needs attention', drill: 'Investigating', explain: 'Explaining this metric', changes: 'Comparing with your last visit', analyzing: 'Analyzing this dashboard', status: 'Drafting a status update', plan: 'Building a recovery plan', worklist: 'Working out what comes first' }
 const thinkLabel = (b) => THINK_LABEL[b.kind] || 'Thinking'
 // only the reasoning steps that have started (so transition-group animates each in)
 const shownSteps = (b) => (b.steps || []).filter((s) => s.state !== 'pending')
@@ -158,6 +158,39 @@ function pushChanges() {
     revealItems(b, 'shown', b.data.items.length, 160, () => { b.settled = true })
   })
 }
+// "Draft a status update" — a copy-ready update, streamed like prose
+function pushStatus() {
+  const b = push('status', { phase: 'thinking', data: null, lines: [], shownLines: [], cur: '', settled: false })
+  runThinking(b, ['Reading what needs attention', 'Checking the worklist', 'Drafting the update'], () => {
+    b.data = statusUpdate(props.board, props.role)
+    b.lines = b.data.body
+    streamStatus(b, 0)
+  })
+}
+function streamStatus(b, i) {
+  if (i >= b.lines.length) { b.settled = true; scrollDown(); return }
+  streamText(b, 'cur', b.lines[i], () => {
+    b.shownLines.push(b.lines[i]); b.cur = ''
+    setTimeout(() => streamStatus(b, i + 1), 150)
+  })
+}
+// "Turn this into a recovery plan" — ordered steps revealed one at a time
+function pushPlan() {
+  const b = push('plan', { phase: 'thinking', data: null, shown: 0, settled: false })
+  runThinking(b, ['Reading the signals', 'Ordering the work by deadline', 'Writing the plan'], () => {
+    b.data = recoveryPlan(props.board, props.role)
+    revealItems(b, 'shown', b.data.steps.length, 240, () => { b.settled = true })
+  })
+}
+// "What should I work on first?" — a ranked queue
+function pushWorkOrder() {
+  const b = push('worklist', { phase: 'thinking', items: [], shown: 0, settled: false })
+  runThinking(b, ['Ranking by deadline and impact', 'Checking what’s already owned', 'Ordering your queue'], () => {
+    b.items = workOrder(props.board, props.role)
+    revealItems(b, 'shown', b.items.length, 220, () => { b.settled = true })
+  })
+}
+
 // Summarize / Ask: think, then the grouped written summary
 function pushAnalyzing() {
   const b = push('analyzing', { phase: 'thinking', points: [], settled: false })
@@ -645,6 +678,9 @@ function dispatch(intent, text) {
   else if (intent === 'changes') pushChanges()
   else if (intent === 'analyzing') pushAnalyzing()
   else if (intent === 'createstart') pushCreateStart()
+  else if (intent === 'status') pushStatus()
+  else if (intent === 'plan') pushPlan()
+  else if (intent === 'worklist') pushWorkOrder()
   else if (intent === 'note') pushNote(text)
 }
 
@@ -653,7 +689,7 @@ const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-widgets'
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
-const FOLLOWUP_KINDS = ['summary', 'changes', 'analyzing', 'explain', 'drill']
+const FOLLOWUP_KINDS = ['summary', 'changes', 'analyzing', 'explain', 'drill', 'status', 'plan', 'worklist']
 function isAnswer(b) {
   if (!FOLLOWUP_KINDS.includes(b.kind)) return false
   if (b.phase && b.phase !== 'done') return false   // still thinking
@@ -698,14 +734,29 @@ function copyBlock(b) {
 function followUpsFor(b) {
   const k = b.kind
   if (k === 'analyzing' || k === 'summary') return [
-    { label: 'Prioritize what needs attention', intent: 'drill' },
+    { label: 'What should I work on first?', intent: 'worklist' },
     { label: 'What changed since last visit', intent: 'changes' },
-    { label: 'Create a widget for SLA breaches by team', intent: 'create' },
+    { label: 'Draft a status update', intent: 'status' },
   ]
   if (k === 'changes') return [
     { label: 'Show the new P1 requests', intent: 'drill' },
     { label: 'Why did Overdue rise?', intent: 'explain' },
-    { label: 'Turn this into a recovery plan', intent: 'drill' },
+    { label: 'Turn this into a recovery plan', intent: 'plan' },
+  ]
+  if (k === 'status') return [
+    { label: 'Turn this into a recovery plan', intent: 'plan' },
+    { label: 'What should I work on first?', intent: 'worklist' },
+    { label: 'Schedule this as a daily digest', intent: 'note' },
+  ]
+  if (k === 'plan') return [
+    { label: 'What should I work on first?', intent: 'worklist' },
+    { label: 'Draft a status update', intent: 'status' },
+    { label: 'What changed since last visit', intent: 'changes' },
+  ]
+  if (k === 'worklist') return [
+    { label: 'Turn this into a recovery plan', intent: 'plan' },
+    { label: 'Draft a status update', intent: 'status' },
+    { label: 'What needs attention', intent: 'summary' },
   ]
   if (k === 'explain') return [
     { label: `Show the records behind ${b.tile?.title || 'this'}`, intent: 'drill' },
@@ -713,8 +764,8 @@ function followUpsFor(b) {
     { label: 'Create an alert for this metric', intent: 'note' },
   ]
   if (k === 'drill') return [
-    { label: 'Draft a status update', intent: 'summary' },
-    { label: 'What changed since last visit', intent: 'changes' },
+    { label: 'Draft a status update', intent: 'status' },
+    { label: 'What should I work on first?', intent: 'worklist' },
     { label: 'Schedule a follow-up check', intent: 'note' },
   ]
   if (k === 'widget') return [
@@ -756,9 +807,9 @@ const ACTIONS = [
     { label: 'Summarize this dashboard', intent: 'analyzing' },
   ] },
   { key: 'prioritize', label: 'Prioritize', icon: 'flag', hint: 'Rank what to work on', placeholder: 'What should I prioritize?', prompts: [
+    { label: 'What should I work on first?', intent: 'worklist' },
     { label: 'Prioritize the P1s breaching today', intent: 'drill' },
-    { label: 'Rank overdue tickets by impact', intent: 'drill' },
-    { label: 'What should I work on first?', intent: 'summary' },
+    { label: 'Turn this into a recovery plan', intent: 'plan' },
   ] },
   { key: 'schedule', label: 'Schedule', icon: 'calendar2', hint: 'Digests, alerts & reminders', placeholder: 'What should I schedule?', prompts: [
     { label: 'Schedule a daily summary email', intent: 'note' },
@@ -1034,6 +1085,44 @@ watch(() => props.role, () => {
             <div class="sum-gt">{{ g.title }}</div>
             <ul class="sum-list"><li v-for="(p, pi) in g.points" :key="pi" v-html="hl(p)" /></ul>
           </div>
+        </template>
+
+        <!-- Draft a status update — a copy-ready update, not a metric list -->
+        <template v-else-if="b.kind === 'status'">
+          <div class="reasoning"><span class="rz-dot" /> Written from what needs attention right now</div>
+          <div class="blk-h"><Icon name="file-text" :size="14" /> Status update</div>
+          <div class="subj"><span>Subject</span><b>{{ b.data.subject }}</b></div>
+          <p v-for="(line, i) in b.shownLines" :key="i" class="say" v-html="hl(line)" />
+          <p v-if="b.cur" class="say"><span v-html="hl(b.cur)" /><span class="caret" /></p>
+        </template>
+
+        <!-- Turn this into a recovery plan — ordered, each step with its reason -->
+        <template v-else-if="b.kind === 'plan'">
+          <div class="reasoning"><span class="rz-dot" /> Ordered by which deadline lands first</div>
+          <div class="blk-h"><Icon name="clipboard" :size="14" /> Recovery plan</div>
+          <p class="say">{{ b.data.intro }}</p>
+          <ol class="nsteps">
+            <template v-for="(s, si) in b.data.steps" :key="si">
+              <li v-if="si < b.shown" class="reveal"><b>{{ s.title }}</b> — <span v-html="hl(s.body)" /></li>
+            </template>
+          </ol>
+        </template>
+
+        <!-- What should I work on first — a ranked queue with the why -->
+        <template v-else-if="b.kind === 'worklist'">
+          <div class="reasoning"><span class="rz-dot" /> Ranked for your role · deadline first</div>
+          <div class="blk-h"><Icon name="flag" :size="14" /> Work on this first</div>
+          <template v-for="(it, i) in b.items" :key="i">
+            <div v-if="i < b.shown" class="wq reveal">
+              <span class="wq-n" :class="dotClass(it.severity)">{{ it.rank }}</span>
+              <div class="wq-b">
+                <div class="wq-t" v-html="hl(it.text)" />
+                <div class="wq-w">{{ it.why }}</div>
+                <button class="lnk" @click="investigate({ kind: 'delta', tileId: it.tileId, chip: it.chip, text: it.text })">Investigate →</button>
+              </div>
+            </div>
+          </template>
+          <div v-if="b.settled && !b.items.length" class="calm"><Icon name="check" :size="16" /> Nothing is competing for your attention — the board is within range.</div>
         </template>
 
         <!-- P3 explain — the verdict streams in, then the sparkline/how/CTA reveal -->
@@ -1694,6 +1783,20 @@ tr:last-child td { border-bottom: none; }
 .sum-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.62; color: var(--ink-2); }
 .sum-list li b { color: var(--ink); font-weight: 600; }
 .sum-list li::before { content: ''; position: absolute; left: 3px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--ai); }
+/* status update — the subject line reads like an email header */
+.subj { display: flex; align-items: baseline; gap: 9px; padding: 8px 11px; margin-bottom: 11px; background: var(--surface-2); border-radius: 9px; font-size: 12.5px; }
+.subj span { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
+.subj b { color: var(--ink); font-weight: 600; }
+/* ranked work queue */
+.wq { display: flex; gap: 10px; padding: 9px 0; }
+.wq + .wq { border-top: 1px solid var(--border); }
+.wq-n { flex: none; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--muted-2); }
+.wq-n.bad { background: var(--red); } .wq-n.warn { background: var(--amber); } .wq-n.info { background: var(--blue); }
+.wq-b { flex: 1; min-width: 0; }
+.wq-t { font-size: 12.5px; font-weight: 500; color: var(--ink); line-height: 1.4; }
+.wq-t b { font-weight: 600; }
+.wq-w { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+.wq-b .lnk { margin-top: 5px; }
 /* rate / copy — quiet until you reach for them */
 .fb-row { display: flex; align-items: center; gap: 2px; margin-top: 10px; }
 .fbtn { width: 26px; height: 26px; border: none; background: transparent; color: var(--muted-2); border-radius: 6px; display: grid; place-items: center; }
