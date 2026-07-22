@@ -652,6 +652,41 @@ function isAnswer(b) {
   if (b.settled === false) return false              // still streaming/revealing
   return true
 }
+/* Feedback sits under a finished ANSWER, never under a question or a prompt that's
+ * still waiting on the user — rating something you haven't been told yet is noise. */
+const NO_FEEDBACK = ['user', 'ask', 'create-start', 'cd-intent', 'cw-intent', 'cd-widgets', 'cw-newboard', 'cd-need']
+function hasFeedback(b) {
+  if (NO_FEEDBACK.includes(b.kind)) return false
+  if (b.phase && b.phase !== 'done') return false
+  if (b.settled === false) return false
+  return true
+}
+// the readable text of a block, for Copy
+function blockText(b) {
+  if (b.shownLines?.length || b.cur) return [...(b.shownLines || []), b.cur].filter(Boolean).join('\n')
+  if (b.points?.length) return b.points.map((g) => `${g.title}\n${g.points.map((p) => `- ${p}`).join('\n')}`).join('\n\n')
+  if (b.facts?.length) return b.facts.map((f) => `- ${f.text} (${f.chip})`).join('\n')
+  if (b.data?.items) return b.data.items.map((i) => `- ${i.widget}: ${i.delta}, now ${i.value}`).join('\n')
+  if (b.kind === 'nextsteps') return [b.intro, ...b.steps.map((s, i) => `${i + 1}. ${s.title} — ${s.body}`)].join('\n')
+  if (b.kind === 'cd-draft') return [`${b.name}`, ...(b.plan || []).map((p) => `- ${p}`)].join('\n')
+  if (b.kind === 'cd-recap') return `${b.dash.name}\n${b.built.map((t) => `- ${t.title}`).join('\n')}`
+  if (b.tile) return b.tile.title
+  if (b.dash) return b.dash.name
+  return b.text || ''
+}
+function rate(b, v) {
+  b.rated = b.rated === v ? null : v
+  if (b.rated) toast(v === 'up' ? 'Thanks — noted for this answer' : 'Thanks — I’ll take that into account', v === 'up' ? 'success' : 'warn')
+}
+function copyBlock(b) {
+  const t = blockText(b)
+  if (!t) return
+  navigator.clipboard?.writeText(t)
+  b.copied = true
+  setTimeout(() => { b.copied = false }, 1600)
+  toast('Copied to clipboard', 'success')
+}
+
 function followUpsFor(b) {
   const k = b.kind
   if (k === 'analyzing' || k === 'summary') return [
@@ -1301,6 +1336,15 @@ watch(() => props.role, () => {
           <p class="say">{{ b.text }}</p>
         </template>
 
+        <!-- rate / copy this answer -->
+        <div v-if="hasFeedback(b)" class="fb-row">
+          <button class="fbtn" :class="{ on: b.rated === 'up' }" title="Good answer" @click="rate(b, 'up')"><Icon name="thumb-up" :size="14" /></button>
+          <button class="fbtn" :class="{ on: b.rated === 'down' }" title="Not helpful" @click="rate(b, 'down')"><Icon name="thumb-down" :size="14" /></button>
+          <button class="fbtn" :class="{ ok: b.copied }" :title="b.copied ? 'Copied' : 'Copy'" @click="copyBlock(b)">
+            <Icon :name="b.copied ? 'check' : 'copy'" :size="14" />
+          </button>
+        </div>
+
         <!-- contextual Follow ups (change with the answer) -->
         <div v-if="isAnswer(b)" class="fu-sec">
           <div class="fu-h">Follow ups</div>
@@ -1642,6 +1686,12 @@ tr:last-child td { border-bottom: none; }
 .sum-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.62; color: var(--ink-2); }
 .sum-list li b { color: var(--ink); font-weight: 600; }
 .sum-list li::before { content: ''; position: absolute; left: 3px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--ai); }
+/* rate / copy — quiet until you reach for them */
+.fb-row { display: flex; align-items: center; gap: 2px; margin-top: 10px; }
+.fbtn { width: 26px; height: 26px; border: none; background: transparent; color: var(--muted-2); border-radius: 6px; display: grid; place-items: center; }
+.fbtn:hover { background: var(--surface-2); color: var(--ink-2); }
+.fbtn.on { color: var(--ai); background: var(--ai-softer); }
+.fbtn.ok { color: var(--green); }
 /* contextual Follow ups (ClickUp-style vertical rows) */
 .fu-sec { margin-top: 16px; }
 .fu-h { font-size: 12px; color: var(--muted); margin-bottom: 8px; }

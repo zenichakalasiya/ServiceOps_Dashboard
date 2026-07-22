@@ -28,6 +28,7 @@ const MAP = {
   menu: 'menu', keyboard: 'keyboard', history: 'history', 'predefined-monitor': 'desktop_windows',
   ungroup: 'layers_clear', 'default-home': 'home', 'new-group': 'create_new_folder',
   verified: 'verified', undo: 'undo', redo: 'redo',
+  'thumb-up': 'thumb_up', 'thumb-down': 'thumb_down',
   'sort-asc': 'arrow_upward', 'sort-desc': 'arrow_downward',
   rearrange: 'auto_awesome_mosaic', pen: 'draw', palette: 'palette',
   'shape-rect': 'crop_square', 'shape-ellipse': 'circle', 'shape-arrow': 'arrow_outward',
