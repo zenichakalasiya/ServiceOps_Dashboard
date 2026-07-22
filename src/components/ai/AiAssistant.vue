@@ -12,7 +12,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, statusUpdate, recoveryPlan, workOrder, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, statusUpdate, recoveryPlan, workOrder, changesSinceLastVisit, dashboardSummaryPoints, boardWidgetDigest, FRESHNESS } from '../../data/aiEngine.js'
 import { routeIntent, tileFromText, factFromText, resolveWidget, applyGroupBy, reviseSpec, explicitForm, proposeDashboard, GROUP_DIMS, WINDOW_CHOICES, CONDITION_CHOICES, SUGGESTIONS } from '../../data/aiAssistant.js'
 import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
@@ -203,6 +203,18 @@ function pushAnalyzing() {
   runThinking(b, THINK_STEPS.analyzing(props.board.tiles.length), () => {
     b.points = dashboardSummaryPoints(props.board, props.role)
     b.settled = true
+  })
+}
+/* Every widget on the board, read in one pass. The summary card only has room for an
+ * overview, so this is where the per-widget detail lives — revealed one at a time so a
+ * fifteen-widget board doesn't land as a wall. */
+function pushWidgets() {
+  const b = push('widgets', { phase: 'thinking', rows: [], shown: 0, settled: false })
+  const n = (props.board.tiles || []).length
+  runThinking(b, [`Reading all ${n} widget${n === 1 ? '' : 's'}`, 'Checking each against its normal range', 'Writing it up'], () => {
+    b.rows = boardWidgetDigest(props.board)
+    if (!b.rows.length) { b.settled = true; return }
+    revealItems(b, 'shown', b.rows.length, 140, () => { b.settled = true })
   })
 }
 // a short templated reply for actions we don't fully simulate (edit / schedule)
@@ -999,6 +1011,7 @@ function dispatch(intent, text) {
   else if (intent === 'create') (/\b(dashboard|board|dashboards)\b/i.test(text) ? dashIntent : pushWidget)(text)
   else if (intent === 'changes') pushChanges()
   else if (intent === 'analyzing') pushAnalyzing()
+  else if (intent === 'widgets') pushWidgets()
   else if (intent === 'createstart') pushCreateStart()
   else if (intent === 'status') pushStatus()
   else if (intent === 'plan') pushPlan()
@@ -1011,7 +1024,7 @@ const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-proposal
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
-const FOLLOWUP_KINDS = ['summary', 'changes', 'analyzing', 'explain', 'drill', 'status', 'plan', 'worklist']
+const FOLLOWUP_KINDS = ['summary', 'changes', 'analyzing', 'widgets', 'explain', 'drill', 'status', 'plan', 'worklist']
 function isAnswer(b) {
   if (!FOLLOWUP_KINDS.includes(b.kind)) return false
   if (b.phase && b.phase !== 'done') return false   // still thinking
@@ -1421,6 +1434,22 @@ watch(() => props.role, () => {
           <div v-for="(g, gi) in b.points" :key="gi" class="sum-grp">
             <div class="sum-gt">{{ g.title }}</div>
             <ul class="sum-list"><li v-for="(p, pi) in g.points" :key="pi" v-html="hl(p)" /></ul>
+          </div>
+        </template>
+
+        <!-- Every widget explained — the detail the summary card has no room for -->
+        <template v-else-if="b.kind === 'widgets'">
+          <div class="reasoning"><span class="rz-dot" /> Every widget on this board, read one by one</div>
+          <div class="blk-h"><Icon name="auto-graph" :size="14" /> Widget-by-widget</div>
+          <div v-if="!b.rows.length" class="calm"><Icon name="check" :size="16" /> <span>This board has no widgets yet.</span></div>
+          <div v-for="(w, wi) in b.rows.slice(0, b.shown)" :key="w.id" class="wrow">
+            <div class="wrow-h">
+              <span class="wdot" :class="dotClass(w.status)" />
+              <b class="wrow-t">{{ w.title }}</b>
+              <span class="wrow-k">{{ w.kind }}</span>
+              <span class="wrow-v">{{ w.headline }}</span>
+            </div>
+            <p class="wrow-s" v-html="hl(w.summary)" />
           </div>
         </template>
 
@@ -2163,6 +2192,16 @@ tr:last-child td { border-bottom: none; }
 /* grouped summary points */
 .sum-grp { margin-bottom: 16px; }
 .sum-gt { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+/* widget-by-widget — the name and its headline number on one line, the reading beneath */
+.wrow { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.wrow:last-child { border-bottom: 0; }
+.wrow-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.wdot { width: 7px; height: 7px; border-radius: 50%; flex: none; align-self: center; background: var(--muted-2); }
+.wdot.bad { background: var(--red); } .wdot.warn { background: var(--amber); } .wdot.info { background: var(--blue, var(--primary)); }
+.wrow-t { font-size: 13px; color: var(--ink); }
+.wrow-k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.wrow-v { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.wrow-s { margin: 5px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 .sum-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .sum-list li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.62; color: var(--ink-2); }
 .sum-list li b { color: var(--ink); font-weight: 600; }

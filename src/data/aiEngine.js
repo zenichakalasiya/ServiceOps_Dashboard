@@ -238,6 +238,33 @@ export function widgetBrief(tile) {
   ] }
 }
 
+/* boardWidgetDigest — every widget on the board read in one pass.
+ *
+ * The summary CARD has room for an overview only, so the widget-by-widget detail lives
+ * here and is asked for explicitly. Each entry carries the tile's own headline reading
+ * (the number, the shape of the chart, the makeup of the list) plus its status, so the
+ * panel can render the whole board without the user opening fifteen hover cards. */
+export function boardWidgetDigest(board) {
+  const tiles = board?.tiles || []
+  return tiles.map((t) => {
+    const brief = widgetBrief(t)
+    const a = t.type === 'kpi' ? anomalyFor(t) : null
+    return {
+      id: t.id,
+      title: t.title,
+      kind: t.type === 'kpi' ? 'KPI' : t.type === 'shortcut' ? 'Record list' : `${t.chart?.kind || 'chart'} chart`,
+      // the one number/phrase that IS the widget, shown beside its name
+      headline: t.type === 'kpi'
+        ? `${t.value}${t.unit || ''}${t.delta ? ` · ${t.delta.dir === 'up' ? '▲' : '▼'} ${t.delta.pct}%` : ''}`
+        : t.type === 'shortcut'
+          ? `${(t.rows || []).length} record${(t.rows || []).length === 1 ? '' : 's'}`
+          : `${(t.chart?.labels || []).length} categories`,
+      summary: brief.summary,
+      status: a ? 'bad' : (t.status || 'info'),
+    }
+  })
+}
+
 // chartSummary — turn a chart's numbers into 2–3 plain-language sentences (leader + share +
 // concentration for part-to-whole; trend + peak for time series; the gap for multi-series).
 function chartSummary(ch, series, labels) {
