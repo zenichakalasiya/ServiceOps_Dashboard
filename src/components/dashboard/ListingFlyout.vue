@@ -105,6 +105,7 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
         <button class="ic" title="Collapse panel" @click="emit('close')"><Icon name="chevron-left" :size="17" /></button>
         <span class="ftitle">Dashboards</span>
       </div>
+      <button class="ic" title="New dashboard" @click="newDashboard"><Icon name="plus" :size="18" /></button>
     </div>
 
     <div class="tabs2">
@@ -151,13 +152,10 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <div v-if="!groups.length" class="none">No dashboards match.</div>
     </div>
 
-    <!-- footer: New dashboard CTA · Manage all dashboards + Archive icon -->
+    <!-- footer: the one link that isn't reachable from the rail — creating lives in the
+         header now, and Archive already has its own nav item with a count -->
     <div class="ffoot">
-      <button class="new-dash-btn" @click="newDashboard"><Icon name="plus" :size="15" /> New dashboard</button>
-      <div class="ffoot-row">
-        <button class="manage-link" @click="openFull()"><Icon name="rows" :size="15" /> Manage all dashboards <Icon name="chevron-right" :size="14" class="ml-arrow" /></button>
-        <button class="arch-ic" title="Archive" @click="emit('close'); router.push('/archive')"><Icon name="archive" :size="16" /></button>
-      </div>
+      <button class="manage-link" @click="openFull()"><Icon name="rows" :size="15" /> Manage all dashboards <Icon name="chevron-right" :size="14" class="ml-arrow" /></button>
     </div>
 
     <!-- per-row actions menu (teleported so it overlays instead of being clipped) -->
@@ -200,16 +198,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
 .row { display: flex; align-items: center; } .gap-6 { gap: 6px; }
-/* footer: outlined New dashboard CTA · Manage all dashboards + Archive icon */
-.ffoot { border-top: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.new-dash-btn { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; height: 38px; border: 1px solid var(--primary); background: transparent; color: var(--primary-700); font-weight: 600; font-size: 13px; border-radius: 8px; }
-.new-dash-btn:hover { background: var(--primary-softer); }
-.ffoot-row { display: flex; align-items: center; gap: 6px; }
-.manage-link { flex: 1; display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: none; background: transparent; color: var(--ink-2); font-weight: 600; font-size: 13px; border-radius: 8px; }
+/* footer: Manage all dashboards, on its own */
+.ffoot { border-top: 1px solid var(--border); padding: 10px; }
+.manage-link { width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: none; background: transparent; color: var(--ink-2); font-weight: 600; font-size: 13px; border-radius: 8px; }
 .manage-link:hover { background: var(--surface-2); color: var(--ink); }
 .manage-link .ml-arrow { margin-left: auto; color: var(--muted); }
-.arch-ic { flex: none; width: 36px; height: 36px; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
-.arch-ic:hover { background: var(--surface-2); color: var(--ink); }
 /* inline underline tabs (matches the Add-Widget side popup) */
 .tabs2 { display: flex; gap: 0; padding: 0 12px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .t2 { border: none; background: transparent; padding: 9px 2px; margin-right: 14px; color: var(--muted); font-weight: 500; font-size: 12.5px; border-bottom: 2px solid transparent; white-space: nowrap; flex: none; }
