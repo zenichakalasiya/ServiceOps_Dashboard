@@ -105,7 +105,7 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
         <button class="ic" title="Collapse panel" @click="emit('close')"><Icon name="chevron-left" :size="17" /></button>
         <span class="ftitle">Dashboards</span>
       </div>
-      <button class="ic" title="New dashboard" @click="newDashboard"><Icon name="plus" :size="18" /></button>
+      <button class="new-ic" title="New dashboard" @click="newDashboard"><Icon name="plus" :size="17" /></button>
     </div>
 
     <div class="tabs2">
@@ -204,6 +204,10 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .ftitle { font-weight: 600; font-size: 15px; }
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
+/* the primary create action — same filled treatment as the topbar's +, sized to this
+   header so it sits level with the 30px ghost chevron opposite it */
+.new-ic { width: 28px; height: 28px; border: none; border-radius: 8px; background: var(--primary); color: #fff; display: grid; place-items: center; box-shadow: var(--sh-sm); }
+.new-ic:hover { background: var(--primary-600); }
 .row { display: flex; align-items: center; } .gap-6 { gap: 6px; }
 /* footer: Manage all dashboards, on its own */
 .ffoot { border-top: 1px solid var(--border); padding: 10px; }
