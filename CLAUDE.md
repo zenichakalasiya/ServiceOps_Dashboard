@@ -114,7 +114,7 @@ positioned in viewport coordinates — follow that pattern for any new floating 
 | `components/ai/AiAssistant.vue` | The whole AI side panel — composer, thread, creation flows. |
 | `components/ai/AiSummaryCard.vue` | The upfront AI Summary banner + its 3 CTAs. |
 | `data/aiEngine.js` | **Deterministic, no-LLM** engine: facts, anomalies, explanations, briefings. |
-| `data/aiAssistant.js` | Intent routing, tile/fact resolution, description → widget spec. |
+| `data/aiAssistant.js` | Intent routing, tile/fact resolution, and `resolveWidget` (description → configured widget). |
 
 ## The AI assistant (`components/ai/AiAssistant.vue`)
 
@@ -136,11 +136,30 @@ there:
 (pending → spinner → check), then `streamText()` reveals prose word-by-word and `revealItems()`
 staggers lists. All of it honours `prefers-reduced-motion` (skips straight to the result).
 
-**Creation is intent-led.** Describe what a dashboard is *for*; the AI drafts a widget plan,
-**names it if you didn't**, then asks only the two things it can't infer (category, visibility)
-as numbered question cards. Widgets: describe the data → one built widget with a live preview and
-minimal chart-type pills → add it, or say what to change. Typing a **new** name in "where should
-it go?" creates that dashboard.
+**Creation is intent-led, and it BUILDS before it administrates.** Describe what a dashboard is
+*for*; the AI drafts a widget plan and **names it if you didn't**. Approving the draft creates the
+board immediately (with defaults) and moves to filling it — a small palette shows the vocabulary
+(Column · Bar · Line · Doughnut · KPI · Shortcut; tap one to hint a form), then you describe
+widgets in the composer. **"That's everything"** navigates the canvas to the new board with the
+panel still open and recaps what was built. Only *then* come the two things it can't infer —
+category, then visibility — applied to the existing board.
+
+**One message can build many widgets.** `splitWidgetRequests` splits on newlines, semicolons,
+bullets and numbered markers always; commas and "and" **only** when a count was stated, because a
+bare "and" is usually part of one phrase ("SLA breaches and overdue work"), not a list boundary.
+Each widget is placed in sequence, labelled "n of m", with the add/finish pills only after the
+last one.
+
+**`resolveWidget` (in `data/aiAssistant.js`) is what makes the output match the prompt.** It reads
+the module, the conditions, the grouping dimension (with that dimension's *real* labels), the time
+window and the form, then generates data shaped like the dimension — a priority split descends, a
+month series trends, a team split is uneven — seeded from the text so the same sentence always
+builds the same widget. Anything it genuinely can't infer comes back in `spec.missing`; the flow
+**pauses and asks** (grouping is the usual one) rather than guessing, then resumes the queue.
+
+**The panel reads the board you're actually on** (`aiBoard` in `DashboardView.vue` is a computed
+over the live dashboard, not a fixed demo board). A newly created or empty board is summarised
+honestly — "no widgets yet" — rather than borrowing another board's story.
 
 **Numbered next steps** appear only after a task that leaves a real decision (dashboard created,
 widget added). Contextual **follow-ups** appear only on answers that invite a next question
