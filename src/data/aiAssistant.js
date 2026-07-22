@@ -282,10 +282,15 @@ const DEFAULT_RECIPE = {
 }
 const VIZ_LABEL = { kpi: 'KPI', shortcut: 'Table', bar: 'Column', hbar: 'Bar', line: 'Line', donut: 'Doughnut' }
 
-export function proposeDashboard(intent, variant = 0) {
+export function proposeDashboard(intent, variant = 0, size) {
   const recipe = BOARD_RECIPES.find((r) => r.re.test(intent)) || DEFAULT_RECIPE
-  // "Regenerate" rotates the recipe's own list so a second look differs from the first
-  const items = recipe.items.map((t, i) => recipe.items[(i + variant) % recipe.items.length])
+  // rotating the recipe's own list makes a second look differ from the first
+  const rotated = recipe.items.map((t, i) => recipe.items[(i + variant) % recipe.items.length])
+  /* "Add a few more" / "trim it" resize the SAME list rather than re-rolling it — a
+   * bigger board should still contain the widgets you already approved of. Growing
+   * past the recipe wraps back through it with the pool from every other recipe. */
+  const pool = [...rotated, ...BOARD_RECIPES.flatMap((r) => r.items).filter((t) => !rotated.includes(t))]
+  const items = size ? pool.slice(0, Math.min(size, pool.length)) : rotated
   const widgets = items.map((text) => {
     const spec = resolveWidget(text)
     return {
@@ -308,6 +313,37 @@ export function applyGroupBy(spec, dimId, text) {
   if (!dim) return spec
   const next = resolveWidget(`${text} by ${dim.label}`, spec.kind)
   next.missing = []
+  return next
+}
+/* ---- revising a built widget ------------------------------------------------
+ * Amending the user's original sentence leaves residue — "... by priority" plus a
+ * new "... by team" gives you a widget grouped by whichever the regex hits first.
+ * So a revision regenerates the intent from the parts the resolver actually read,
+ * applies exactly one change, and re-resolves. Every word written here is one the
+ * matchers above are guaranteed to read back. */
+export const WINDOW_CHOICES = ['Today', 'This week', 'Last 30 days', 'Last 6 months', 'This year']
+export const CONDITION_CHOICES = FILTERS.map((f) => f.word)
+export function specToText(spec, over = {}) {
+  const words = (over.filters || (spec.filters || []).map((f) => f.word)).map((w) => w.toLowerCase().replace(/-/g, ' '))
+  const groupBy = 'groupBy' in over ? over.groupBy : spec.groupBy
+  const win = 'window' in over ? over.window : spec.window
+  const dim = GROUP_DIMS.find((d) => d.id === groupBy)
+  return [
+    words.join(' '),
+    (over.module || spec.module || 'Requests').toLowerCase(),
+    dim ? `by ${dim.label.toLowerCase()}` : '',
+    win ? win.toLowerCase() : '',
+  ].filter(Boolean).join(' ')
+}
+export function reviseSpec(spec, change = {}) {
+  const over = { ...change }
+  // a named condition is ADDED to what's already set, not swapped for it
+  if (change.addCondition) {
+    over.filters = [...new Set([...(spec.filters || []).map((f) => f.word), change.addCondition])]
+    delete over.addCondition
+  }
+  const next = resolveWidget(specToText(spec, over), change.kind || spec.kind)
+  if (change.title) next.title = change.title
   return next
 }
 

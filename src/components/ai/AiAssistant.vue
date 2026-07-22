@@ -13,7 +13,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, statusUpdate, recoveryPlan, workOrder, changesSinceLastVisit, dashboardSummaryPoints, FRESHNESS } from '../../data/aiEngine.js'
-import { routeIntent, tileFromText, factFromText, resolveWidget, applyGroupBy, explicitForm, proposeDashboard, GROUP_DIMS, SUGGESTIONS } from '../../data/aiAssistant.js'
+import { routeIntent, tileFromText, factFromText, resolveWidget, applyGroupBy, reviseSpec, explicitForm, proposeDashboard, GROUP_DIMS, WINDOW_CHOICES, CONDITION_CHOICES, SUGGESTIONS } from '../../data/aiAssistant.js'
 import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
 import { chart, kpi, shortcut } from '../../data/mock.js'
@@ -92,8 +92,9 @@ function pushUser(text) { thread.value.push({ id: ++bid, kind: 'user', text }); 
  * step, so it goes down the same road: real resolver, real tile preview, one-click
  * placement. Two builders for one intent is how the two drift apart. */
 function pushWidget(text) {
-  draft.value = { ...draft.value, mode: 'widget', intent: text }
-  const blk = push('cw-build', { phase: 'thinking', title: '', tile: null, spec: null, chips: [], cfg: null, settled: false })
+  const inDash = inDashFlow()
+  draft.value = { ...draft.value, mode: inDash ? 'dash' : 'widget', intent: text }
+  const blk = push('cw-build', { phase: 'thinking', title: '', tile: null, spec: null, chips: [], cfg: null, settled: false, inDash })
   runThinking(blk, ['Reading what you want to show', 'Matching it to fields we can query', 'Configuring the widget'], () => {
     previewOrAsk(blk, text, explicitForm(text))
   })
@@ -325,15 +326,16 @@ function writePrompt(b, ap) { input.value = PROMPT_HELP[b.which].prompts[ap.id];
 function useDashPrompt() { askPromptHelp('dash') }
 /* The fast path: read the intent once and propose the WHOLE board, so it can be
  * accepted in a single click instead of described a widget at a time. */
-function dashIntent(text, variant = 0) {
+function dashIntent(text, variant = 0, size) {
   const t = (text || '').trim(); if (!t) return
   awaiting.value = null
-  if (!variant) pushUser(t)
+  if (!variant && !size) pushUser(t)
   const nm = nameFromIntent(t)
   draft.value = { ...draft.value, mode: 'dash', intent: t, name: nm.name, namedByAi: nm.ours, variant }
+  if (draft.value.improving) draft.value.improving.stale = true
   const blk = push('cd-proposal', { phase: 'thinking', name: '', proposal: null, namedByAi: false, settled: false })
   runThinking(blk, ['Reading the intent behind it', 'Choosing the widgets that answer it', 'Laying out the board'], () => {
-    const p = proposeDashboard(t, variant)
+    const p = proposeDashboard(t, variant, size)
     draft.value.category = p.category
     draft.value.proposal = p
     blk.name = draft.value.name
@@ -343,10 +345,42 @@ function dashIntent(text, variant = 0) {
     awaiting.value = 'dash-refine'   // typing still refines it
   })
 }
-function regenerate(b) {
-  const next = ((draft.value.variant || 0) + 1) % 6
-  pushUser('Regenerate')
-  dashIntent(draft.value.intent, next)
+/* "Improve anything" replaces a bare Regenerate. Regenerate re-rolls blindly and makes
+ * the user keep clicking until something fits; asking WHAT to improve gets there in one
+ * step, and every option is answerable by picking rather than typing. */
+function improveProposal(b) {
+  awaiting.value = null
+  draft.value.improving = b
+  push('ask', {
+    askId: 'improve', step: 1, total: 1, other: '',
+    q: 'What should I improve about it?',
+    sub: `Right now it’s ${b.proposal.widgets.length} widgets in ${b.proposal.category}.`,
+    options: [
+      { label: 'Add a few more widgets', value: 'more' },
+      { label: 'Trim it to the essentials', value: 'fewer' },
+      { label: 'Focus it on a different module', value: 'module' },
+      { label: 'Try a different mix entirely', value: 'reroll' },
+    ],
+    otherPh: 'Or describe what’s missing…', skippable: false,
+  })
+}
+function askImproveModule() {
+  push('ask', {
+    askId: 'imodule', step: 1, total: 1, other: '', skippable: false,
+    q: 'Which module should it be about?',
+    sub: 'I’ll re-propose the whole board against that data.',
+    options: ['Requests', 'Assets', 'Changes', 'Problems', 'Tasks'].map((m) => ({ label: m, value: m })),
+    otherPh: '',
+  })
+}
+function reproposeSize(dir) {
+  const b = draft.value.improving
+  const p = b?.proposal
+  if (!p) return
+  // widen or narrow the SAME proposal rather than re-rolling it — "a bit bigger" should
+  // not hand back a board with none of the widgets you already approved of
+  const size = dir === 'more' ? p.widgets.length + 3 : Math.max(3, p.widgets.length - 2)
+  dashIntent(draft.value.intent, draft.value.variant || 0, size)
 }
 // accept the proposal: create the board (if needed) and place every widget at once
 function acceptProposal(b, target) {
@@ -486,7 +520,18 @@ function dashWidget(text) {
   // "add 4 KPIs: a, b, c, d" names the form ONCE, in the preamble the splitter
   // removes — so carry it across the whole batch unless an item overrides it.
   draft.value.batchForm = explicitForm(t)
-  buildWidgetQueue(items, 0, want && want > items.length ? want - items.length : 0)
+  const shortBy = want && want > items.length ? want - items.length : 0
+  /* ONE widget gets a preview to approve; a BATCH places straight away. Asking someone
+   * to confirm six previews one at a time is the slow flow this whole rework replaced. */
+  if (items.length === 1 && !shortBy) {
+    draft.value.intent = items[0]
+    const blk = push('cw-build', { phase: 'thinking', title: '', tile: null, spec: null, chips: [], cfg: null, settled: false, inDash: true })
+    runThinking(blk, ['Reading what you want to show', 'Choosing the clearest way to draw it', 'Configuring the widget'], () => {
+      previewOrAsk(blk, items[0], formFor(items[0]))
+    })
+    return
+  }
+  buildWidgetQueue(items, 0, shortBy)
 }
 // item's own wording wins, then the batch preamble, then the palette hint
 function formFor(item) {
@@ -519,7 +564,9 @@ function placeWidget(spec, text, list, i, shortBy) {
     d.tiles.push(tile); d.updated = new Date().toISOString()
     draft.value.built.push(tile)
     blk.tile = tile
-    blk.cfg = tile.type === 'chart' ? configLines({ title: tile.title, chart: tile.chart, chips: tile._chips }) : null
+    // every form has conditions worth showing — read the kind off the spec, since a
+    // KPI and a record list have no tile.chart to read it from
+    blk.cfg = configLines({ title: tile.title, chart: { kind: spec.kind, labels: spec.chart?.labels }, chips: spec.chips || [] })
     blk.settled = true
     setTimeout(() => buildWidgetQueue(list, i + 1, shortBy), 400)
   })
@@ -544,7 +591,30 @@ function finishWidgets() {
   setTimeout(() => push('cd-recap', { dash: d, built: [...(draft.value.built || [])] }), 450)
 }
 function confirmRecap() { awaiting.value = null; askCategory() }
-function changeRecap() { awaiting.value = 'dash-widget'; focusComposer() }
+// "Change something" on the recap is also a question, for the same reason
+function changeRecap() {
+  awaiting.value = null
+  push('ask', {
+    askId: 'recapchange', step: 1, total: 1, other: '', skippable: false,
+    q: 'What would you like to change?',
+    sub: `“${draft.value.dash?.name}” has ${(draft.value.built || []).length} widget${(draft.value.built || []).length === 1 ? '' : 's'} on it.`,
+    options: [
+      { label: 'Add another widget', value: 'add' },
+      { label: 'Remove one of the widgets', value: 'remove' },
+      { label: 'Rename the dashboard', value: 'rename' },
+    ],
+    otherPh: 'Or describe the change…',
+  })
+}
+function askRemoveWidget() {
+  push('ask', {
+    askId: 'rremove', step: 1, total: 1, other: '', skippable: false,
+    q: 'Which one should come off?',
+    sub: 'It’s removed from the board straight away — nothing else changes.',
+    options: (draft.value.built || []).map((t, i) => ({ label: t.title, value: String(i) })),
+    otherPh: '',
+  })
+}
 
 function askCategory() {
   awaiting.value = null
@@ -571,6 +641,7 @@ function askVisibility() {
 // two answers to it and closes the flow out.
 function finishDashboard() {
   const d = draft.value.dash
+  draft.value.finished = true
   d.category = draft.value.category === '__skip' ? '' : draft.value.category
   d.access = draft.value.access || 'private'
   d.updated = new Date().toISOString()
@@ -626,12 +697,16 @@ function applyPreview(blk, spec, text) {
   blk.cfg = configLines({ title: spec.title, chart: { kind: spec.kind, labels: spec.chart?.labels }, chips: spec.chips || [] })
   blk.settled = true
 }
+/* A dashboard is mid-build when its board exists but its setup questions haven't been
+ * answered yet. A widget previewed in that window belongs to THAT board, so its next
+ * step is finishing the board — not choosing where to put it. */
+function inDashFlow() { return draft.value.mode === 'dash' && !!draft.value.dash && !draft.value.finished }
 function widgetIntent(text) {
   const t = (text || '').trim(); if (!t) return
   awaiting.value = null
   pushUser(t)
   draft.value.intent = t
-  const blk = push('cw-build', { phase: 'thinking', title: '', tile: null, spec: null, chips: [], cfg: null, settled: false })
+  const blk = push('cw-build', { phase: 'thinking', title: '', tile: null, spec: null, chips: [], cfg: null, settled: false, inDash: inDashFlow() })
   runThinking(blk, ['Reading what you want to show', 'Matching it to fields we can query', 'Configuring the widget'], () => {
     previewOrAsk(blk, t, explicitForm(t))
   })
@@ -654,17 +729,101 @@ function setBuildKind(b, id) {
   if (b.spec?.kind === id) return
   previewOrAsk(b, draft.value.intent || b.title, id)
 }
-function changeWidget() { awaiting.value = 'widget-refine'; focusComposer() }
+/* "Change something" is a QUESTION, not a blank composer. Being asked "what should I
+ * change?" with the four things that are actually changeable beats an empty box that
+ * makes you guess the vocabulary — and it keeps the whole exchange in the thread. */
+function changeWidget(b) {
+  awaiting.value = null
+  draft.value.revising = b
+  push('ask', {
+    askId: 'wchange', step: 1, total: 1, other: '',
+    q: `What should I change about “${b.title}”?`,
+    sub: 'Pick one and I’ll rebuild the preview — the chart type is switchable above.',
+    options: [
+      { label: 'The conditions it filters on', value: 'cond' },
+      { label: 'What it’s grouped by', value: 'group' },
+      { label: 'The time window it covers', value: 'window' },
+      { label: 'Its title', value: 'title' },
+    ],
+    otherPh: 'Or describe the change…', skippable: false,
+  })
+}
+// each answer to "what should I change" opens the one list that answers it
+function askRevision(kind, b) {
+  const spec = draft.value.revising?.spec
+  const q = {
+    cond: {
+      askId: 'wcond', q: 'Which condition should it filter on?',
+      sub: 'I’ll add it to the conditions already set.',
+      options: CONDITION_CHOICES.slice(0, 6).map((w) => ({ label: w.replace(/-/g, ' '), value: w })),
+      otherPh: 'Or name another condition…',
+    },
+    group: {
+      askId: 'wregroup', q: 'What should it be grouped by?',
+      sub: 'This becomes the axis the values are split across.',
+      options: GROUP_DIMS.slice(0, 6).map((d) => ({ label: `By ${d.label.toLowerCase()}`, value: d.id })),
+      otherPh: 'Or name another field…',
+    },
+    window: {
+      askId: 'wwindow', q: 'Which time window should it cover?',
+      sub: 'Leave it on the dashboard filter and it follows whatever the board is set to.',
+      options: [...WINDOW_CHOICES.map((w) => ({ label: w, value: w })), { label: 'Follow the dashboard filter', value: '__none' }],
+      otherPh: '',
+    },
+    title: {
+      askId: 'wtitle', q: 'What should it be called?',
+      sub: 'Type the new title below — or keep the one I derived from the query.',
+      options: [{ label: `Keep “${spec?.title || 'the current title'}”`, value: spec?.title || '' }],
+      otherPh: 'Type the new title…',
+    },
+  }[kind]
+  if (!q) { redoPreview(reviseSpec(draft.value.revising.spec, {}), b.answered); return }
+  push('ask', { step: 1, total: 1, other: '', skippable: false, ...q })
+}
+// a revision produces a NEW preview block, so the change reads as a step in the thread
+function redoPreview(spec, note) {
+  const prev = draft.value.revising
+  if (prev) prev.stale = true
+  const blk = push('cw-build', {
+    phase: 'thinking', title: '', tile: null, spec: null, chips: [], settled: false,
+    inDash: prev?.inDash || false,
+  })
+  runThinking(blk, [note ? `Applying “${note}”` : 'Applying your change', 'Re-running the query', 'Redrawing the preview'], () => {
+    applyPreview(blk, spec, draft.value.intent || spec.title)
+  })
+}
 function refineWidget(text) { const t = (text || '').trim(); if (!t) return; widgetIntent(`${draft.value.intent}. ${t}`) }
 /* Almost everyone wants the widget on the board they're already looking at, so that
  * is a BUTTON, not a question — one click from preview to placed. "A new dashboard"
  * stays available beside it and is the only branch that still needs to be asked. */
 function confirmWidget(b, target) {
   draft.value.build = { title: b.title, spec: b.spec, chips: b.chips || [] }
-  if (target === 'new') { awaiting.value = 'newboard-name'; push('cw-newboard'); focusComposer(); return }
+  b.stale = true
   awaiting.value = null
+  // building INSIDE a dashboard draft: place it, then go finish the board
+  if (target === 'finish') {
+    const tile = tileFromSpec(b.spec, draft.value.intent)
+    const d = draft.value.dash
+    d.tiles.push(tile); d.updated = new Date().toISOString()
+    ;(draft.value.built = draft.value.built || []).push(tile)
+    toast(`Added “${tile.title}” to ${d.name}`, 'success')
+    setTimeout(finishWidgets, 400)
+    return
+  }
+  if (target === 'other') { askWhichBoard(); return }
   draft.value.targetBoard = currentBoard()
   addTheWidget()
+}
+// "Add to another": the boards that exist, plus a brand-new one — asked in the thread
+function askWhichBoard() {
+  const others = store.dashboards.filter((d) => d.id !== currentBoard().id).slice(0, 4)
+  push('ask', {
+    askId: 'wother', step: 1, total: 1, other: '', skippable: false,
+    q: 'Which dashboard should it go on?',
+    sub: 'I’ll place it at the end of that board.',
+    options: [...others.map((d) => ({ label: d.name, value: d.id })), { label: 'A new dashboard', value: '__new' }],
+    otherPh: 'Or name a new dashboard…',
+  })
 }
 function currentBoard() { return draft.value.dash || props.board }
 /* Spell the configuration back, so "added" is verifiable rather than a claim. Each
@@ -733,6 +892,79 @@ function answerAsk(b, opt, custom) {
     else setTimeout(() => placeWidget(spec, p.text, p.list, p.i, p.shortBy), 350)
     return
   }
+  // ---- revising a built widget: pick a field, then pick its value ----
+  if (b.askId === 'wchange') {
+    if (opt) { setTimeout(() => askRevision(val, b), 320); return }
+    // typed freely instead of picking → treat it as a fresh description of the widget
+    const base = draft.value.revising
+    if (base) base.stale = true
+    setTimeout(() => widgetIntent(`${draft.value.intent}. ${val}`), 320)
+    return
+  }
+  if (b.askId === 'wcond') {
+    setTimeout(() => redoPreview(reviseSpec(draft.value.revising.spec, { addCondition: val }), b.answered), 320); return
+  }
+  if (b.askId === 'wregroup') {
+    const dim = GROUP_DIMS.find((d) => d.id === val) || GROUP_DIMS.find((d) => d.label.toLowerCase() === String(val).toLowerCase())
+    setTimeout(() => redoPreview(reviseSpec(draft.value.revising.spec, { groupBy: dim ? dim.id : null }), b.answered), 320); return
+  }
+  if (b.askId === 'wwindow') {
+    setTimeout(() => redoPreview(reviseSpec(draft.value.revising.spec, { window: val === '__none' ? null : val }), b.answered), 320); return
+  }
+  if (b.askId === 'wtitle') {
+    setTimeout(() => redoPreview(reviseSpec(draft.value.revising.spec, { title: val }), b.answered), 320); return
+  }
+  // ---- "add to another": an existing board, or a brand-new one ----
+  if (b.askId === 'wother') {
+    if (val === '__new') { awaiting.value = 'newboard-name'; push('cw-newboard'); focusComposer(); return }
+    const target = store.dashboards.find((d) => d.id === val) || makeBoardFor(b.answered)
+    draft.value.targetBoard = target
+    setTimeout(addTheWidget, 350)
+    return
+  }
+  // ---- changing the board after its widgets are on it ----
+  if (b.askId === 'recapchange') {
+    if (val === 'add') { awaiting.value = 'dash-widget'; focusComposer(); return }
+    if (val === 'remove') { setTimeout(askRemoveWidget, 320); return }
+    if (val === 'rename') {
+      push('ask', {
+        askId: 'rrename', step: 1, total: 1, other: '', skippable: false,
+        q: 'What should it be called?', sub: 'Type the new name.',
+        options: [{ label: `Keep “${draft.value.dash?.name}”`, value: draft.value.dash?.name || '' }],
+        otherPh: 'Type a new name…',
+      })
+      return
+    }
+    awaiting.value = 'dash-widget'; focusComposer(); return
+  }
+  if (b.askId === 'rremove') {
+    const d = draft.value.dash
+    const tile = (draft.value.built || [])[Number(val)]
+    if (tile) {
+      d.tiles = d.tiles.filter((t) => t.id !== tile.id)
+      draft.value.built = draft.value.built.filter((t) => t.id !== tile.id)
+      d.updated = new Date().toISOString()
+      toast(`Removed “${tile.title}”`, 'success')
+    }
+    setTimeout(() => push('cd-recap', { dash: d, built: [...(draft.value.built || [])] }), 450)
+    return
+  }
+  if (b.askId === 'rrename') {
+    const d = draft.value.dash
+    if (d && val) { d.name = val; d.updated = new Date().toISOString(); draft.value.name = val; draft.value.namedByAi = false }
+    setTimeout(() => push('cd-recap', { dash: d, built: [...(draft.value.built || [])] }), 450)
+    return
+  }
+  // ---- improving a proposed board before it's built ----
+  if (b.askId === 'improve') {
+    if (val === 'more' || val === 'fewer') { setTimeout(() => reproposeSize(val), 320); return }
+    if (val === 'module') { setTimeout(askImproveModule, 320); return }
+    setTimeout(() => dashIntent(`${draft.value.intent}. ${b.answered}`, (draft.value.variant || 0) + 1), 320)
+    return
+  }
+  if (b.askId === 'imodule') {
+    setTimeout(() => dashIntent(`${draft.value.intent} for ${val}`, draft.value.variant || 0), 320); return
+  }
   if (b.askId === 'wdash') {
     // "a new dashboard" with no name yet → ask for the name in the composer
     if (val === '__new') { awaiting.value = 'newboard-name'; focusComposer(); setTimeout(() => push('cw-newboard'), 250); return }
@@ -762,7 +994,9 @@ function dispatch(intent, text) {
   if (intent === 'summary') pushSummary()
   else if (intent === 'explain') pushExplain(text)
   else if (intent === 'drill') pushDrill(text)
-  else if (intent === 'create') pushWidget(text)
+  /* "Create a DASHBOARD" and "create a widget" are the same intent to the router but
+   * different flows — one proposes a whole board, the other builds a single tile. */
+  else if (intent === 'create') (/\b(dashboard|board|dashboards)\b/i.test(text) ? dashIntent : pushWidget)(text)
   else if (intent === 'changes') pushChanges()
   else if (intent === 'analyzing') pushAnalyzing()
   else if (intent === 'createstart') pushCreateStart()
@@ -1297,13 +1531,11 @@ watch(() => props.role, () => {
                 <span class="prop-viz">{{ w.viz }}</span>
               </div>
             </div>
-            <div class="prop-acts">
-              <button class="pact go" @click="acceptProposal(b, 'new')">Create new dashboard</button>
-              <button class="pact" @click="acceptProposal(b, 'current')">Add to current</button>
-              <button class="pact" @click="regenerate(b)">Regenerate</button>
+            <div v-if="!b.stale" class="prop-acts">
+              <button class="pact go" @click="acceptProposal(b, 'new')">Create dashboard</button>
+              <button class="pact" @click="improveProposal(b)">Improve anything</button>
             </div>
           </div>
-          <p class="say muted-say">Or tell me what to change and I’ll re-propose it.</p>
         </template>
 
         <!-- dashboard: everything placed in one go -->
@@ -1378,9 +1610,10 @@ watch(() => props.role, () => {
               </table>
             </div>
           </div>
-          <div v-if="b.cfg" class="cfg">
-            <div class="cfg-h">How it’s configured</div>
-            <div v-for="(r, ri) in b.cfg.rows" :key="ri" class="cfg-r"><span>{{ r.k }}</span><b>{{ r.v }}</b></div>
+          <div v-if="b.cfg && b.cfg.filters.length" class="chips condrow">
+            <span v-for="(c, ci) in b.cfg.filters" :key="ci" class="dchip">
+              <b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}
+            </span>
           </div>
           <!-- only after the LAST of a batch, so a 3-widget request doesn't repeat these -->
           <div v-if="b.last" class="chipsrow mini">
@@ -1451,24 +1684,27 @@ watch(() => props.role, () => {
               @click="setBuildKind(b, k.id)"
             >{{ k.label }}</button>
           </div>
-          <div v-if="b.cfg" class="cfg">
-            <div class="cfg-h">How it’s configured</div>
-            <div v-for="(r, ri) in b.cfg.rows" :key="ri" class="cfg-r"><span>{{ r.k }}</span><b>{{ r.v }}</b></div>
-            <template v-if="b.cfg.filters.length">
-              <div class="cfg-h cond">Conditions</div>
-              <div class="chips">
-                <span v-for="(c, ci) in b.cfg.filters" :key="ci" class="dchip">
-                  <b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}
-                </span>
-              </div>
-            </template>
+          <div v-if="b.cfg && b.cfg.filters.length" class="chips condrow">
+            <span v-for="(c, ci) in b.cfg.filters" :key="ci" class="dchip">
+              <b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}
+            </span>
           </div>
-          <div class="doneacts">
-            <button class="add" @click="confirmWidget(b)">
-              <Icon name="plus" :size="14" /><span>Add to “{{ currentBoard().name }}”</span>
-            </button>
-            <button class="mini-cta" @click="confirmWidget(b, 'new')">New dashboard</button>
-            <button class="mini-cta" @click="changeWidget()">Change something <Icon name="chevron-right" :size="13" /></button>
+          <!-- inside a board being built, the next move is finishing the board; on its
+               own, it's choosing where the widget lands. Only the newest preview acts. -->
+          <div v-if="!b.stale" class="doneacts">
+            <template v-if="b.inDash">
+              <button class="add" @click="confirmWidget(b, 'finish')">
+                <Icon name="check" :size="14" /><span>Create dashboard</span>
+              </button>
+              <button class="mini-cta" @click="changeWidget(b)">Change something <Icon name="chevron-right" :size="13" /></button>
+            </template>
+            <template v-else>
+              <button class="add" @click="confirmWidget(b)">
+                <Icon name="plus" :size="14" /><span>Add to “{{ currentBoard().name }}”</span>
+              </button>
+              <button class="mini-cta" @click="confirmWidget(b, 'other')">Add to another</button>
+              <button class="mini-cta" @click="changeWidget(b)">Change something <Icon name="chevron-right" :size="13" /></button>
+            </template>
           </div>
         </template>
 
@@ -1494,18 +1730,11 @@ watch(() => props.role, () => {
               </table>
             </div>
           </div>
-          <!-- spell the configuration back so "added" is checkable, not just claimed -->
-          <div v-if="b.cfg" class="cfg">
-            <div class="cfg-h">How it’s configured</div>
-            <div v-for="(r, ri) in b.cfg.rows" :key="ri" class="cfg-r"><span>{{ r.k }}</span><b>{{ r.v }}</b></div>
-            <template v-if="b.cfg.filters.length">
-              <div class="cfg-h cond">Conditions</div>
-              <div class="chips">
-                <span v-for="(c, ci) in b.cfg.filters" :key="ci" class="dchip">
-                  <b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}
-                </span>
-              </div>
-            </template>
+          <!-- the conditions it landed with, so "added" is checkable and not just claimed -->
+          <div v-if="b.cfg && b.cfg.filters.length" class="chips condrow">
+            <span v-for="(c, ci) in b.cfg.filters" :key="ci" class="dchip">
+              <b>{{ c.field }}</b><span v-if="c.op" class="op">{{ c.op }}</span> {{ c.value }}
+            </span>
           </div>
         </template>
 
@@ -1869,12 +2098,10 @@ tr:last-child td { border-bottom: none; }
 /* a real table glyph reads better than anything drawable in CSS */
 .wt-i { height: 16px; margin-bottom: 2px; color: var(--ai); display: grid; place-items: center; }
 /* the configuration, spelled back after adding */
-.cfg { margin-top: 11px; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; display: flex; flex-direction: column; gap: 5px; }
-.cfg-h { font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
-.cfg-h.cond { margin-top: 7px; }
-.cfg-r { display: flex; align-items: baseline; gap: 10px; font-size: 11.5px; }
-.cfg-r span { flex: none; width: 74px; color: var(--muted); }
-.cfg-r b { flex: 1; min-width: 0; color: var(--ink); font-weight: 600; }
+/* The conditions on their own. The old "How it's configured" table restated what the
+ * meta line above the preview already says (source · measure · how it's drawn) — the
+ * conditions were the only part of it you couldn't read anywhere else. */
+.condrow { margin-top: 10px; }
 /* chart-type preference pills sit tight under the preview */
 .kindrow { margin-top: 9px; }
 .wmeta { font-size: 11px; color: var(--muted); margin: -4px 0 9px; font-family: var(--mono, inherit); }
