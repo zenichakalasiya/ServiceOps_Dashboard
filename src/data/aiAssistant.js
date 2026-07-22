@@ -36,12 +36,23 @@ export function routeIntent(text) {
   if (/status (?:update|report)|draft an update|write an update|comms update/.test(t)) return 'status'
   if (/recovery plan|action plan|remediation plan|get (?:us |this )?back on track|plan to (?:fix|recover)/.test(t)) return 'plan'
   if (/work on first|start with|where do i start|what should i do first|order my|my queue/.test(t)) return 'worklist'
+  // 'changes' had no rule at all — it only ever worked from a button
+  if (/what.?s? changed|changed since|since (?:my )?last visit|what.?s new|any (?:new )?changes/.test(t)) return 'changes'
   // "create" must need a build verb — matching a bare "by priority" used to hijack
   // "explain the trend in Open Requests By Priority" into the widget builder.
   if (/^(create|build|make|add|generate|draft)\b|new widget|a widget|widget for|trend chart|chart (of|for)/.test(t)) return 'create'
-  if (/investigate|breach|overdue|\blist\b|\bshow\b|which|drill|\bp1\b|due today|records|top offenders/.test(t)) return 'drill'
-  if (/\bwhy\b|explain|anomal|spike|spiked|drop|surge|cause|\btrend\b|\bhow\b|tell me about|break ?down/.test(t)) return 'explain'
-  if (/attention|summar|focus|going on|what.?s wrong|status|overview/.test(t)) return 'summary'
+  /* Intent comes from the VERB, not the topic. "overdue" and "breach" are subjects —
+   * they appear just as often in "why did overdue spike" as in "show the overdue
+   * list" — so matching them for drill hijacked every explain question about them.
+   * Explain is checked first because its markers (why / explain / cause) are
+   * unambiguous, and drill keeps only the words that genuinely ask to see records. */
+  if (/\bwhy\b|explain|anomal|spike|spiked|surge|cause|\btrend\b|tell me about|break ?down/.test(t)) return 'explain'
+  if (/investigate|\blist\b|\bshow\b|which|drill|\bp1\b|due today|records|top offenders|breaching today/.test(t)) return 'drill'
+  /* "Summarise this dashboard" and "what needs attention" are different questions:
+   * the first wants the written description, the second the ranked problem list.
+   * Matching a bare "summar" for the latter answered the wrong one. */
+  if (/summar(?:ise|ize|y)|describe this (?:dashboard|board)|overview of/.test(t)) return 'analyzing'
+  if (/attention|focus|going on|what.?s wrong|needs? action|what.?s the status/.test(t)) return 'summary'
   return 'explain'   // a question about a widget explains it, rather than dumping a generic summary
 }
 

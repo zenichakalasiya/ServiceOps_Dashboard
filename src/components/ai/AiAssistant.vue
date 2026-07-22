@@ -854,7 +854,8 @@ const DEFAULT_PH = 'Ask, build and act across your stack'
 const CMD_INTENT = { find: 'drill', create: 'create', edit: 'note', analyze: 'explain', prioritize: 'drill', schedule: 'note' }
 
 const cmdOpen = ref(false)        // the command palette (+ button / "/")
-const cmdIndex = ref(0)           // keyboard highlight
+const cmdIndex = ref(0)           // keyboard highlight in the palette
+const sugIndex = ref(0)           // …and in the picked command's suggestions
 const activeAction = ref(null)    // the picked command — shows as a chip in the composer
 const showSuggest = ref(false)    // its suggestion list; hides as soon as the user types
 const inputEl = ref(null)
@@ -887,6 +888,7 @@ function pickCommand(a) {
   cmdOpen.value = false
   input.value = ''             // drop the "/query" that opened the palette
   showSuggest.value = true     // its suggestions open with it…
+  sugIndex.value = 0           // …with the first one already under the keyboard
   nextTick(() => inputEl.value?.focus())
 }
 function clearCommand() { activeAction.value = null; showSuggest.value = false; nextTick(() => inputEl.value?.focus()) }
@@ -897,13 +899,29 @@ function onInput() {
   // …and fade away the moment the user starts writing their own prompt
   if (input.value.trim()) showSuggest.value = false
 }
+/* The keyboard carries all the way through: "/" opens the palette, ↑↓ + ↵ picks a
+ * command, then ↑↓ + ↵ runs one of THAT command's suggestions — never breaking to
+ * the mouse mid-flow. Enter is handled here (not on keyup) so one keypress can't
+ * both pick a suggestion and submit the composer. */
 function onKeydown(e) {
+  // 1 — the command palette
   if (cmdOpen.value && cmdList.value.length) {
     if (e.key === 'ArrowDown') { e.preventDefault(); cmdIndex.value = (cmdIndex.value + 1) % cmdList.value.length; return }
     if (e.key === 'ArrowUp') { e.preventDefault(); cmdIndex.value = (cmdIndex.value - 1 + cmdList.value.length) % cmdList.value.length; return }
     if (e.key === 'Enter') { e.preventDefault(); pickCommand(cmdList.value[cmdIndex.value]); return }
     if (e.key === 'Escape') { e.preventDefault(); cmdOpen.value = false; return }
+    return
   }
+  // 2 — the picked command's suggestions
+  const prompts = activeAction.value?.prompts || []
+  if (showSuggest.value && prompts.length) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sugIndex.value = (sugIndex.value + 1) % prompts.length; return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); sugIndex.value = (sugIndex.value - 1 + prompts.length) % prompts.length; return }
+    if (e.key === 'Enter') { e.preventDefault(); runPrompt(prompts[sugIndex.value]); return }
+    if (e.key === 'Escape') { e.preventDefault(); showSuggest.value = false; return }
+  }
+  // 3 — plain composer
+  if (e.key === 'Enter') { e.preventDefault(); submit(); return }
   if (e.key === 'Escape') { showSuggest.value = false; return }
   // backspace on an empty composer pops the command chip off
   if (e.key === 'Backspace' && !input.value && activeAction.value) clearCommand()
@@ -1476,7 +1494,10 @@ watch(() => props.role, () => {
           <!-- the picked command's suggestions — fade out once the user writes their own -->
           <template v-else>
             <div class="actpop-h"><Icon :name="activeAction.icon" :size="14" /> {{ activeAction.label }}<button class="apx" @click="showSuggest = false"><Icon name="x" :size="14" /></button></div>
-            <button v-for="p in activeAction.prompts" :key="p.label" class="actprompt" @click="runPrompt(p)">
+            <button
+              v-for="(p, si) in activeAction.prompts" :key="p.label" class="actprompt"
+              :class="{ sel: si === sugIndex }" @click="runPrompt(p)" @mouseenter="sugIndex = si"
+            >
               <Icon :name="activeAction.icon" :size="14" /> {{ p.label }}
             </button>
           </template>
@@ -1491,7 +1512,7 @@ watch(() => props.role, () => {
         </span>
         <input
           ref="inputEl" v-model="input" :placeholder="placeholder"
-          @input="onInput" @keydown="onKeydown" @keyup.enter="submit"
+          @input="onInput" @keydown="onKeydown"
         />
         <button class="send" :class="{ ready: input.trim() }" :disabled="!input.trim()" @click="submit"><Icon name="send" :size="15" /></button>
       </div>
@@ -1832,8 +1853,8 @@ tr:last-child td { border-bottom: none; }
 .apx:hover { background: var(--surface-2); color: var(--ink); }
 .actprompt { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; border: none; background: transparent; border-radius: 7px; padding: 8px 8px; font-size: 12.5px; color: var(--ink); }
 .actprompt :deep(.ico) { color: var(--muted-2); flex: none; }
-.actprompt:hover { background: var(--ai-softer); color: var(--ai-ink); }
-.actprompt:hover :deep(.ico) { color: var(--ai); }
+.actprompt:hover, .actprompt.sel { background: var(--ai-softer); color: var(--ai-ink); }
+.actprompt:hover :deep(.ico), .actprompt.sel :deep(.ico) { color: var(--ai); }
 .chipsrow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .sg { border: 1px solid var(--ai-border); background: var(--ai-grad-soft); border-radius: var(--r-pill); padding: 5px 11px; font-size: 11.5px; color: var(--ink-2); }
 /* minimal suggestive actions — plain outline; the AI accent only on hover */
