@@ -36,6 +36,11 @@ const filteredGroups = computed(() => GROUPS.map((g) => ({
 // ---- Reuse tabs: listing with actions ----
 const provMap = { predefined: 'predefined', user: 'user', shared: 'shared' }
 const isTrash = computed(() => tab.value === 'trash')
+/* "All" is every live item regardless of who made it. Because it MIXES provenances,
+ * nothing downstream may key a rule off the tab — the per-item rules below read
+ * `l.prov` instead, so a predefined tile is uneditable in All exactly as it is in
+ * its own tab. */
+const inTab = (l) => (tab.value === 'all' ? !l.trashed : l.prov === provMap[tab.value] && !l.trashed)
 
 /* Module counts must describe WHAT YOU WILL GET, so they are scoped to the tab and
  * the type filter you already have on. They used to count the whole library, so
@@ -44,9 +49,7 @@ const isTrash = computed(() => tab.value === 'trash')
  * a filter that can only ever return nothing isn't a filter.
  * "All modules" carries no count: it is the absence of a filter, not a bucket. */
 const moduleBase = computed(() => {
-  const arr = isTrash.value
-    ? store.library.filter((l) => l.trashed)
-    : store.library.filter((l) => l.prov === provMap[tab.value] && !l.trashed)
+  const arr = isTrash.value ? store.library.filter((l) => l.trashed) : store.library.filter(inTab)
   return fType.value ? arr.filter((l) => l.type === fType.value) : arr
 })
 const moduleCount = (m) => moduleBase.value.filter((l) => l.module === m).length
@@ -60,9 +63,7 @@ watch(moduleOptions, (opts) => {
 })
 const trashCount = computed(() => store.library.filter((l) => l.trashed).length)
 const list = computed(() => {
-  let arr = isTrash.value
-    ? store.library.filter((l) => l.trashed)
-    : store.library.filter((l) => l.prov === provMap[tab.value] && !l.trashed)
+  let arr = isTrash.value ? store.library.filter((l) => l.trashed) : store.library.filter(inTab)
   if (fType.value) arr = arr.filter((l) => l.type === fType.value)
   if (fModule.value) arr = arr.filter((l) => l.module === fModule.value)
   if (search.value.trim()) arr = arr.filter((l) => l.title.toLowerCase().includes(search.value.trim().toLowerCase()))
@@ -70,9 +71,10 @@ const list = computed(() => {
 })
 // per-type counts for the current tab (before the type filter is applied)
 const typeCounts = computed(() => {
+  const inMod = (l) => !fModule.value || l.module === fModule.value
   const base = isTrash.value
-    ? store.library.filter((l) => l.trashed && (!fModule.value || l.module === fModule.value))
-    : store.library.filter((l) => l.prov === provMap[tab.value] && !l.trashed && (!fModule.value || l.module === fModule.value))
+    ? store.library.filter((l) => l.trashed && inMod(l))
+    : store.library.filter((l) => inTab(l) && inMod(l))
   return { '': base.length, kpi: base.filter((l) => l.type === 'kpi').length, chart: base.filter((l) => l.type === 'chart').length, shortcut: base.filter((l) => l.type === 'shortcut').length }
 })
 // ---- multi-select: add is ONLY via checkbox + footer (no per-row quick add) ----
@@ -115,7 +117,8 @@ function uniqueName(base) {
   return `${base} Copy ${n}`
 }
 function onLibrarySaved({ title, module, type, sharedAccess, place }) {
-  const item = { id: uid('lt'), type, title: uniqueName(title), prov: provMap[tab.value], module, favorite: false, sharedAccess: sharedAccess || 'view' }
+  // All / Trash aren't provenance buckets — a copy you made in one of them is yours
+  const item = { id: uid('lt'), type, title: uniqueName(title), prov: provMap[tab.value] || 'user', module, favorite: false, sharedAccess: sharedAccess || 'view' }
   store.library.unshift(item)     // shows at top of the current tab's listing
   libBuilder.value = null
   if (place) {                    // "Clone & Add Widget" → place on canvas + redirect
@@ -144,17 +147,22 @@ function restore(l) { restoreLibTile(l) }
 function delForever(l) { delTarget.value = l }    // opens the confirm modal
 function confirmDel() { removeLibTileForever(delTarget.value); delTarget.value = null }
 
-// ---- per-tab action rules (same for Widget / KPI / Shortcut) ----
-// Predefined: Duplicate only · User Defined: Duplicate·Edit·Delete
-// Shared: Duplicate always, Edit only if the owner granted Edit access
+/* ---- per-ITEM action rules (same for Widget / KPI / Shortcut) ----
+ * Predefined: Duplicate only · Created by me: Duplicate·Edit·Delete
+ * Shared: Duplicate always, Edit only if the owner granted Edit access
+ * These read the item's own provenance, never the active tab. The All tab mixes all
+ * three, so a tab-based rule would have offered Delete on a predefined tile. */
 function canDuplicate() { return true }
 function canEdit(l) {
-  if (tab.value === 'user') return true
-  if (tab.value === 'shared') return l.sharedAccess === 'edit' || l.sharedAccess === 'both'
+  if (l.prov === 'user') return true
+  if (l.prov === 'shared') return l.sharedAccess === 'edit' || l.sharedAccess === 'both'
   return false   // predefined → no edit
 }
-function canDelete() { return tab.value === 'user' }
+function canDelete(l) { return l.prov === 'user' }
 function hasActions(l) { return canDuplicate(l) || canEdit(l) || canDelete(l) }
+
+// in a mixed list the row must say where each item came from
+const PROV_LABEL = { predefined: 'Predefined', user: 'Created by me', shared: 'Shared' }
 
 const TYPE_LABEL = { kpi: 'KPI', chart: 'Widget', shortcut: 'Shortcut' }
 
@@ -207,7 +215,7 @@ function showTip(l, e) {
   tip.value = { show: true, text: libDesc(l), top: r.top + r.height / 2, right: window.innerWidth - r.left + 12 }
 }
 function hideTip() { tip.value.show = false }
-const TAB_LABEL = { predefined: 'Ready-made', user: 'Created by me', shared: 'Shared with me', trash: 'Trash' }
+const TAB_LABEL = { all: 'All', predefined: 'Predefined', user: 'Created by me', shared: 'Shared with me', trash: 'Trash' }
 const emptyMsg = computed(() => {
   const plural = fType.value ? (fType.value === 'kpi' ? 'KPIs' : TYPE_LABEL[fType.value] + 's') : 'items'
   if (isTrash.value) return `Trash is empty.`
@@ -217,7 +225,8 @@ const emptyHelp = computed(() => {
   if (tab.value === 'trash') return 'Deleted widgets, KPIs and Shortcuts land here — restore them, or delete forever.'
   if (tab.value === 'shared') return 'Widgets, KPIs and Shortcuts shared with you will appear here.'
   if (tab.value === 'user') return 'Create one from the Create Widget tab, then it appears here.'
-  return 'Ready-made tiles curated by your admin will appear here.'
+  if (tab.value === 'all') return 'Everything in the library — predefined, yours, and shared with you — appears here.'
+  return 'Predefined tiles curated by your admin will appear here.'
 })
 watch([tab], () => { search.value = ''; fModule.value = ''; fType.value = ''; selected.value = new Set() })
 watch(fType, (v) => { if (v === 'shortcut') fModule.value = '' })   // Shortcut listing has no module filter
@@ -236,7 +245,8 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
       <!-- top tabs -->
       <div class="aw-tabs">
         <button class="awt" :class="{ on: tab === 'chart' }" @click="tab = 'chart'">Create Widget</button>
-        <button class="awt" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Ready-made</button>
+        <button class="awt" :class="{ on: tab === 'all' }" @click="tab = 'all'">All</button>
+        <button class="awt" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Predefined</button>
         <button class="awt" :class="{ on: tab === 'user' }" @click="tab = 'user'">Created by me</button>
         <button class="awt" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
         <button class="awt" :class="{ on: tab === 'trash' }" @click="tab = 'trash'"><Icon name="trash" :size="13" /> Trash <span v-if="trashCount" class="awt-count">{{ trashCount }}</span></button>
@@ -299,7 +309,12 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
                   >{{ usageOf(l).length }}</span>
                   <span v-if="isPlaced(l)" class="placed-tag"><Icon name="check" :size="11" /> On dashboard</span>
                 </div>
-                <div class="lt-meta">{{ TYPE_LABEL[l.type] }} · {{ l.module }}</div>
+                <!-- in All the provenance decides which actions the row gets, so it has
+                     to be visible on the row rather than implied by the tab you're on -->
+                <div class="lt-meta">
+                  {{ TYPE_LABEL[l.type] }} · {{ l.module }}
+                  <span v-if="tab === 'all'" class="prov-tag" :class="l.prov">{{ PROV_LABEL[l.prov] || l.prov }}</span>
+                </div>
               </div>
               <!-- Trash: Restore + Delete forever · other tabs: Duplicate / Edit / Delete -->
               <div v-if="isTrash" class="lt-acts always">
@@ -424,7 +439,12 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .lcb { width: 16px; height: 16px; accent-color: var(--primary); flex: none; cursor: pointer; margin: 0; }
 .lt-main { flex: 1; min-width: 0; }
 .lt-name-row { display: flex; align-items: center; gap: 7px; } .lt-name { font-weight: 500; font-size: 13.5px; }
-.lt-meta { position: relative; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.lt-meta { position: relative; display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+/* provenance pill — only rendered in the All tab, where the list is mixed */
+.prov-tag { font-size: 10px; font-weight: 600; letter-spacing: .2px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); flex: none; }
+.prov-tag.predefined { background: var(--primary-soft); border-color: transparent; color: var(--primary-700); }
+.prov-tag.user { background: var(--green-soft); border-color: transparent; color: var(--green); }
+.prov-tag.shared { background: var(--blue-soft, var(--surface-2)); border-color: transparent; color: var(--blue); }
 /* usage count — a pill on the widget's NAME */
 .use-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center;
   background: var(--primary-soft); color: var(--primary-700); border-radius: 999px;

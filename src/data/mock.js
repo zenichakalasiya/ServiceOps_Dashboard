@@ -73,6 +73,11 @@ function helpdeskTiles() {
     { ...chart('Open Requests By Status', { kind: 'donut', labels: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'], series: [{ name: 'Requests', values: [96, 54, 30, 42, 26] }] }, 'Open requests grouped by status.'), w: 4 },
     { ...chart('Open Requests By Priority', { kind: 'donut', labels: ['Low', 'Medium', 'High', 'Urgent'], series: [{ name: 'Requests', values: [120, 78, 34, 16] }] }, 'Open requests grouped by priority.'), w: 4 },
     { ...chart('Open Requests By Technician', { kind: 'hbar', labels: TECHS, series: [{ name: 'Total', values: [34, 28, 22, 19, 17, 14, 12, 9, 7, 5, 12] }] }, 'Open requests grouped by assigned technician.'), w: 4 },
+    /* The legend problem in the flesh: 63 technicians on a pie. Above HIGH_CARD the
+     * tile switches to the rank pill (Top N · Bottom N · range · coverage · All) and
+     * pages the side legend to whatever the widget's height can hold. See
+     * docs/legend-and-topn-design.md. */
+    { ...chart('Requests by Technician — full estate', technicianLoad(), 'Every request grouped by assigned technician — 63 of them. Use the rank pill to bound the list, and page through the rest.'), w: 4 },
     { ...shortcut('My Open Requests', ['Subject', 'Requester', 'Status', 'Priority'],
       [['VPN down for finance team', 'Arnav Desai', 'In Progress', 'Urgent'],
        ['Email delivery delayed', 'Sarah Chen', 'Open', 'High'],

@@ -122,8 +122,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
         title="Default dashboard — the one you land on" @click="openBoard(defaultDash)">
         <Icon name="default-home" :size="15" class="def-lead" />
         <span class="iname ellip">{{ defaultDash.name }}</span>
+        <!-- no home button here: this row IS the default, so the action has nothing to do -->
         <span class="hov">
-          <button class="hb fav" :class="{ on: defaultDash.favorite }" title="Favourite" @click.stop="toggleFavorite(defaultDash)"><Icon :name="defaultDash.favorite ? 'star-fill' : 'star'" :size="13" /></button>
           <button class="hb" title="Actions" @click.stop="openMenu(defaultDash, $event)"><Icon name="dots-v" :size="14" /></button>
         </span>
       </div>
@@ -142,8 +142,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
             <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id, 'menu-open': menuId === d.id }" @click="openBoard(d)">
               <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
               <span class="iname ellip">{{ d.name }}</span>
+              <!-- hover gives the one action worth a click from a list: make this the
+                   board you land on. Favouriting moved into ⋯ — it's a preference you
+                   set once, not something you reach for while scanning. -->
               <span class="hov">
-                <button class="hb fav" :class="{ on: d.favorite }" title="Favourite" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="13" /></button>
+                <button v-if="!d.default" class="hb home" title="Set as default dashboard" @click.stop="markDefault(d)"><Icon name="default-home" :size="14" /></button>
                 <button class="hb" title="Actions" @click.stop="openMenu(d, $event)"><Icon name="dots-v" :size="14" /></button>
               </span>
             </div>
@@ -163,6 +166,10 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <div v-if="menuId" class="row-backdrop" @click="menuId = null" />
       <transition name="pop">
         <div v-if="menuDash" class="menu row-menu" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+          <button class="menu-item" @click="menuAct((d) => toggleFavorite(d))">
+            <Icon :name="menuDash.favorite ? 'star-fill' : 'star'" :size="15" :class="{ favon: menuDash.favorite }" />
+            {{ menuDash.favorite ? 'Remove from favourites' : 'Add to favourites' }}
+          </button>
           <button class="menu-item" @click="menuAct((d) => doEdit(d))"><Icon name="edit" :size="15" /> Edit</button>
           <button class="menu-item" @click="menuAct((d) => doClone(d))"><Icon name="copy" :size="15" /> Clone</button>
           <button v-if="!menuDash.default" class="menu-item" @click="menuAct((d) => markDefault(d))"><Icon name="pin" :size="15" /> Mark as default landing</button>
@@ -239,8 +246,10 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .item.menu-open { background: var(--surface-2); }
 .hb { width: 24px; height: 24px; border: none; background: transparent; color: var(--muted); border-radius: 6px; display: grid; place-items: center; }
 .hb:hover { background: var(--surface); }
-.hb.fav:hover, .hb.fav.on { color: #f5a623; }
+.hb.home:hover { color: var(--primary); }
 .hb.del:hover { color: var(--red); background: var(--red-soft); }
+/* the star keeps its colour inside the menu, so "on" reads at a glance */
+.menu-item .favon { color: #f5a623; }
 /* teleported per-row menu — fixed to viewport so it isn't clipped by the scroll area */
 .row-menu { position: fixed; z-index: 61; }
 .row-backdrop { position: fixed; inset: 0; z-index: 59; }

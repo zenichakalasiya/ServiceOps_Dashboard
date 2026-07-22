@@ -543,12 +543,17 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <div class="titles">
           <div class="t-row">
             <h1>{{ d.name }}</h1>
-            <span v-if="d.description || d.default" class="dinfo" @mouseenter="descHover = true" @mouseleave="descHover = false">
+            <!-- description first, then what KIND of board this is — the same order the
+                 widget info tooltip uses, so the two read the same way -->
+            <span v-if="d.description || d.default || d.predefined" class="dinfo" @mouseenter="descHover = true" @mouseleave="descHover = false">
               <Icon name="info" :size="15" />
               <transition name="fade">
                 <span v-if="descHover" class="tt dinfo-tt">
-                  <span v-if="d.default" class="def-tag"><Icon name="default-home" :size="12" /> Default dashboard</span>
-                  <span v-if="d.description" class="dinfo-desc">{{ d.description }}</span>
+                  <span class="dinfo-desc">{{ d.description || 'No description has been added for this dashboard yet.' }}</span>
+                  <span v-if="d.predefined || d.default" class="dinfo-tags">
+                    <span v-if="d.predefined" class="tt-tag predefined">Predefined</span>
+                    <span v-if="d.default" class="tt-tag def"><Icon name="default-home" :size="11" /> Default</span>
+                  </span>
                 </span>
               </transition>
             </span>
@@ -845,8 +850,12 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .dinfo { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; }
 .dinfo:hover { color: var(--primary); }
 .dinfo-tt { top: 26px; left: -8px; width: 260px; }
-.def-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #cfc6ff; background: rgba(255,255,255,.1); border-radius: 5px; padding: 2px 7px; margin-bottom: 6px; }
-.dinfo-desc { display: block; }
+.dinfo-desc { display: block; font-weight: 400; color: rgba(255,255,255,.88); line-height: 1.45; }
+/* pills sit BELOW the description, left-aligned — mirrors WidgetCard's .tt-tag */
+.dinfo-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.tt-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .2px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); color: #fff; }
+.tt-tag.predefined { background: rgba(139,92,246,.3); border-color: rgba(139,92,246,.55); color: #ded3ff; }
+.tt-tag.def { background: rgba(76,177,254,.26); border-color: rgba(76,177,254,.5); color: #cfe8ff; }
 /* restricted → click the icon to see technician + group access */
 .restrict-ic { display: inline-grid; place-items: center; width: 28px; height: 26px; border: 1px solid var(--border-strong); background: var(--surface); border-radius: 7px; color: var(--amber); cursor: pointer; }
 .restrict-ic:hover { background: var(--amber-soft); border-color: transparent; }
