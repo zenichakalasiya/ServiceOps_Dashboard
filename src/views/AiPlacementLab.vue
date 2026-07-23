@@ -32,7 +32,20 @@ const board = computed(() => store.dashboards.find((d) => d.name === 'Helpdesk O
 const tiles = computed(() => board.value?.tiles || [])
 
 const count = insightCount        // 5 — the live insight count on the chip/tile
-const lead = leadInsight          // the headline insight, shown in the popover
+const lead = leadInsight          // the headline insight
+
+// a descriptive, grounded summary of the whole board (woven from the insights)
+const dashSummary = computed(() => {
+  const b = board.value?.name || 'This board'
+  return `${b} has ${count} insights worth your attention. ${lead.title} and ${AI_INSIGHTS[1].title.toLowerCase()} are the most pressing, and ${AI_INSIGHTS[2].title.toLowerCase()}.`
+})
+
+// the three CTAs shown in Variant A's popover and Variant B's card
+const CTAS = [
+  { label: 'Insights with AI', icon: 'sparkles', primary: true },
+  { label: 'Every widget explained', icon: 'auto-graph' },
+  { label: 'Add a new widget', icon: 'plus' },
+]
 
 // ---- the shared panel (open/pinned persist per user via store.ui) ----
 const panelOpen = computed(() => store.ui.aiInsightsOpen)
@@ -121,11 +134,12 @@ watch([variant, panelOpen], () => nextTick(measure))
                 <div v-if="popoverOpen" class="pop-backdrop" @click="popoverOpen = false" />
                 <transition name="pop">
                   <div v-if="popoverOpen" class="ai-pop" @click.stop>
-                    <div class="ai-pop-lead">{{ lead.title }}</div>
-                    <div class="ai-pop-more" v-if="count > 1">{{ count - 1 }} more insight{{ count - 1 === 1 ? '' : 's' }}</div>
+                    <div class="ai-pop-h"><span class="ai-pop-spark"><Icon name="sparkles" :size="14" /></span> AI insights</div>
+                    <p class="ai-pop-sum">{{ dashSummary }}</p>
                     <div class="ai-pop-acts">
-                      <button class="ai-pop-cta primary" @click="openPanel"><Icon name="sparkles" :size="14" /> <span>Insights with AI</span></button>
-                      <button class="ai-pop-cta" @click="openPanel"><Icon name="auto-graph" :size="14" /> Every widget explained</button>
+                      <button v-for="c in CTAS" :key="c.label" class="ai-pop-cta" :class="{ primary: c.primary }" @click="openPanel">
+                        <Icon :name="c.icon" :size="14" /> <span>{{ c.label }}</span>
+                      </button>
                     </div>
                   </div>
                 </transition>
@@ -138,16 +152,20 @@ watch([variant, panelOpen], () => nextTick(measure))
           <AiSummaryCard v-if="variant === 'C'" :board="board" hide-add-widget @ask="openPanel" />
         </div>
 
-        <!-- real tiles in a 12-col grid; WidgetCard carries its own span-{w} class -->
-        <div ref="gridEl" class="grid">
-          <!-- Variant B: the AI card takes slot 1 of the KPI row, at KPI-tile size -->
-          <button v-if="variant === 'B'" class="ai-kpi card span-2" @click="openPanel" title="Open AI insights">
-            <span class="ai-kpi-top"><span class="ai-kpi-spark"><Icon name="sparkles" :size="15" /></span> AI insights</span>
-            <span class="ai-kpi-mid">
-              <span class="ai-kpi-n">{{ count }}</span>
-              <Icon name="chevron-right" :size="22" class="ai-kpi-arrow" />
-            </span>
-          </button>
+        <!-- real tiles in a 12-col grid; WidgetCard carries its own span-{w} class.
+             Variant B narrows KPIs to 4-per-row and gives slot 1 to a wide summary card. -->
+        <div ref="gridEl" class="grid" :class="{ vb: variant === 'B' }">
+          <!-- Variant B: a summary card two KPIs wide, with the summary + CTAs; two KPIs sit
+               beside it and the rest flow onto the row below. -->
+          <div v-if="variant === 'B'" class="ai-card-b card">
+            <div class="acb-head"><span class="acb-spark"><Icon name="sparkles" :size="15" /></span> AI insights <span class="acb-badge">{{ count }}</span></div>
+            <p class="acb-sum">{{ dashSummary }}</p>
+            <div class="acb-acts">
+              <button v-for="c in CTAS" :key="c.label" class="acb-cta" :class="{ primary: c.primary }" @click="openPanel">
+                <Icon :name="c.icon" :size="13" /> <span>{{ c.label }}</span>
+              </button>
+            </div>
+          </div>
           <WidgetCard v-for="t in tiles" :key="t.id" :tile="t" />
         </div>
       </div>
@@ -204,12 +222,14 @@ watch([variant, panelOpen], () => nextTick(measure))
 .ai-chip:hover, .ai-chip.on { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 .pop-backdrop { position: fixed; inset: 0; z-index: 40; }
 .ai-pop {
-  position: absolute; top: 38px; right: 0; z-index: 50; width: 320px;
+  position: absolute; top: 38px; right: 0; z-index: 50; width: 340px;
   background: var(--surface); border: 1px solid var(--ai-border); border-radius: 12px;
   box-shadow: var(--sh-pop); padding: 14px;
 }
-.ai-pop-lead { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.45; }
-.ai-pop-more { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.ai-pop-h { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+.ai-pop-spark { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--ai-softer); }
+.ai-pop-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.ai-pop-sum { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 .ai-pop-acts { display: flex; flex-direction: column; gap: 8px; margin-top: 13px; }
 .ai-pop-cta {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px;
@@ -225,19 +245,30 @@ watch([variant, panelOpen], () => nextTick(measure))
 .pop-enter-active, .pop-leave-active { transition: opacity .14s ease, transform .14s ease; transform-origin: top right; }
 .pop-enter-from, .pop-leave-to { opacity: 0; transform: scale(.96); }
 
-/* ── Variant B: the AI card as KPI slot 1 (matches tile size, AI accent) ── */
-.ai-kpi {
-  grid-column: span 2; align-self: stretch; min-height: 130px; display: flex; flex-direction: column; text-align: left;
-  padding: 12px 14px; border: 1px solid var(--ai-border); border-radius: var(--r-lg);
-  background: var(--ai-grad-card); cursor: pointer;
+/* ── Variant B: KPIs narrow to 4-per-row; a wide summary card takes slot 1 ── */
+.grid.vb :deep(.span-2) { grid-column: span 3; }   /* KPI tiles → 4 per row */
+.ai-card-b {
+  grid-column: span 6;                              /* = two KPI widths */
+  align-self: stretch; display: flex; flex-direction: column; text-align: left;
+  padding: 12px 15px; border: 1px solid var(--ai-border); border-radius: var(--r-lg);
+  background: var(--ai-grad-card);
 }
-.ai-kpi:hover { border-color: var(--ai); }
-.ai-kpi-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
-.ai-kpi-spark { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--ai-softer); }
-.ai-kpi-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
-.ai-kpi-mid { flex: 1; display: flex; align-items: center; justify-content: space-between; }
-.ai-kpi-n { font-size: 40px; font-weight: 500; letter-spacing: -1px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
-.ai-kpi-arrow { color: var(--ai); }
+.acb-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.acb-spark { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--ai-softer); }
+.acb-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.acb-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--ai-grad); color: #fff; font-size: 11px; font-weight: 700; }
+.acb-sum { flex: 1; margin: 8px 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.acb-acts { display: flex; gap: 7px; flex-wrap: wrap; }
+.acb-cta {
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px;
+  border: 1px solid var(--ai-border); border-radius: var(--r-pill);
+  background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 11.5px;
+}
+.acb-cta :deep(.ico) { color: var(--ai); }
+.acb-cta:hover { border-color: var(--ai); background: var(--ai-soft); }
+.acb-cta.primary { border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; }
+.acb-cta.primary span, .acb-cta.primary :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.acb-cta.primary:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 
 /* the 12-col grid, mirroring the real dashboard's tile sizing + reflow */
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; align-items: start; }
