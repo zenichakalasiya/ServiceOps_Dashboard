@@ -1,34 +1,37 @@
 <script setup>
 /**
- * AiSummaryCard — the always-upfront "AI Summary" banner (the ServiceOps reference look).
+ * AiSummaryCard — the upfront "AI insights" card.
  *
- * On a DASHBOARD the card must stay short — a board can't spare the height to expand into
- * full detail the way a ticket page can. So there is NO expand/collapse: the card shows a
- * one-line overview (the grounded teaser) and the three CTAs, always. The depth lives
- * behind the CTAs, in the side panel where it has room.
+ * COLLAPSED (default) it is a thin bar: the AI glyph, the title "AI insights", and a
+ * dropdown chevron on the right — so it costs a dashboard almost no height.
+ * EXPANDED it shows a small grounded summary of the board, with the three CTAs beneath
+ * it at the bottom-left. The depth still lives behind the CTAs, in the side panel.
  *
  *   Insights with AI       → opens the chat (the old "Ask about this dashboard" behaviour)
  *   Every widget explained → the widget-by-widget read, in the panel
  *   Add a new widget       → opens the chat and suggests widgets to add
  *
- * Grounded: the teaser is computed from the engine (no LLM invents it).
+ * Grounded: the summary is computed from the engine (no LLM invents it).
  */
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import Icon from '../ui/Icon.vue'
 import { facts as computeFacts } from '../../data/aiEngine.js'
 
 const props = defineProps({ board: { type: Object, required: true } })
 const emit = defineEmits(['ask'])
 
+const open = ref(false)
+
 const attention = computed(() => computeFacts(props.board).filter((f) => f.severity === 'bad' || f.severity === 'warn'))
-const teaser = computed(() => {
+// the small written summary shown once the card is expanded
+const summary = computed(() => {
   const tiles = props.board.tiles || []
-  // an empty board isn't "healthy" — it has nothing to read
   if (!tiles.length) return `“${props.board.name}” has no widgets yet — add one and I’ll start summarising it.`
   const n = attention.value.length
-  if (!n) return `“${props.board.name}” looks healthy — all ${tiles.length} widgets are within range.`
+  if (!n) return `“${props.board.name}” looks healthy — all ${tiles.length} widgets are within range right now.`
   const top = attention.value[0]
-  return `${n} thing${n > 1 ? 's' : ''} need attention on “${props.board.name}” — top of the list: ${top.text}.`
+  const more = n > 1 ? ` ${n - 1} other${n - 1 > 1 ? 's are' : ' is'} worth watching.` : ''
+  return `${n} thing${n > 1 ? 's' : ''} need attention on “${props.board.name}”. Top of the list: ${top.text}.${more}`
 })
 
 const CTAS = [
@@ -37,44 +40,54 @@ const CTAS = [
   // opens the chat and has the AI SUGGEST widgets to pick from
   { label: 'Add a new widget', intent: 'suggestwidget', icon: 'plus' },
 ]
+
+function toggle() { open.value = !open.value }
 </script>
 
 <template>
-  <section class="ai-card">
-    <div class="ac-left">
-      <span class="ac-spark"><Icon name="sparkles" :size="20" /></span>
-      <div class="ac-copy">
-        <div class="ac-title">AI Summary <span class="ac-badge" v-if="attention.length">{{ attention.length }}</span></div>
-        <div class="ac-teaser">{{ teaser }}</div>
+  <section class="ai-card" :class="{ open }">
+    <!-- collapsed bar: AI glyph · "AI insights" · dropdown chevron. The whole row toggles. -->
+    <div class="ac-head" role="button" tabindex="0" :aria-expanded="open"
+      @click="toggle" @keydown.enter.prevent="toggle" @keydown.space.prevent="toggle">
+      <span class="ac-spark"><Icon name="sparkles" :size="18" /></span>
+      <span class="ac-title">AI insights</span>
+      <span class="ac-arrow" :title="open ? 'Collapse' : 'Expand'"><Icon :name="open ? 'chevron-up' : 'chevron-down'" :size="18" /></span>
+    </div>
+
+    <transition name="acx">
+      <div v-if="open" class="ac-body">
+        <p class="ac-summary">{{ summary }}</p>
+        <div class="ac-ctas">
+          <button
+            v-for="c in CTAS" :key="c.intent" class="ac-cta" :class="{ primary: c.primary }"
+            @click="emit('ask', c.intent, c.label)"
+          >
+            <Icon :name="c.icon" :size="15" /><span>{{ c.label }}</span>
+          </button>
+        </div>
       </div>
-    </div>
-    <div class="ac-ctas">
-      <button
-        v-for="c in CTAS" :key="c.intent" class="ac-cta" :class="{ primary: c.primary }"
-        @click="emit('ask', c.intent, c.label)"
-      >
-        <Icon :name="c.icon" :size="15" /><span>{{ c.label }}</span>
-      </button>
-    </div>
+    </transition>
   </section>
 </template>
 
 <style scoped>
-/* one compact row — teaser on the left, CTAs on the right; wraps on narrow widths */
 .ai-card {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
   border: 1px solid var(--ai-border); border-radius: var(--r-lg);
-  background: var(--ai-grad-card); padding: 13px 16px; margin-bottom: 14px;
+  background: var(--ai-grad-card); padding: 11px 14px; margin-bottom: 14px;
 }
-.ac-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
-.ac-spark { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--ai-softer); }
+/* collapsed row — glyph, title, and the dropdown chevron pinned right */
+.ac-head { display: flex; align-items: center; gap: 11px; cursor: pointer; }
+.ac-head:focus-visible { outline: 2px solid var(--ai); outline-offset: 3px; border-radius: 8px; }
+.ac-spark { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--ai-softer); }
 .ac-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
-.ac-copy { min-width: 0; }
-.ac-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--ink); }
-.ac-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--ai-grad); color: #fff; font-size: 11px; font-weight: 700; }
-.ac-teaser { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+.ac-title { flex: 1; font-size: 15px; font-weight: 600; color: var(--ink); }
+.ac-arrow { flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--ai); }
+.ac-head:hover .ac-arrow { background: var(--ai-soft); }
 
-.ac-ctas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
+/* expanded: the small summary, then the CTAs beneath it at the bottom-left */
+.ac-body { padding: 10px 0 2px 45px; }
+.ac-summary { margin: 0 0 12px; font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 80ch; }
+.ac-ctas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ac-cta {
   display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
   border: 1px solid var(--ai-border); border-radius: var(--r-pill);
@@ -87,5 +100,8 @@ const CTAS = [
 .ac-cta.primary span, .ac-cta.primary :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .ac-cta.primary:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 
-@media (max-width: 860px) { .ac-ctas { width: 100%; } }
+.acx-enter-active, .acx-leave-active { transition: opacity .16s ease; }
+.acx-enter-from, .acx-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .acx-enter-active, .acx-leave-active { transition: none; } }
+@media (max-width: 620px) { .ac-body { padding-left: 0; } }
 </style>
