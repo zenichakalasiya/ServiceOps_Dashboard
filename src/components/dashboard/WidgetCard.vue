@@ -59,16 +59,32 @@ const dfPos = ref({ top: 0, left: 0 })
 // the quick ranges, mirrored from the topbar TimeFilter — the "small" version is this
 // single column, no absolute-range pane.
 const DF_RANGES = ['Today', 'Yesterday', 'Last 7 days', 'Last 30 days', 'This week', 'This month', 'This quarter', 'Year to date']
+// custom absolute range — the second pane of the popover (mirrors the topbar TimeFilter)
+const dfCustom = ref(false)
+const dfFrom = ref('')
+const dfTo = ref('')
 function toggleDf() {
   if (dfOpen.value) { dfOpen.value = false; return }
   const r = dfChipEl.value?.getBoundingClientRect(); if (!r) return
   const W = 210
   dfPos.value = { top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) }
+  dfCustom.value = false
   dfOpen.value = true
 }
 function pickDf(range) { props.tile.dateFilter = range; dfOpen.value = false; toast(`“${props.tile.title}” → ${range}`) }
 // "Follow dashboard filter" clears the override; the chip then disappears
 function clearDf() { props.tile.dateFilter = null; dfOpen.value = false; toast(`“${props.tile.title}” follows the dashboard filter`) }
+// apply an absolute From→To range as this widget's own filter
+function applyDfCustom() {
+  if (!dfFrom.value || !dfTo.value) { toast('Pick both a From and a To date', 'warn'); return }
+  const fmt = (s) => { const [Y, M, D] = s.split('T')[0].split('-'); return `${D}/${M}/${Y.slice(2)}` }
+  props.tile.dateFilter = `${fmt(dfFrom.value)} – ${fmt(dfTo.value)}`
+  dfOpen.value = false; dfCustom.value = false
+  toast(`“${props.tile.title}” → custom range`)
+}
+function openDfPicker(el) { try { el?.showPicker?.() } catch (e) { el?.focus() } }
+const dfFromEl = ref(null)
+const dfToEl = ref(null)
 
 const loading = ref(false)
 const menu = ref(false)
@@ -267,12 +283,25 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       <div v-if="dfOpen" class="backdrop" @click="dfOpen = false" />
       <transition name="pop">
         <div v-if="dfOpen" class="df-pop" :style="{ top: dfPos.top + 'px', left: dfPos.left + 'px' }" @click.stop>
-          <div class="df-pop-h"><Icon name="clock" :size="13" /> This widget’s time range</div>
-          <button v-for="r in DF_RANGES" :key="r" class="df-opt" :class="{ on: tile.dateFilter === r }" @click="pickDf(r)">
-            {{ r }} <Icon v-if="tile.dateFilter === r" name="check" :size="13" />
-          </button>
-          <div class="df-sep" />
-          <button class="df-opt clear" @click="clearDf"><Icon name="x" :size="12" /> Follow dashboard filter</button>
+          <!-- quick ranges -->
+          <template v-if="!dfCustom">
+            <div class="df-pop-h"><Icon name="clock" :size="13" /> This widget’s time range</div>
+            <button v-for="r in DF_RANGES" :key="r" class="df-opt" :class="{ on: tile.dateFilter === r }" @click="pickDf(r)">
+              {{ r }} <Icon v-if="tile.dateFilter === r" name="check" :size="13" />
+            </button>
+            <div class="df-sep" />
+            <button class="df-opt" @click="dfCustom = true"><Icon name="calendar" :size="12" /> Custom range… <Icon name="chevron-right" :size="13" class="df-chev" /></button>
+            <button class="df-opt clear" @click="clearDf"><Icon name="x" :size="12" /> Follow dashboard filter</button>
+          </template>
+          <!-- custom absolute range -->
+          <template v-else>
+            <button class="df-pop-h back" @click="dfCustom = false"><Icon name="chevron-left" :size="14" /> Custom range</button>
+            <label class="df-lbl">From</label>
+            <div class="df-dt"><input ref="dfFromEl" class="df-input" type="datetime-local" v-model="dfFrom" /><button class="df-cal" @click="openDfPicker(dfFromEl)" title="Pick date"><Icon name="calendar" :size="14" /></button></div>
+            <label class="df-lbl">To</label>
+            <div class="df-dt"><input ref="dfToEl" class="df-input" type="datetime-local" v-model="dfTo" /><button class="df-cal" @click="openDfPicker(dfToEl)" title="Pick date"><Icon name="calendar" :size="14" /></button></div>
+            <button class="df-apply" @click="applyDfCustom"><Icon name="check" :size="14" /> Apply range</button>
+          </template>
         </div>
       </transition>
     </teleport>
@@ -494,7 +523,21 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .df-opt.on :deep(.ico) { color: var(--df); }
 .df-opt.clear { color: var(--muted); gap: 7px; justify-content: flex-start; }
 .df-opt.clear:hover { color: var(--ink); }
+.df-opt .df-chev { margin-left: auto; color: var(--muted-2); }
 .df-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+/* custom-range pane */
+.df-pop-h.back { width: 100%; border: none; background: transparent; cursor: pointer; align-items: center; }
+.df-pop-h.back:hover { color: var(--ink); }
+.df-lbl { font-size: 11px; font-weight: 500; color: var(--ink-2); padding: 4px 8px 3px; }
+.df-dt { position: relative; padding: 0 6px 6px; }
+.df-input { width: 100%; height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 32px 0 9px; font-size: 12px; color: var(--ink); background: var(--surface); outline: none; }
+.df-input:focus { border-color: var(--df); }
+.df-input::-webkit-calendar-picker-indicator { opacity: 0; }
+.df-cal { position: absolute; right: 10px; top: 2px; width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 6px; display: grid; place-items: center; }
+.df-cal:hover { background: var(--surface-2); color: var(--ink); }
+.df-apply { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 4px 6px 2px; height: 34px; border: none; border-radius: 8px; background: var(--df); color: #fff; font-weight: 600; font-size: 12.5px; cursor: pointer; }
+.df-apply:hover { background: var(--df-ink); }
+.df-apply :deep(.ico) { color: #fff; }
 /* info-icon tooltip: the DESCRIPTION leads, provenance sits under it as a left-aligned pill */
 .tt-desc { font-weight: 400; color: rgba(255,255,255,.88); line-height: 1.45; }
 .tt-tag { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .2px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); color: #fff; }
