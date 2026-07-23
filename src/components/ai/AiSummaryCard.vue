@@ -7,7 +7,7 @@
  * EXPANDED it shows a small grounded summary of the board, with the three CTAs beneath
  * it at the bottom-left. The depth still lives behind the CTAs, in the side panel.
  *
- *   Insights with AI       → opens the chat (the old "Ask about this dashboard" behaviour)
+ *   Insights with AI       → opens the panel and shows the FULL dashboard insights
  *   Every widget explained → the widget-by-widget read, in the panel
  *   Add a new widget       → opens the chat and suggests widgets to add
  *
@@ -35,7 +35,8 @@ const summary = computed(() => {
 })
 
 const CTAS = [
-  { label: 'Insights with AI', intent: 'open', icon: 'sparkles', primary: true },
+  // the card carries a one-line teaser; this opens the panel with the FULL written insights
+  { label: 'Insights with AI', intent: 'analyzing', icon: 'sparkles', primary: true },
   { label: 'Every widget explained', intent: 'widgets', icon: 'auto-graph' },
   // opens the chat and has the AI SUGGEST widgets to pick from
   { label: 'Add a new widget', intent: 'suggestwidget', icon: 'plus' },
