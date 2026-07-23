@@ -42,7 +42,8 @@ const groups = computed(() => dashboardSummaryPoints(props.board).map((g) => ({
 const CTAS = [
   { label: 'Insights with AI', intent: 'open', icon: 'sparkles', primary: true },
   { label: 'Every widget explained', intent: 'widgets', icon: 'auto-graph' },
-  { label: 'Add a new widget', intent: 'addwidget', icon: 'plus' },
+  // opens the chat and has the AI SUGGEST widgets to pick from (not the builder modal)
+  { label: 'Add a new widget', intent: 'suggestwidget', icon: 'plus' },
 ]
 
 function toggle() { open.value = !open.value }

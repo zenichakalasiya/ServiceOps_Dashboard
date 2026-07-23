@@ -13,7 +13,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
 import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, statusUpdate, recoveryPlan, workOrder, changesSinceLastVisit, dashboardSummaryPoints, boardWidgetDigest, FRESHNESS } from '../../data/aiEngine.js'
-import { routeIntent, tileFromText, factFromText, resolveWidget, applyGroupBy, reviseSpec, explicitForm, proposeDashboard, GROUP_DIMS, WINDOW_CHOICES, CONDITION_CHOICES, SUGGESTIONS } from '../../data/aiAssistant.js'
+import { routeIntent, tileFromText, factFromText, resolveWidget, applyGroupBy, reviseSpec, explicitForm, proposeDashboard, suggestWidgets, GROUP_DIMS, WINDOW_CHOICES, CONDITION_CHOICES, SUGGESTIONS } from '../../data/aiAssistant.js'
 import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
 import { chart, kpi, shortcut } from '../../data/mock.js'
@@ -685,6 +685,52 @@ function runNextStep(s) {
   pushUser(s.title); pushNote(s.run === 'schedule' ? 'Schedule a daily summary' : 'Share this dashboard')
 }
 
+/* ---- "Add a new widget" — the AI SUGGESTS, the user picks ----------------------
+ * Rather than a blank "describe a widget" box, the AI reads what this board is about
+ * and shortlists widgets that fit but aren't on it yet. The user ticks the ones they
+ * want and drops them on this board or a new one, in one step. Typing still works — the
+ * composer routes into the normal build flow — but the fast path is selection. */
+function pushWidgetSuggest(variant = 0) {
+  draft.value = { mode: 'widget' }
+  const blk = push('cw-suggest', { phase: 'thinking', widgets: [], picked: new Set(), variant, settled: false })
+  runThinking(blk, ['Reading what this board is about', 'Finding widgets that fit', 'Leaving out what’s already here'], () => {
+    const s = suggestWidgets(props.board, variant)
+    blk.widgets = s.widgets
+    blk.picked = new Set(s.widgets.map((_, i) => i))   // all ticked by default — the common case is "yes, these"
+    blk.settled = true
+    awaiting.value = 'widget-intent'                    // typing a description still builds one directly
+  })
+}
+function togglePick(b, i) {
+  const s = new Set(b.picked)
+  s.has(i) ? s.delete(i) : s.add(i)
+  b.picked = s
+}
+function regenerateSuggest(b) { b.stale = true; pushUser('Suggest different ones'); pushWidgetSuggest((b.variant || 0) + 1) }
+// place the ticked widgets on this board, or ask for a new board's name first
+function acceptSuggest(b, target) {
+  const chosen = b.widgets.filter((_, i) => b.picked.has(i))
+  if (!chosen.length) { toast('Tick at least one widget to add', 'warn'); return }
+  b.stale = true
+  awaiting.value = null
+  if (target === 'new') { draft.value.suggestChosen = chosen; awaiting.value = 'suggest-newboard'; push('cw-newboard'); focusComposer(); return }
+  placeSuggested(chosen, props.board, false)
+}
+function placeSuggested(chosen, d, madeBoard) {
+  draft.value.dash = d
+  const blk = push('cd-placed', { phase: 'thinking', dash: d, count: chosen.length, madeBoard, settled: false })
+  runThinking(blk, [`Building ${chosen.length} widget${chosen.length === 1 ? '' : 's'}`, 'Applying conditions and grouping', 'Placing them on the board'], () => {
+    const built = chosen.map((w) => { const tile = tileFromSpec(w.spec, w.text); d.tiles.push(tile); return tile })
+    d.updated = new Date().toISOString()
+    blk.settled = true
+    toast(`Added ${chosen.length} widget${chosen.length === 1 ? '' : 's'} to ${d.name}`, 'success')
+    setTimeout(() => {
+      if (route.params.id !== d.id) router.push(`/dashboard/${d.id}`)
+      setTimeout(() => push('cd-recap', { dash: d, built: [...built] }), 500)
+    }, 600)
+  })
+}
+
 // ---- widget flow (same shape, reachable on its own or straight after a board) ----
 function startWidget() { draft.value = { ...draft.value, mode: 'widget' }; push('cw-intent'); awaiting.value = 'widget-intent'; focusComposer() }
 function useWidgetPrompt() { askPromptHelp('widget') }
@@ -1001,6 +1047,14 @@ function newBoardNamed(text) {
   draft.value.targetBoard = makeBoardFor(t)
   setTimeout(addTheWidget, 350)
 }
+// naming the new board for a batch of SUGGESTED widgets → create it, then place them all
+function suggestNewBoardNamed(text) {
+  const t = (text || '').trim(); if (!t) return
+  awaiting.value = null
+  pushUser(t)
+  const d = createDashboard({ name: t, access: 'private', category: '', description: 'Created with ServiceOps AI' })
+  setTimeout(() => placeSuggested(draft.value.suggestChosen || [], d, true), 350)
+}
 
 function dispatch(intent, text) {
   if (intent === 'summary') pushSummary()
@@ -1012,6 +1066,7 @@ function dispatch(intent, text) {
   else if (intent === 'changes') pushChanges()
   else if (intent === 'analyzing') pushAnalyzing()
   else if (intent === 'widgets') pushWidgets()
+  else if (intent === 'suggestwidget') pushWidgetSuggest()
   else if (intent === 'createstart') pushCreateStart()
   else if (intent === 'status') pushStatus()
   else if (intent === 'plan') pushPlan()
@@ -1020,7 +1075,7 @@ function dispatch(intent, text) {
 }
 
 // ---- contextual Follow ups (change with the block / what the user asked) ----
-const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-proposal', 'cd-placed', 'cd-widgets', 'cd-widget', 'cd-need', 'cd-recap', 'cd-done', 'cw-intent', 'cw-build', 'cw-newboard', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
+const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-proposal', 'cd-placed', 'cd-widgets', 'cd-widget', 'cd-need', 'cd-recap', 'cd-done', 'cw-intent', 'cw-suggest', 'cw-build', 'cw-newboard', 'cw-done', 'ask', 'nextsteps', 'prompt-help']
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
@@ -1277,6 +1332,7 @@ function submit() {
   if (awaiting.value === 'widget-intent') { widgetIntent(text); return }
   if (awaiting.value === 'widget-refine') { awaiting.value = null; refineWidget(text); return }
   if (awaiting.value === 'newboard-name') { newBoardNamed(text); return }
+  if (awaiting.value === 'suggest-newboard') { suggestNewBoardNamed(text); return }
   if (awaiting.value === 'dash-widget') { dashWidget(text); return }
   pushUser(cmd ? `${cmd.label}: ${text}` : text)
   dispatch(cmd ? CMD_INTENT[cmd.key] : routeIntent(text), text)
@@ -1545,6 +1601,31 @@ watch(() => props.role, () => {
             </button>
           </div>
           <button class="lnk-row" @click="useDashPrompt()"><Icon name="wand" :size="13" /> Write the prompt for me</button>
+        </template>
+
+        <!-- widget: the AI shortlists widgets to ADD; the user ticks and places them -->
+        <template v-else-if="b.kind === 'cw-suggest' && b.settled">
+          <div class="reasoning"><span class="rz-dot" /> Read this board and left out what’s already here</div>
+          <div class="blk-h"><Icon name="wand" :size="14" /> Widgets you could add</div>
+          <p class="say muted-say">Pick the ones you want — I’ll place them on the board. Or just describe a widget below and I’ll build that instead.</p>
+          <div class="prop-list">
+            <button
+              v-for="(w, wi) in b.widgets" :key="wi" class="sug-row" :class="{ on: b.picked.has(wi) }"
+              @click="togglePick(b, wi)"
+            >
+              <span class="sug-check"><Icon v-if="b.picked.has(wi)" name="check" :size="12" /></span>
+              <span class="prop-mod">{{ w.module }}</span>
+              <span class="prop-name">{{ w.name }}</span>
+              <span class="prop-viz">{{ w.viz }}</span>
+            </button>
+          </div>
+          <div v-if="!b.stale" class="doneacts">
+            <button class="add" @click="acceptSuggest(b, 'current')">
+              <Icon name="plus" :size="14" /><span>Add to “{{ currentBoard().name }}”</span>
+            </button>
+            <button class="mini-cta" @click="acceptSuggest(b, 'new')">Add to a new dashboard</button>
+            <button class="mini-cta" @click="regenerateSuggest(b)">Suggest different ones</button>
+          </div>
         </template>
 
         <!-- dashboard: the whole board proposed at once, accepted in one click -->
@@ -2105,6 +2186,13 @@ tr:last-child td { border-bottom: none; }
 .prop-mod { flex: none; padding: 1px 7px; border-radius: 5px; background: var(--ai-soft); color: var(--ai-ink); font-size: 9.5px; font-weight: 700; letter-spacing: .2px; }
 .prop-name { flex: 1; min-width: 0; font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prop-viz { flex: none; padding: 1px 7px; border-radius: 5px; border: 1px solid var(--ai-border); color: var(--ai-ink); font-size: 9.5px; font-weight: 700; }
+/* a suggested row is a checkbox: same anatomy as prop-row, with a leading tick and a
+   ticked/unticked state so the whole row is one target */
+.sug-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.sug-row:hover { border-color: var(--ai); }
+.sug-row.on { background: var(--ai-soft); border-color: var(--ai); }
+.sug-check { flex: none; width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; }
+.sug-row.on .sug-check { background: var(--ai); border-color: var(--ai); color: #fff; }
 .prop-acts { display: flex; flex-wrap: wrap; gap: 7px; }
 .pact { height: 32px; padding: 0 13px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .pact:hover { border-color: var(--ai); color: var(--ai-ink); background: var(--ai-softer); }

@@ -135,8 +135,6 @@ function openAi() { store.ui.aiPanelOpen = true }
 // The card CTAs carry an explicit intent (summary / changes / analyzing / drill / explain)
 // + a natural-language label, run directly rather than re-parsing the text.
 function onCardAsk(intent, text) {
-  // "Add a new widget" is a board action, not a question — it never opens the panel
-  if (intent === 'addwidget') { addToGroup.value = null; showAdd.value = true; return }
   store.ui.aiPanelOpen = true
   if (intent && intent !== 'open') nextTick(() => aiPanel.value?.trigger(intent, text))
 }

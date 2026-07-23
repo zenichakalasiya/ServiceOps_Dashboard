@@ -307,6 +307,41 @@ export function proposeDashboard(intent, variant = 0, size) {
   return { category: recipe.category, widgets, match, recipe: recipe.id }
 }
 
+/* suggestWidgets — propose widgets to ADD to a board that already exists.
+ *
+ * proposeDashboard builds a whole new board from an intent; this is the sibling for
+ * "add a widget": it reads what the board is ABOUT (its category, then the modules its
+ * tiles already use) to pick the right recipe, drops anything whose title is already on
+ * the board, and returns real resolveWidget specs. `variant` re-rolls for "suggest
+ * different ones". The result is a shortlist the user picks from, not a description they
+ * have to type. */
+export function suggestWidgets(board, variant = 0) {
+  const tiles = board?.tiles || []
+  const have = new Set(tiles.map((t) => (t.title || '').toLowerCase().trim()))
+  // what is this board about? category first, else the module its tiles lean on.
+  const hint = [
+    board?.category || '',
+    board?.name || '',
+    ...tiles.slice(0, 6).map((t) => t.title || ''),
+  ].join(' ')
+  const recipe = BOARD_RECIPES.find((r) => r.re.test(hint)) || DEFAULT_RECIPE
+  // the recipe's own items first, then the pool from every other recipe, rotated by
+  // variant so a second look genuinely differs — deduped by resolved title.
+  const pool = [...recipe.items, ...BOARD_RECIPES.flatMap((r) => r.items).filter((t) => !recipe.items.includes(t))]
+  const rotated = pool.map((_, i) => pool[(i + variant * 3) % pool.length])
+  const seen = new Set()
+  const widgets = []
+  for (const text of rotated) {
+    const spec = resolveWidget(text)
+    const key = spec.title.toLowerCase().trim()
+    if (have.has(key) || seen.has(key)) continue      // don't suggest what's already there
+    seen.add(key)
+    widgets.push({ text, spec, module: spec.module, name: spec.title, viz: VIZ_LABEL[spec.kind] || spec.kind })
+    if (widgets.length >= 5) break
+  }
+  return { widgets, recipe: recipe.id }
+}
+
 // apply an answer for something the description didn't say
 export function applyGroupBy(spec, dimId, text) {
   const dim = GROUP_DIMS.find((d) => d.id === dimId)
