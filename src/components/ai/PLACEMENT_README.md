@@ -27,11 +27,17 @@ app's own mechanism (there is no `localStorage` layer anywhere in this project).
 | **B** | First KPI tile | The AI card takes KPI slot 1, matching tile height/radius/padding; the five metrics reflow | Zero extra chrome — it's already a tile row; but it spends a metric slot | Content must survive ~200px wide: glyph + "AI insights" + count + arrow, no sentence |
 | **C** | Current banner (baseline) | Today's collapsible banner, minus "Add a new widget" | Most discoverable; costs the most height | This is the number the other two are trying to beat |
 
-## Status
+## Status — all three variants live
 
-- ✅ **Increment 1** — lab frame, live readout, shared panel, **Variant C** (baseline).
-- ⏳ Variant A (header chip + popover) — next.
-- ⏳ Variant B (KPI tile) — after A.
+- ✅ Lab frame, live readout, shared panel.
+- ✅ **Variant A** — header chip (`✨ 5`) left of the ⋮ → popover (lead insight + "N more" + two
+  actions) → shared panel. Popover and panel are never both open; Esc closes the popover; the
+  chip keeps showing with zero insights (just no count).
+- ✅ **Variant B** — the AI card takes slot 1 of the KPI row at exact tile size (155px, same radius
+  and padding), with the AI accent; the metric tiles reflow into the remaining columns.
+- ✅ **Variant C** — the baseline banner, minus "Add a new widget".
+
+Reach it at **`/ai-placement`** (not linked in the product nav — it's an internal comparison tool).
 
 ## Constraints honoured
 

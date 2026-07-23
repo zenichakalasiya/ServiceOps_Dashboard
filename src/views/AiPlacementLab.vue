@@ -3,12 +3,14 @@
  * AiPlacementLab — a lab page to compare three placements of the AI-insights entry point
  * over the REAL Helpdesk Overview board, with a segmented switcher and a live readout.
  *
- * Increment 1 (this pass): the frame, the shared panel, the live readout, and Variant C
- * (baseline banner). Variants A (header chip + popover) and B (KPI tile) land next.
+ * All three variants open the SAME shared panel (AiInsightsPanel):
+ *   A  header chip → popover (lead insight + "N more" + two actions) → panel
+ *   B  the AI card takes slot 1 of the KPI row → panel
+ *   C  the current banner (baseline), minus "Add a new widget" → panel
  *
  * Docking: the panel is a flex SIBLING of the content column, so opening it PUSHES the
- * board narrower rather than overlaying it (the Variant-A requirement). Real WidgetCard
- * components render every tile — the dashboard itself is not rebuilt.
+ * board narrower rather than overlaying it. Real WidgetCard components render every tile —
+ * the dashboard itself is not rebuilt.
  */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import Icon from '../components/ui/Icon.vue'
@@ -16,23 +18,38 @@ import WidgetCard from '../components/dashboard/WidgetCard.vue'
 import AiSummaryCard from '../components/ai/AiSummaryCard.vue'
 import AiInsightsPanel from '../components/ai/AiInsightsPanel.vue'
 import { store } from '../store/index.js'
+import { AI_INSIGHTS, leadInsight, insightCount } from '../data/aiInsights.mock.js'
 
 const VARIANTS = [
   { id: 'A', label: 'Header chip + popover' },
   { id: 'B', label: 'First KPI tile' },
   { id: 'C', label: 'Current banner (baseline)' },
 ]
-const variant = ref('C')
+const variant = ref('A')
 
 // the real board — reuse its tiles, don't rebuild them
 const board = computed(() => store.dashboards.find((d) => d.name === 'Helpdesk Overview') || store.dashboards[0])
 const tiles = computed(() => board.value?.tiles || [])
 
+const count = insightCount        // 5 — the live insight count on the chip/tile
+const lead = leadInsight          // the headline insight, shown in the popover
+
 // ---- the shared panel (open/pinned persist per user via store.ui) ----
 const panelOpen = computed(() => store.ui.aiInsightsOpen)
 let trigger = null
-function openPanel() { trigger = document.activeElement; store.ui.aiInsightsOpen = true }
+function openPanel() { trigger = document.activeElement; popoverOpen.value = false; store.ui.aiInsightsOpen = true }
 function closePanel() { store.ui.aiInsightsOpen = false }
+
+// ---- Variant A: the header chip's popover (never open at the same time as the panel) ----
+const popoverOpen = ref(false)
+function togglePopover() {
+  if (store.ui.aiInsightsOpen) return   // panel and popover are never both open
+  popoverOpen.value = !popoverOpen.value
+}
+// Esc closes the popover
+function onKey(e) { if (e.key === 'Escape' && popoverOpen.value) popoverOpen.value = false }
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 
 // ---- live readout: px above the KPI row, and whether widget row 3 clears a 900px fold ----
 const aboveEl = ref(null)
@@ -91,11 +108,28 @@ watch([variant, panelOpen], () => nextTick(measure))
     <div class="lab-stage">
       <div ref="frameEl" class="frame" :class="{ pushed: panelOpen }">
         <div ref="aboveEl" class="above">
-          <!-- dashboard header row; Variant A's chip will sit here, left of the ⋮ -->
+          <!-- dashboard header row; Variant A's chip sits here, immediately left of the ⋮ -->
           <header class="fhead">
             <h1>{{ board?.name }}</h1>
             <div class="fhead-actions">
-              <span v-if="variant !== 'C'" class="soon">Variant {{ variant }} — chip / tile arrives next</span>
+              <!-- Variant A: AI insight chip → popover -->
+              <div v-if="variant === 'A'" class="chip-wrap">
+                <button class="ai-chip" :class="{ on: popoverOpen }" :aria-expanded="popoverOpen"
+                  title="AI insights" @click.stop="togglePopover">
+                  <Icon name="sparkles" :size="15" /><span v-if="count" class="ai-chip-n">{{ count }}</span>
+                </button>
+                <div v-if="popoverOpen" class="pop-backdrop" @click="popoverOpen = false" />
+                <transition name="pop">
+                  <div v-if="popoverOpen" class="ai-pop" @click.stop>
+                    <div class="ai-pop-lead">{{ lead.title }}</div>
+                    <div class="ai-pop-more" v-if="count > 1">{{ count - 1 }} more insight{{ count - 1 === 1 ? '' : 's' }}</div>
+                    <div class="ai-pop-acts">
+                      <button class="ai-pop-cta primary" @click="openPanel"><Icon name="sparkles" :size="14" /> <span>Insights with AI</span></button>
+                      <button class="ai-pop-cta" @click="openPanel"><Icon name="auto-graph" :size="14" /> Every widget explained</button>
+                    </div>
+                  </div>
+                </transition>
+              </div>
               <button class="fh-ic" title="More"><Icon name="dots-v" :size="17" /></button>
             </div>
           </header>
@@ -106,6 +140,14 @@ watch([variant, panelOpen], () => nextTick(measure))
 
         <!-- real tiles in a 12-col grid; WidgetCard carries its own span-{w} class -->
         <div ref="gridEl" class="grid">
+          <!-- Variant B: the AI card takes slot 1 of the KPI row, at KPI-tile size -->
+          <button v-if="variant === 'B'" class="ai-kpi card span-2" @click="openPanel" title="Open AI insights">
+            <span class="ai-kpi-top"><span class="ai-kpi-spark"><Icon name="sparkles" :size="15" /></span> AI insights</span>
+            <span class="ai-kpi-mid">
+              <span class="ai-kpi-n">{{ count }}</span>
+              <Icon name="chevron-right" :size="22" class="ai-kpi-arrow" />
+            </span>
+          </button>
           <WidgetCard v-for="t in tiles" :key="t.id" :tile="t" />
         </div>
       </div>
@@ -146,9 +188,56 @@ watch([variant, panelOpen], () => nextTick(measure))
 .fhead { display: flex; align-items: center; gap: 12px; padding: 4px 2px 14px; }
 .fhead h1 { flex: 1; margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.015em; }
 .fhead-actions { display: flex; align-items: center; gap: 10px; }
-.soon { font-size: 11.5px; color: var(--muted-2); font-style: italic; }
 .fh-ic { width: 32px; height: 32px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
 .fh-ic:hover { background: var(--surface-2); color: var(--ink); }
+
+/* ── Variant A: header chip + popover ─────────────────────────────── */
+.chip-wrap { position: relative; }
+/* AI-accented pill: gradient-border over white, gradient glyph, count badge */
+.ai-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
+  border: 1.5px solid transparent; border-radius: 999px;
+  background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box;
+}
+.ai-chip :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.ai-chip-n { font-size: 12.5px; font-weight: 700; color: var(--ai-ink); font-variant-numeric: tabular-nums; }
+.ai-chip:hover, .ai-chip.on { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
+.pop-backdrop { position: fixed; inset: 0; z-index: 40; }
+.ai-pop {
+  position: absolute; top: 38px; right: 0; z-index: 50; width: 320px;
+  background: var(--surface); border: 1px solid var(--ai-border); border-radius: 12px;
+  box-shadow: var(--sh-pop); padding: 14px;
+}
+.ai-pop-lead { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.45; }
+.ai-pop-more { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.ai-pop-acts { display: flex; flex-direction: column; gap: 8px; margin-top: 13px; }
+.ai-pop-cta {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px;
+  border: 1px solid var(--ai-border); border-radius: var(--r-pill);
+  background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 12.5px;
+}
+.ai-pop-cta :deep(.ico) { color: var(--ai); }
+.ai-pop-cta:hover { border-color: var(--ai); background: var(--ai-soft); }
+/* primary: gradient border over white + gradient label (label lives in its own span) */
+.ai-pop-cta.primary { border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; }
+.ai-pop-cta.primary span, .ai-pop-cta.primary :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.ai-pop-cta.primary:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
+.pop-enter-active, .pop-leave-active { transition: opacity .14s ease, transform .14s ease; transform-origin: top right; }
+.pop-enter-from, .pop-leave-to { opacity: 0; transform: scale(.96); }
+
+/* ── Variant B: the AI card as KPI slot 1 (matches tile size, AI accent) ── */
+.ai-kpi {
+  grid-column: span 2; align-self: stretch; min-height: 130px; display: flex; flex-direction: column; text-align: left;
+  padding: 12px 14px; border: 1px solid var(--ai-border); border-radius: var(--r-lg);
+  background: var(--ai-grad-card); cursor: pointer;
+}
+.ai-kpi:hover { border-color: var(--ai); }
+.ai-kpi-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.ai-kpi-spark { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--ai-softer); }
+.ai-kpi-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.ai-kpi-mid { flex: 1; display: flex; align-items: center; justify-content: space-between; }
+.ai-kpi-n { font-size: 40px; font-weight: 500; letter-spacing: -1px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ai-kpi-arrow { color: var(--ai); }
 
 /* the 12-col grid, mirroring the real dashboard's tile sizing + reflow */
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; align-items: start; }
