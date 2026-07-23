@@ -156,7 +156,7 @@ onMounted(() => {
   if (bodyEl.value) ro.observe(bodyEl.value)
 })
 onBeforeUnmount(() => ro?.disconnect())
-const compact = computed(() => cardW.value < 340)
+// Below this width the two upfront controls (AI + Refresh) also fold into ⋯.
 const tiny = computed(() => cardW.value < 258)
 function refresh() { loading.value = true; setTimeout(() => { loading.value = false }, 750) }
 
@@ -222,13 +222,14 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <Icon name="info" :size="14" />
         </span>
       </div>
+      <!-- Upfront: only Refresh and the AI sparkle. Every other action lives in ⋯.
+           (Search + Filter stay for a records table — they operate on the table's
+           content, not the widget, so they aren't "actions" in the ⋯ sense.) -->
       <div class="right">
         <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
         <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
         <FilterMenu v-if="tile.type === 'shortcut' && filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter records" class="ti-fm" />
         <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
-        <button v-if="!compact" class="ti" @click="present = true" title="Full screen"><Icon name="maximize-tile" :size="15" /></button>
-        <button v-if="!tiny && canEdit" class="ti" @click="emit('edit', tile)" title="Edit"><Icon name="edit" :size="15" /></button>
         <div class="mwrap">
           <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
         </div>
@@ -269,15 +270,17 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false; typeOpen = false" />
       <transition name="pop">
         <div v-if="menu" ref="menuEl" class="menu tile-menu" :class="{ 'sub-right': !subLeft }" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
+          <!-- On a tiny tile the two upfront controls (AI + Refresh) collapse in here too,
+               separated from the widget actions by a rule. -->
           <template v-if="tiny">
             <button class="menu-item ai" @click="askWidgetAi"><Icon name="sparkles" :size="15" /> Ask AI about this widget</button>
+            <button class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
             <div class="menu-sep" />
           </template>
-          <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
-          <button v-if="tiny && canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
-          <button v-if="compact" class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
+          <!-- Widget actions -->
+          <button v-if="canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
+          <button class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
           <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
-          <button class="menu-item" @click="menu = false; shareOpen = true"><Icon name="share" :size="15" /> Share widget</button>
           <!-- Chart type → submenu. Only Column / Bar / Line can be swapped for one
                another; a predefined pie is frozen, so the item is disabled with the
                reason rather than silently missing. -->
@@ -299,9 +302,12 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
               </button>
             </div></transition>
           </div>
+          <!-- divider between the widget's own actions and the share / export group -->
+          <div class="menu-sep" />
+          <button class="menu-item" @click="menu = false; shareOpen = true"><Icon name="share" :size="15" /> Share widget</button>
           <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->
           <div class="menu-item sub" @mouseenter="exportOpen = true; typeOpen = false" @mouseleave="exportOpen = false">
-            <span class="mi-l"><Icon name="share" :size="15" /> Export</span><Icon name="chevron-right" :size="14" class="mi-c" />
+            <span class="mi-l"><Icon name="download" :size="15" /> Export</span><Icon name="chevron-right" :size="14" class="mi-c" />
             <transition name="pop"><div v-if="exportOpen" class="submenu">
               <button v-for="f in EXPORTS" :key="f" class="menu-item" @click="download(f)">{{ f }}</button>
             </div></transition>
