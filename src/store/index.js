@@ -13,9 +13,6 @@ export const store = reactive({
   currentUser: 'Aarav Mehta',
   toasts: [],
   ui: { createOpen: false, cloneTarget: null, editTarget: null, pendingAddWidget: false, theme: 'light', listingOpen: false, listingQuery: '', groupStyle: 1, listStyle: 1, legendStyle: 6,
-    // Date-filter indicator DEMO: which treatment marks a widget that overrides the
-    // global time filter with its own range. 0 = none; 1..5 = the five options.
-    dateFilterStyle: 5,
     // AI entry-point demo: which surface reveals the AI Summary/Assistant, and whether the panel is open.
     // Entry ids live in src/data/aiEntries.js; one at a time, switched from the on-board demo bar.
     // aiAsk lets any component (topbar, a widget) request the panel run an intent — the board forwards it.
