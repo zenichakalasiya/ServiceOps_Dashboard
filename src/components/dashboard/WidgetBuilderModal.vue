@@ -346,7 +346,7 @@ function save(place) {
                 <!-- how the Widget is drawn — a property of the widget, so it sits with
                      the rest of its configuration rather than in the family row above -->
                 <div v-if="showFamilies && isChart" class="fld" style="margin-top:12px">
-                  <label>Chart type</label>
+                  <div class="sec-h">Chart type</div>
                   <div class="kinds">
                     <button
                       v-for="k in CHART_KINDS" :key="k.id" class="kind"
@@ -503,7 +503,8 @@ function save(place) {
 .kinds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .kind { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 1 / 1; padding: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 10px; font-weight: 500; font-size: 12.5px; }
 .kind:hover { background: var(--surface-2); border-color: var(--muted-2); }
-.kind.on { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--sh-sm); }
+/* selected: a light primary wash, not a solid fill */
+.kind.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-700); box-shadow: var(--sh-sm); }
 .kind-l { line-height: 1; }
 .kind .rot90 { transform: rotate(90deg); }
 .pv-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; }
