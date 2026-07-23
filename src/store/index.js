@@ -12,7 +12,7 @@ export const store = reactive({
   categories: [...CATEGORIES],
   currentUser: 'Aarav Mehta',
   toasts: [],
-  ui: { createOpen: false, cloneTarget: null, editTarget: null, pendingAddWidget: false, theme: 'light', listingOpen: false, listingQuery: '', groupStyle: 1, listStyle: 1, legendStyle: 6,
+  ui: { createOpen: false, cloneTarget: null, editTarget: null, pendingAddWidget: false, theme: 'light', listingOpen: true, listingQuery: '', groupStyle: 1, listStyle: 1, legendStyle: 6,
     // AI entry-point demo: which surface reveals the AI Summary/Assistant, and whether the panel is open.
     // Entry ids live in src/data/aiEntries.js; one at a time, switched from the on-board demo bar.
     // aiAsk lets any component (topbar, a widget) request the panel run an intent — the board forwards it.
@@ -20,6 +20,9 @@ export const store = reactive({
     // AI-insights placement lab: the shared panel's open + pinned state. Persists "per user"
     // via the store, the app's own mechanism (there is no localStorage layer anywhere).
     aiInsightsOpen: false, aiInsightsPinned: false,
+    // Two-sidebar shell: which module the rail has selected, whether the rail shows labels,
+    // and whether the listing sidebar is open. listingOpen already exists below.
+    activeModule: 'dashboard', railExpanded: false, activeSub: null, activeView: null,
     // a widget TITLE the AI panel asked the board to spotlight (scroll + flash) while it
     // narrates the answer — so "investigate" points at the real tile instead of a table.
     aiHighlight: null,

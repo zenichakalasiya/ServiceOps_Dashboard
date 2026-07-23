@@ -14,6 +14,8 @@ const routes = [
   { path: '/ai', name: 'ai', component: () => import('../views/AiShowcase.vue') },
   // AI-insights placement lab — compare three entry-point placements over the real board
   { path: '/ai-placement', name: 'ai-placement', component: () => import('../views/AiPlacementLab.vue') },
+  // non-dashboard module (stub content) — the two-sidebar shell around a real listing
+  { path: '/m/:key', name: 'module', component: () => import('../views/ModuleStub.vue') },
   // full management listing (opened from the left drawer's entry points)
   { path: '/dashboards', name: 'manage', component: () => import('../views/ManageDashboards.vue') },
   { path: '/all', redirect: '/dashboards' },

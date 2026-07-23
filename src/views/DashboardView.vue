@@ -540,6 +540,11 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
     <!-- Header -->
     <header class="bhead">
       <div class="bh-left">
+        <!-- collapse / expand the listing sidebar, beside the title (image 1) -->
+        <button class="listing-toggle" :title="store.ui.listingOpen ? 'Collapse dashboard listing' : 'Expand dashboard listing'"
+          @click="store.ui.listingOpen = !store.ui.listingOpen">
+          <Icon :name="store.ui.listingOpen ? 'panel-close' : 'panel-left'" :size="18" />
+        </button>
         <button class="star" :class="{ on: d.favorite }" @click="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="17" /></button>
         <div class="titles">
           <div class="t-row">
@@ -842,6 +847,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .board { display: flex; flex-direction: column; min-height: 100%; }
 .bhead { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: nowrap; }
 .bh-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.listing-toggle { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); border-radius: 9px; display: grid; place-items: center; flex: none; }
+.listing-toggle:hover { background: var(--surface-2); color: var(--ink); border-color: var(--border-strong); }
 .star { width: 34px; height: 34px; border-radius: 9px; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; }
 .star:hover, .star.on { color: #f5a623; }
 .titles { min-width: 0; }

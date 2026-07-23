@@ -38,6 +38,9 @@ const MAP = {
   'open-in': 'arrow_forward', chat: 'chat_bubble', 'auto-graph': 'auto_graph', bolt: 'bolt',
   send: 'send', attach: 'attach_file', brain: 'neurology', flag: 'flag', research: 'travel_explore',
   target: 'center_focus_strong', insights: 'insights',
+  // module-rail glyphs
+  assets: 'devices', patch: 'shield', packages: 'deployed_code',
+  'panel-left': 'left_panel_open', 'panel-close': 'left_panel_close',
 }
 const FILLED = new Set(['star-fill'])
 
