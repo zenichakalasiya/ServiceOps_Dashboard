@@ -36,11 +36,13 @@ watchEffect(() => { document.documentElement.dataset.theme = store.ui.theme })
 
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-.below { flex: 1; display: flex; min-height: 0; }
+/* the region behind the sidebars carries the tint, so the main canvas reads as a
+   white(ish) panel curving away from the tinted sidebars at the top-left */
+.below { flex: 1; display: flex; min-height: 0; background: var(--sidebar); }
 /* ModuleRail owns its own width now (56px ↔ 208px expanded) */
 .below > .rail { flex: none; }
 .below > .flyout, .below > .mlist { flex: none; }
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: auto; }
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: auto; background: var(--bg); border-top-left-radius: 16px; }
 .slide-enter-active, .slide-leave-active { transition: width .18s ease, opacity .18s ease; overflow: hidden; }
 .slide-enter-from, .slide-leave-to { width: 0 !important; opacity: 0; }
 </style>

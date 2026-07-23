@@ -41,6 +41,9 @@
   --bg: #f9fafb;               /* Light BG / Card Foreground */
   --surface: #ffffff;          /* White / Widget BG / Nav BG */
   --surface-2: #eef2f6;        /* Action Box / Switch / Nav Hover BG */
+  /* Sidebar tint — the two left sidebars use this to read as a distinct region against
+     the near-white main canvas (ClickUp-style). */
+  --sidebar: #eef1f6; --sidebar-hover: #e3e8f1; --sidebar-border: #dce2ec;
   --border: #dfe5ed;           /* Border Color */
   --border-strong: #cbd6e1;
   --ink: #364658;              /* Page Text Color */
@@ -93,6 +96,7 @@
 
   --bg: #14141c;
   --surface: #1d1d27;
+  --sidebar: #0f111a; --sidebar-hover: #1b1f2b; --sidebar-border: #282c3a;
   --surface-2: #25252f;
   --border: #2f2f3b;
   --border-strong: #3a3a48;

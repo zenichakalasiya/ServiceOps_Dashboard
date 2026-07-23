@@ -100,7 +100,8 @@ function pickSub(m, sub) {
 </template>
 
 <style scoped>
-.rail { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 8px; gap: 3px; width: 56px; transition: width .16s ease; overflow: hidden; }
+/* retint the whole rail: remap the neutral tokens so every child follows, then paint it */
+.rail { --surface: var(--sidebar); --surface-2: var(--sidebar-hover); --border: var(--sidebar-border); background: var(--sidebar); border-right: 1px solid var(--sidebar-border); display: flex; flex-direction: column; padding: 8px; gap: 3px; width: 56px; transition: width .16s ease; overflow: hidden; }
 .rail.expanded { width: 208px; }
 .rail-toggle { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border: none; background: transparent; color: var(--muted); border-radius: 9px; margin-bottom: 4px; white-space: nowrap; }
 .rail:not(.expanded) .rail-toggle { justify-content: center; padding: 0; }

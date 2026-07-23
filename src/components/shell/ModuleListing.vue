@@ -33,9 +33,9 @@ function pick(it) {
 
 <template>
   <aside class="mlist">
+    <!-- collapse is driven from the main screen's toggle now, so only the title here -->
     <div class="ml-head">
       <h2>{{ mod.title }}</h2>
-      <button class="ml-x" title="Collapse panel" @click="emit('close')"><Icon name="chevron-left" :size="17" /></button>
     </div>
     <div class="ml-search"><Icon name="search" :size="15" class="muted" /><input v-model="q" :placeholder="`Search ${mod.label.toLowerCase()}…`" /></div>
 
@@ -61,7 +61,8 @@ function pick(it) {
 </template>
 
 <style scoped>
-.mlist { width: 300px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; }
+/* retint: remap the neutral tokens so every child follows the sidebar tint */
+.mlist { --surface: var(--sidebar); --surface-2: var(--sidebar-hover); --border: var(--sidebar-border); width: 300px; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); display: flex; flex-direction: column; height: 100%; }
 .ml-head { display: flex; align-items: center; gap: 8px; padding: 12px 8px 8px 14px; }
 .ml-head h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ml-x { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }

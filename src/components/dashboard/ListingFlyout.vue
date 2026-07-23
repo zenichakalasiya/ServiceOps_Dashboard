@@ -101,10 +101,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 <template>
   <aside class="flyout">
     <div class="fhead">
-      <div class="row gap-6">
-        <button class="ic" title="Collapse panel" @click="emit('close')"><Icon name="chevron-left" :size="17" /></button>
-        <span class="ftitle">Dashboards</span>
-      </div>
+      <!-- collapse is driven from the main screen's toggle now, so only the title here -->
+      <span class="ftitle">Dashboards</span>
       <button class="new-ic" title="New dashboard" @click="newDashboard"><Icon name="plus" :size="17" /></button>
     </div>
 
@@ -199,7 +197,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 </template>
 
 <style scoped>
-.flyout { width: 300px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; }
+/* retint: remap the neutral tokens on the root so every child follows the sidebar tint */
+.flyout { --surface: var(--sidebar); --surface-2: var(--sidebar-hover); --border: var(--sidebar-border); width: 300px; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); display: flex; flex-direction: column; height: 100%; }
 .fhead { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; }
 .ftitle { font-weight: 600; font-size: 15px; }
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
