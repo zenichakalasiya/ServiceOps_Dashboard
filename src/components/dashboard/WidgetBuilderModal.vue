@@ -352,7 +352,8 @@ function save(place) {
                       v-for="k in CHART_KINDS" :key="k.id" class="kind"
                       :class="{ on: curType.id === k.id }" @click="pickKind(k)"
                     >
-                      <Icon :name="k.icon" :size="15" :class="{ rot90: k.id === 'bar' }" /> {{ k.label }}
+                      <Icon :name="k.icon" :size="22" :class="{ rot90: k.id === 'bar' }" />
+                      <span class="kind-l">{{ k.label }}</span>
                     </button>
                   </div>
                 </div>
@@ -498,10 +499,12 @@ function save(place) {
 .pv-tab .rot90 { transform: rotate(90deg); }
 /* chart-kind picker in the config panel — the family row's little sibling, sized for
    a 2-up grid so all four fit the narrow column without wrapping oddly */
-.kinds { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-.kind { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 12.5px; }
-.kind:hover { background: var(--surface-2); }
+/* all four chart kinds in one row, as square tiles: icon over label */
+.kinds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.kind { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 1 / 1; padding: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 10px; font-weight: 500; font-size: 12.5px; }
+.kind:hover { background: var(--surface-2); border-color: var(--muted-2); }
 .kind.on { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--sh-sm); }
+.kind-l { line-height: 1; }
 .kind .rot90 { transform: rotate(90deg); }
 .pv-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; }
 .pv-canvas { flex: 1; display: grid; place-items: center; padding: 22px; min-height: 0; }
