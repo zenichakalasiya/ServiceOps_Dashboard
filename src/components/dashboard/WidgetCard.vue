@@ -48,6 +48,16 @@ function pillClass(v) {
   return ''
 }
 
+/* Per-widget date override indicator (DEMO). A widget with its own `dateFilter` reads
+ * a different time range than the dashboard's global filter; store.ui.dateFilterStyle
+ * picks which of five treatments marks it. hasDateFilter drives every option. */
+const dfStyle = computed(() => store.ui.dateFilterStyle || 0)
+const hasDateFilter = computed(() => !!props.tile.dateFilter && dfStyle.value > 0)
+// card-level treatments: 2 = top stripe · 5 = left edge (fused)
+const dfCardClass = computed(() => (!hasDateFilter.value ? '' : dfStyle.value === 2 ? 'df-stripe' : dfStyle.value === 5 ? 'df-edge' : ''))
+// header chip is shown for the chip option (1) and the fused option (5)
+const dfChip = computed(() => hasDateFilter.value && (dfStyle.value === 1 || dfStyle.value === 5))
+
 const loading = ref(false)
 const menu = ref(false)
 const menuBtn = ref(null)
@@ -208,7 +218,11 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 </script>
 
 <template>
-  <div ref="cardEl" class="tile card" :class="{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen }">
+  <div ref="cardEl" class="tile card" :class="[{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen }, dfCardClass]">
+    <!-- corner badge option (3): a persistent date marker pinned to the card corner -->
+    <span v-if="hasDateFilter && dfStyle === 3" class="df-corner" :title="`Custom range: ${tile.dateFilter}`">
+      <Icon name="calendar" :size="11" /> {{ tile.dateFilter }}
+    </span>
     <!-- Standardized header: title + info (left) · refresh · fullscreen · edit · ⋯ (right).
          EVERY tile uses this. The click-to-select floating toolbar three tiles used to
          have is gone — one board should not have two different ways to reach the same
@@ -218,6 +232,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         <span class="draghandle" title="Drag to move" @mousedown="emit('armdrag', tile)"><Icon name="drag" :size="16" /></span>
         <span v-if="tile.pinned" class="pinbadge" title="Pinned"><Icon name="pin" :size="12" /></span>
         <span class="title ellip">{{ tile.title }}</span>
+        <!-- chip options (1 chip · 5 fused): an always-visible date pill beside the title -->
+        <span v-if="dfChip" class="df-chip" :title="`This widget uses its own range, not the dashboard filter`">
+          <Icon name="calendar" :size="11" /> {{ tile.dateFilter }}
+        </span>
         <span ref="infoEl" class="info" @mouseenter="showInfo" @mouseleave="infoHover = false">
           <Icon name="info" :size="14" />
         </span>
@@ -235,6 +253,11 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         </div>
       </div>
     </header>
+
+    <!-- meta-line option (4): a sub-line under the header naming the custom range -->
+    <div v-if="hasDateFilter && dfStyle === 4" class="df-meta">
+      <Icon name="calendar" :size="12" /> {{ tile.dateFilter }} <span class="df-meta-tag">custom range</span>
+    </div>
 
     <!-- per-widget AI: hover mini-summary card, teleported so it overlays the board -->
     <teleport to="body">
@@ -425,6 +448,42 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .tile:hover .draghandle { opacity: 1; }
 .pinbadge { display: inline-grid; place-items: center; color: var(--primary); flex: none; transform: rotate(35deg); }
 .title { font-weight: 600; font-size: var(--tile-title, 13.5px); }
+
+/* ── Per-widget date-override indicators (five demo treatments) ──────────────────
+   All share one indigo "time" hue (--df) so an override reads as its own kind of
+   thing, distinct from the primary blue, the status colours and the AI gradient. */
+/* 1 · chip + 5 · fused chip — an always-visible date pill beside the title */
+.df-chip {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  height: 19px; padding: 0 8px; border-radius: 999px;
+  background: var(--df-soft); border: 1px solid var(--df-line); color: var(--df-ink);
+  font-size: 10.5px; font-weight: 600; white-space: nowrap;
+}
+.df-chip :deep(.ico) { color: var(--df); }
+/* 2 · top stripe — a scan-first accent along the card's top edge */
+.tile.df-stripe { border-top: 2px solid var(--df); }
+/* 5 · fused — a hairline accent on the left edge, paired with the chip above */
+.tile.df-edge { box-shadow: inset 3px 0 0 var(--df); }
+/* 3 · corner badge — a persistent marker pinned to the top-left corner */
+.df-corner {
+  position: absolute; top: 8px; left: 10px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 19px; padding: 0 8px; border-radius: 999px;
+  background: var(--df); color: #fff; font-size: 10.5px; font-weight: 600; box-shadow: var(--sh-sm);
+}
+.df-corner :deep(.ico) { color: #fff; }
+/* corner badge sits where the title would start — nudge the header in to clear it */
+.tile:has(.df-corner) .thead { padding-top: 32px; }
+/* 4 · meta-line — a sub-line under the header naming the range */
+.df-meta {
+  display: flex; align-items: center; gap: 5px; margin: -2px 12px 0;
+  font-size: 11px; color: var(--df-ink);
+}
+.df-meta :deep(.ico) { color: var(--df); }
+.df-meta-tag {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+  color: var(--df-ink); background: var(--df-soft); border-radius: 4px; padding: 1px 5px;
+}
 /* info-icon tooltip: the DESCRIPTION leads, provenance sits under it as a left-aligned pill */
 .tt-desc { font-weight: 400; color: rgba(255,255,255,.88); line-height: 1.45; }
 .tt-tag { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .2px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); color: #fff; }

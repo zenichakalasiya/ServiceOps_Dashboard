@@ -65,13 +65,15 @@ function helpdeskTiles() {
   const TECHS = ['yash', 'RW', 'Juli Gopani', 'Sakshi', 'ahmedraza', 'Rosy', 'Keya', 'Jerry', 'Stuti', 'Nikhil', 'Unassigned']
   return [
     { ...kpi('Overdue Requests', 18, '', { dir: 'up', pct: 14 }, 'bad', 'Open requests past their SLA due date.'), w: 2 },
-    { ...kpi('Requests Due In the 24 Hours', 24, '', { dir: 'up', pct: 9 }, 'warn', 'Open requests whose SLA due date falls within the next 24 hours.'), w: 2 },
+    // `dateFilter` = this widget overrides the dashboard time filter with its own range.
+    // A few tiles carry one so the date-filter indicator demo has widgets to differentiate.
+    { ...kpi('Requests Due In the 24 Hours', 24, '', { dir: 'up', pct: 9 }, 'warn', 'Open requests whose SLA due date falls within the next 24 hours.'), w: 2, dateFilter: 'Today' },
     { ...kpi('Open Requests', 248, '', { dir: 'up', pct: 4 }, 'warn', 'Count of requests in an open state.'), w: 2 },
     { ...kpi('Unassigned Requests', 12, '', { dir: 'down', pct: 6 }, 'warn', 'Open requests with no technician assigned.'), w: 2 },
     { ...kpi('My Open Requests', 9, '', { dir: 'up', pct: 3 }, 'good', 'Open requests assigned to me.'), w: 2 },
     { ...kpi('Urgent Open Requests', 6, '', { dir: 'up', pct: 20 }, 'bad', 'Open requests with priority Urgent.'), w: 2 },
     { ...chart('Open Requests By Status', { kind: 'donut', labels: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'], series: [{ name: 'Requests', values: [96, 54, 30, 42, 26] }] }, 'Open requests grouped by status.'), w: 4 },
-    { ...chart('Open Requests By Priority', { kind: 'donut', labels: ['Low', 'Medium', 'High', 'Urgent'], series: [{ name: 'Requests', values: [120, 78, 34, 16] }] }, 'Open requests grouped by priority.'), w: 4 },
+    { ...chart('Open Requests By Priority', { kind: 'donut', labels: ['Low', 'Medium', 'High', 'Urgent'], series: [{ name: 'Requests', values: [120, 78, 34, 16] }] }, 'Open requests grouped by priority.'), w: 4, dateFilter: 'Last 7 days' },
     { ...chart('Open Requests By Technician', { kind: 'hbar', labels: TECHS, series: [{ name: 'Total', values: [34, 28, 22, 19, 17, 14, 12, 9, 7, 5, 12] }] }, 'Open requests grouped by assigned technician.'), w: 4 },
     /* The legend problem in the flesh: 63 technicians on a pie. Above HIGH_CARD the
      * tile switches to the rank pill (Top N · Bottom N · range · coverage · All) and
@@ -89,7 +91,7 @@ function helpdeskTiles() {
       [['Provision laptop for new joiner', 'TASK-3021', 'Open', 'Medium'],
        ['Review firewall change', 'TASK-3018', 'In Progress', 'High'],
        ['Patch database servers', 'TASK-3009', 'Open', 'Urgent']],
-      'Tasks assigned to me that are open.'), w: 4 },
+      'Tasks assigned to me that are open.'), w: 4, dateFilter: 'This month' },
     { ...shortcut('My Pending Approvals', ['Requester Name', 'Created Date', 'Subject', 'Type'],
       [['Priya Nair', '18 Jul 2026', 'New software purchase — Figma', 'Service Request'],
        ['Vikram Deshpande', '17 Jul 2026', 'Access to production DB', 'Change']],

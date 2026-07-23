@@ -124,6 +124,20 @@ const LSTYLES = [
 const showLegendDemo = false
 const ls = computed(() => store.ui.legendStyle)
 
+// ---- Date-filter indicator DEMO switcher: five ways to mark a widget that overrides
+// the global time filter with its own range. On Helpdesk Overview a few tiles carry a
+// `dateFilter`, so switching options re-skins just those. See WidgetCard.vue.
+const DFSTYLES = [
+  { id: 0, n: '⊘', label: 'None', desc: 'No indicator — the baseline, so you can see what a plain board looks like.' },
+  { id: 1, n: '①', label: 'Header chip', desc: 'Overridden widgets show a date pill beside the title; global-following widgets show nothing. Reads on landing, weaker at a scan.' },
+  { id: 2, n: '②', label: 'Top stripe', desc: 'An indigo accent along the top edge of overridden widgets — a pure scan signal; the range lives in the info tooltip.' },
+  { id: 3, n: '③', label: 'Corner badge', desc: 'A persistent date badge pinned to the card corner — one fixed place to look across the board.' },
+  { id: 4, n: '④', label: 'Meta-line', desc: 'A sub-line under the header naming the range and tagging it “custom” — value and state together, off the action row.' },
+  { id: 5, n: '⑤', label: 'Fused (chip + edge)', desc: 'Recommended: the accented chip gives the range, the left-edge accent gives the scan — one mechanism for both signals.' },
+]
+const dfs = computed(() => store.ui.dateFilterStyle)
+const showDateDemo = true
+
 // ---- AI: the Summary card is always upfront; every CTA opens the ServiceOps AI side panel.
 // The AI reads the board you are ACTUALLY on. A dashboard the user just created has no
 // canned story, so the engine summarises whatever it finds there (and says so when it's
@@ -640,6 +654,18 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <span class="gsb-desc">{{ LSTYLES.find(s => s.id === ls)?.desc }}</span>
       </div>
 
+      <!-- DEMO: the 5 ways to mark a widget with its OWN date range (vs the global filter).
+           Affects the few Helpdesk tiles that carry a `dateFilter`. -->
+      <div v-if="showDateDemo && !loadingBoard" class="gstyle-bar df-bar">
+        <span class="gsb-label"><Icon name="calendar" :size="14" /> Date-filter indicator</span>
+        <div class="gsb-seg">
+          <button v-for="s in DFSTYLES" :key="s.id" class="gsb-b" :class="{ on: dfs === s.id }" :title="s.desc" @click="store.ui.dateFilterStyle = s.id">
+            <span class="gsb-n">{{ s.n }}</span> {{ s.label }}
+          </button>
+        </div>
+        <span class="gsb-desc">{{ DFSTYLES.find(s => s.id === dfs)?.desc }}</span>
+      </div>
+
       <!-- AI Summary — always upfront on the board (the ServiceOps reference), with its
            three deep-dive CTAs on the right; each opens the ServiceOps AI side panel. -->
       <!-- shown even on an empty board: a dashboard the user just created still needs
@@ -941,6 +967,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-empty p { margin: 0; }
 /* grouping-style demo switcher */
 .gstyle-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 14px; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 10px; }
+/* date-filter demo bar — tinted with the indigo date-scope hue so it reads as that control */
+.df-bar { border-color: var(--df-line); background: var(--df-soft); }
+.df-bar .gsb-label, .df-bar .gsb-label :deep(.ico) { color: var(--df-ink); }
+.df-bar .gsb-b.on { color: var(--df-ink); box-shadow: 0 0 0 1px var(--df-line), var(--sh-sm); }
 .legend-bar .gsb-label em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 11px; margin-left: 4px; }
 .gsb-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .gsb-seg { display: inline-flex; gap: 3px; background: var(--surface-2); padding: 3px; border-radius: 9px; border: 1px solid var(--border); }

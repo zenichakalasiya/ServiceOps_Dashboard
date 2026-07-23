@@ -14,6 +14,11 @@
   --red: #e0483d;    --red-soft: #fdecea;
   --blue: #3279be;   --blue-soft: #e7f0f9;
 
+  /* Date-scope accent — a "time" hue reserved for per-widget date overrides.
+     Indigo: distinct from primary sky-blue, from status red/amber/green, and from
+     the AI purple/pink gradient, so an override reads as its own kind of thing. */
+  --df: #5b61d6;  --df-ink: #4348b8;  --df-soft: #ecedfb;  --df-line: #c9cbf3;
+
   /* AI accent — the sparkle/summary branding (violet → magenta), kept distinct
      from the product blue so "this is AI" reads at a glance. */
   --ai: #8b5cf6;
@@ -70,6 +75,9 @@
   --primary-softer: #0c2937;
 
   --green-soft: #133227; --amber-soft: #332811; --red-soft: #3a1f1d; --blue-soft: #122844;
+
+  /* Date-scope accent — dark */
+  --df: #8b90ee;  --df-ink: #b6b9f4;  --df-soft: #1e2040;  --df-line: #363a6b;
 
   /* AI accent — dark: lift the ink so violet reads on the dark surface */
   --ai: #a78bfa;
