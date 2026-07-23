@@ -12,6 +12,8 @@ const routes = [
   { path: '/dashboard/:id', name: 'dashboard', component: () => import('../views/DashboardView.vue'), props: true },
   // AI Capabilities showcase — selector of the four AI features over a live demo board
   { path: '/ai', name: 'ai', component: () => import('../views/AiShowcase.vue') },
+  // AI-insights placement lab — compare three entry-point placements over the real board
+  { path: '/ai-placement', name: 'ai-placement', component: () => import('../views/AiPlacementLab.vue') },
   // full management listing (opened from the left drawer's entry points)
   { path: '/dashboards', name: 'manage', component: () => import('../views/ManageDashboards.vue') },
   { path: '/all', redirect: '/dashboards' },

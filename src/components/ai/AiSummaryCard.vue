@@ -17,7 +17,9 @@ import { ref, computed } from 'vue'
 import Icon from '../ui/Icon.vue'
 import { facts as computeFacts } from '../../data/aiEngine.js'
 
-const props = defineProps({ board: { type: Object, required: true } })
+// hideAddWidget: the placement lab's Variant C drops "Add a new widget" (it duplicates
+// the floating action button and isn't an AI action). The real dashboard leaves it on.
+const props = defineProps({ board: { type: Object, required: true }, hideAddWidget: { type: Boolean, default: false } })
 const emit = defineEmits(['ask'])
 
 const open = ref(false)
@@ -34,13 +36,14 @@ const summary = computed(() => {
   return `${n} thing${n > 1 ? 's' : ''} need attention on “${props.board.name}”. Top of the list: ${top.text}.${more}`
 })
 
-const CTAS = [
+const ALL_CTAS = [
   // the card carries a one-line teaser; this opens the panel with the FULL written insights
   { label: 'Insights with AI', intent: 'analyzing', icon: 'sparkles', primary: true },
   { label: 'Every widget explained', intent: 'widgets', icon: 'auto-graph' },
   // opens the chat and has the AI SUGGEST widgets to pick from
   { label: 'Add a new widget', intent: 'suggestwidget', icon: 'plus' },
 ]
+const CTAS = computed(() => (props.hideAddWidget ? ALL_CTAS.filter((c) => c.intent !== 'suggestwidget') : ALL_CTAS))
 
 function toggle() { open.value = !open.value }
 </script>
