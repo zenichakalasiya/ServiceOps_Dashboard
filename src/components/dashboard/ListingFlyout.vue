@@ -38,7 +38,8 @@ const groups = computed(() => {
   if (rec.length) g.push({ name: 'Recently used', items: rec })
   const cats = {}
   tabbed.value.forEach((d) => {
-    if (d.default) return   // the pin above already stands in for it in its category
+    // the default is BOTH pinned above and listed in its own category (with a home
+    // icon beside its name there) — so it's reachable from either place
     const c = d.category || 'Other'; (cats[c] ||= []).push(d)
   })
   Object.keys(cats).sort().forEach((c) => g.push({ name: c, items: cats[c] }))
@@ -134,6 +135,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
             <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id, 'menu-open': menuId === d.id }" @click="openBoard(d)">
               <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
               <span class="iname ellip">{{ d.name }}</span>
+              <!-- the default landing board carries a static home icon beside its name here too -->
+              <Icon v-if="d.default" name="default-home" :size="13" class="def-mark" title="Default dashboard — the one you land on" />
               <!-- favourite is the quick action upfront on hover, and stays lit once set;
                    setting a different default landing board is a set-once action in ⋯ -->
               <button class="hb fav" :class="{ show: d.favorite }" :title="d.favorite ? 'Remove from favourites' : 'Add to favourites'" @click.stop="toggleFavorite(d)">
@@ -234,6 +237,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .item.def { padding-left: 8px; }
 .item.def .iname { flex: 1; font-weight: 600; color: var(--ink); }
 .def-lead { color: var(--primary); flex: none; }
+/* the home icon beside the default's name in the category/Favourite/Recently rows */
+.def-mark { flex: none; color: var(--primary); }
 .lk.arch { color: var(--muted); }
 .hov { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
 .item:hover .hov, .item.menu-open .hov { opacity: 1; }
