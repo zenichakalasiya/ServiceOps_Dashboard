@@ -113,6 +113,7 @@ positioned in viewport coordinates — follow that pattern for any new floating 
 | `components/ui/FilterMenu.vue` | Shared two-level filter: OR within a field, AND across fields. |
 | `components/ai/AiAssistant.vue` | The whole AI side panel — composer, thread, creation flows. |
 | `components/ai/AiSummaryCard.vue` | The upfront AI Summary banner + its 3 CTAs. |
+| `views/AiPlacementLab.vue` | Internal `/ai-placement` lab comparing 3 entry placements (header chip · KPI-row card · banner). All three open the **real `AiAssistant` overlay** — each CTA fires its own intent (`analyzing` / `widgets` / `suggestwidget`). `AiInsightsPanel.vue` (the old mock push-panel) is no longer referenced. |
 | `data/aiEngine.js` | **Deterministic, no-LLM** engine: facts, anomalies, explanations, briefings. |
 | `data/aiAssistant.js` | Intent routing, tile/fact resolution, and `resolveWidget` (description → configured widget). |
 
