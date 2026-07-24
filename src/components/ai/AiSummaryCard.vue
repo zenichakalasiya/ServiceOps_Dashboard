@@ -15,7 +15,7 @@
  */
 import { ref, computed } from 'vue'
 import Icon from '../ui/Icon.vue'
-import { facts as computeFacts } from '../../data/aiEngine.js'
+import { useAiTeaser, AI_TEASER_CTAS } from '../../data/aiTeaser.js'
 
 // hideAddWidget: the placement lab's Variant C drops "Add a new widget" (it duplicates
 // the floating action button and isn't an AI action). The real dashboard leaves it on.
@@ -24,26 +24,9 @@ const emit = defineEmits(['ask'])
 
 const open = ref(false)
 
-const attention = computed(() => computeFacts(props.board).filter((f) => f.severity === 'bad' || f.severity === 'warn'))
-// the small written summary shown once the card is expanded
-const summary = computed(() => {
-  const tiles = props.board.tiles || []
-  if (!tiles.length) return `“${props.board.name}” has no widgets yet — add one and I’ll start summarising it.`
-  const n = attention.value.length
-  if (!n) return `“${props.board.name}” looks healthy — all ${tiles.length} widgets are within range right now.`
-  const top = attention.value[0]
-  const more = n > 1 ? ` ${n - 1} other${n - 1 > 1 ? 's are' : ' is'} worth watching.` : ''
-  return `${n} thing${n > 1 ? 's' : ''} need attention on “${props.board.name}”. Top of the list: ${top.text}.${more}`
-})
-
-const ALL_CTAS = [
-  // the card carries a one-line teaser; this opens the panel with the FULL written insights
-  { label: 'Insights with AI', intent: 'analyzing', icon: 'sparkles', primary: true },
-  { label: 'Every widget explained', intent: 'widgets', icon: 'auto-graph' },
-  // opens the chat and has the AI SUGGEST widgets to pick from
-  { label: 'Add a new widget', intent: 'suggestwidget', icon: 'plus' },
-]
-const CTAS = computed(() => (props.hideAddWidget ? ALL_CTAS.filter((c) => c.intent !== 'suggestwidget') : ALL_CTAS))
+// grounded teaser (count + one-line summary), shared with the chip and KPI-card placements
+const { summary } = useAiTeaser(() => props.board)
+const CTAS = computed(() => (props.hideAddWidget ? AI_TEASER_CTAS.filter((c) => c.intent !== 'suggestwidget') : AI_TEASER_CTAS))
 
 function toggle() { open.value = !open.value }
 </script>

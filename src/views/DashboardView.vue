@@ -15,6 +15,8 @@ import SharePopover from '../components/dashboard/SharePopover.vue'
 import ShareDialog from '../components/dashboard/ShareDialog.vue'
 import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
 import AiSummaryCard from '../components/ai/AiSummaryCard.vue'
+import AiInsightChip from '../components/ai/AiInsightChip.vue'
+import AiInsightCard from '../components/ai/AiInsightCard.vue'
 import AiAssistant from '../components/ai/AiAssistant.vue'
 import { demoBoard } from '../data/aiDemo.js'
 import { store, byId, recordView, toggleFavorite, removeTile, toast, rearrangeTiles } from '../store/index.js'
@@ -123,6 +125,16 @@ const LSTYLES = [
 ]
 const showLegendDemo = false
 const ls = computed(() => store.ui.legendStyle)
+
+// ---- AI-insights PLACEMENT demo (for management): the three ways the entry point can live
+// on the board. Switch it live from the lavender bar; the destination is always the same
+// real assistant. A = header chip + popover · B = a card in the KPI row · C = the banner.
+const PLACEMENTS = [
+  { id: 'A', n: 'A', label: 'Header chip', desc: 'A small “✨ N” chip in the board header → popover with the summary + the 3 actions. Near-zero vertical cost; discovery rides on a compact chip.' },
+  { id: 'B', n: 'B', label: 'KPI-row card', desc: 'A wide AI card living in the KPI row (summary + 3 actions), with the metric tiles beside it. Zero extra chrome — it’s already a tile.' },
+  { id: 'C', n: 'C', label: 'Banner (baseline)', desc: 'Today’s collapsible “AI insights” banner above the grid. Most discoverable; costs the most height. This is what the other two try to beat.' },
+]
+const ap = computed(() => store.ui.aiPlacement)
 
 
 // ---- AI: the Summary card is always upfront; every CTA opens the ServiceOps AI side panel.
@@ -607,6 +619,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
           <button class="btn ico-only" :class="{ on: showDownload }" @click.stop="showDownload = !showDownload" title="Download"><Icon name="download" :size="17" /></button>
           <DownloadDialog v-if="showDownload" :d="d" @close="showDownload = false" />
         </div>
+        <!-- A: the AI-insights chip lives in the header, immediately left of the ⋯ menu -->
+        <AiInsightChip v-if="!loadingBoard && ap === 'A'" :board="aiBoard" @ask="onCardAsk" />
         <DashboardMenu :d="d" align="right" @present="presenting = true" @schedule="showSchedule = true" @history="showHistory = true" />
       </div>
     </header>
@@ -646,11 +660,23 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <span class="gsb-desc">{{ LSTYLES.find(s => s.id === ls)?.desc }}</span>
       </div>
 
-      <!-- AI Summary — always upfront on the board (the ServiceOps reference), with its
-           three deep-dive CTAs on the right; each opens the ServiceOps AI side panel. -->
-      <!-- shown even on an empty board: a dashboard the user just created still needs
-           the AI entry point, and the card says plainly that there's nothing to read yet -->
-      <AiSummaryCard v-if="!loadingBoard" :board="aiBoard" @ask="onCardAsk" />
+      <!-- DEMO (for management): flip the AI-insights entry between its three placements —
+           A header chip · B KPI-row card · C banner. The destination is always the same
+           real assistant; only WHERE the entry point sits changes. -->
+      <div v-if="!loadingBoard" class="gstyle-bar ai-bar">
+        <span class="gsb-label"><Icon name="sparkles" :size="14" /> AI placement</span>
+        <div class="gsb-seg">
+          <button v-for="p in PLACEMENTS" :key="p.id" class="gsb-b" :class="{ on: ap === p.id }" :title="p.desc" @click="store.ui.aiPlacement = p.id">
+            <span class="gsb-n">{{ p.n }}</span> {{ p.label }}
+          </button>
+        </div>
+        <span class="gsb-desc">{{ PLACEMENTS.find(p => p.id === ap)?.desc }}</span>
+      </div>
+
+      <!-- C (baseline): the collapsible "AI insights" banner, upfront above the grid. Shown
+           even on an empty board — a just-created dashboard still needs the AI entry point,
+           and the card says plainly there's nothing to read yet. -->
+      <AiSummaryCard v-if="!loadingBoard && ap === 'C'" :board="aiBoard" @ask="onCardAsk" />
 
       <!-- loading skeleton (P2·9) -->
       <div v-if="loadingBoard" class="grid">
@@ -704,6 +730,10 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <div v-if="tilesIn(null).length" class="ug-wrap">
           <div class="grid" ref="ugGridEl" :style="gridStyle" :class="{ 'drop-into': dropGroup === null }"
             @dragover.prevent="dropGroup = null" @drop="onDropGroup(null)">
+            <!-- B: a wide AI card takes the first slot of the KPI row; the metric tiles flow beside it -->
+            <div v-if="ap === 'B'" class="cell ai-cell">
+              <AiInsightCard :board="aiBoard" @ask="onCardAsk" />
+            </div>
             <div v-for="t in tilesIn(null)" :key="t.id" :data-tile="t.id" class="cell"
               :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
@@ -896,6 +926,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .unsaved { color: var(--amber); font-weight: 600; font-size: 12px; }
 .bbody { flex: 1; padding: 16px 24px 28px; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; align-items: start; }
+/* B placement: the AI card in the KPI row — ~3 KPI widths, height matched to a KPI tile */
+.ai-cell { grid-column: span 6; min-height: 140px; }
+.ai-cell :deep(.ai-card-b) { min-height: 140px; }
 .cell { position: relative; border-radius: var(--r-lg); display: flex; flex-direction: column; }
 /* minimal highlight on a just-added widget */
 .cell.flash { animation: flash 1.8s ease-out; }

@@ -1,5 +1,5 @@
 <script setup>
-import { watchEffect } from 'vue'
+import { watch, watchEffect } from 'vue'
 import ModuleRail from './components/shell/ModuleRail.vue'
 import ListingFlyout from './components/dashboard/ListingFlyout.vue'
 import ModuleListing from './components/shell/ModuleListing.vue'
@@ -8,6 +8,14 @@ import Toasts from './components/ui/Toasts.vue'
 import CreateDashboardPanel from './components/dashboard/CreateDashboardPanel.vue'
 import { store } from './store/index.js'
 watchEffect(() => { document.documentElement.dataset.theme = store.ui.theme })
+
+// The two sidebars are mutually exclusive at their WIDE state, to keep the content area large:
+// expanding the module rail (labels) auto-collapses the listing sidebar, and opening the listing
+// sidebar auto-collapses the rail back to icons-only (names then live on the instant hover tips).
+// Each watch only fires on the TRUE edge, so there is no ping-pong: collapsing one never re-opens
+// the other. Both may be closed at once (max content) — only "both wide" is disallowed.
+watch(() => store.ui.railExpanded, (v) => { if (v) store.ui.listingOpen = false })
+watch(() => store.ui.listingOpen, (v) => { if (v) store.ui.railExpanded = false })
 </script>
 
 <template>

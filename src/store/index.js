@@ -17,6 +17,9 @@ export const store = reactive({
     // Entry ids live in src/data/aiEntries.js; one at a time, switched from the on-board demo bar.
     // aiAsk lets any component (topbar, a widget) request the panel run an intent — the board forwards it.
     aiEntry: 'card', aiPanelOpen: false, aiAsk: null,
+    // AI-insights PLACEMENT demo (shown to management): which of the three entry placements
+    // is live on the board — 'A' header chip · 'B' KPI-row card · 'C' banner (default/baseline).
+    aiPlacement: 'C',
     // AI-insights placement lab: the shared panel's open + pinned state. Persists "per user"
     // via the store, the app's own mechanism (there is no localStorage layer anywhere).
     aiInsightsOpen: false, aiInsightsPinned: false,
