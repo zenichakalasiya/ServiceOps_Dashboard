@@ -3,20 +3,22 @@
  * AiPlacementLab — a lab page to compare three placements of the AI-insights entry point
  * over the REAL Helpdesk Overview board, with a segmented switcher and a live readout.
  *
- * All three variants open the SAME shared panel (AiInsightsPanel):
- *   A  header chip → popover (lead insight + "N more" + two actions) → panel
- *   B  the AI card takes slot 1 of the KPI row → panel
- *   C  the current banner (baseline), minus "Add a new widget" → panel
+ * All three variants open the SAME real assistant (AiAssistant) — the exact panel that
+ * runs on the dashboard, with its command palette, grounded answers and creation flow:
+ *   A  header chip → popover (dashboard summary + 3 CTAs) → assistant
+ *   B  a wide AI card in the KPI row (summary + 3 CTAs) → assistant
+ *   C  the current banner (baseline), minus "Add a new widget" → assistant
  *
- * Docking: the panel is a flex SIBLING of the content column, so opening it PUSHES the
- * board narrower rather than overlaying it. Real WidgetCard components render every tile —
- * the dashboard itself is not rebuilt.
+ * Each CTA opens the assistant with its OWN intent — "Insights with AI" → full-dashboard
+ * insights (analyzing), "Every widget explained" → widgets, "Add a new widget" →
+ * suggestwidget. The assistant is a right-side OVERLAY (position: fixed), so it never
+ * narrows the board. Real WidgetCard components render every tile — the board is not rebuilt.
  */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import Icon from '../components/ui/Icon.vue'
 import WidgetCard from '../components/dashboard/WidgetCard.vue'
 import AiSummaryCard from '../components/ai/AiSummaryCard.vue'
-import AiInsightsPanel from '../components/ai/AiInsightsPanel.vue'
+import AiAssistant from '../components/ai/AiAssistant.vue'
 import { store } from '../store/index.js'
 import { AI_INSIGHTS, leadInsight, insightCount } from '../data/aiInsights.mock.js'
 
@@ -40,23 +42,29 @@ const dashSummary = computed(() => {
   return `${b} has ${count} insights worth your attention. ${lead.title} and ${AI_INSIGHTS[1].title.toLowerCase()} are the most pressing, and ${AI_INSIGHTS[2].title.toLowerCase()}.`
 })
 
-// the three CTAs shown in Variant A's popover and Variant B's card
+// the three CTAs shown in Variant A's popover and Variant B's card — each opens the real
+// assistant with its own intent, matching the on-board AiSummaryCard exactly
 const CTAS = [
-  { label: 'Insights with AI', icon: 'sparkles', primary: true },
-  { label: 'Every widget explained', icon: 'auto-graph' },
-  { label: 'Add a new widget', icon: 'plus' },
+  { label: 'Insights with AI', icon: 'sparkles', intent: 'analyzing', primary: true },
+  { label: 'Every widget explained', icon: 'auto-graph', intent: 'widgets' },
+  { label: 'Add a new widget', icon: 'plus', intent: 'suggestwidget' },
 ]
 
-// ---- the shared panel (open/pinned persist per user via store.ui) ----
-const panelOpen = computed(() => store.ui.aiInsightsOpen)
-let trigger = null
-function openPanel() { trigger = document.activeElement; popoverOpen.value = false; store.ui.aiInsightsOpen = true }
-function closePanel() { store.ui.aiInsightsOpen = false }
+// ---- the real assistant overlay: every variant opens THIS, the same panel the dashboard
+//      runs, via store.ui.aiPanelOpen + trigger(intent) — mirrors DashboardView.onCardAsk ----
+const aiRole = ref('technician')
+const aiPanel = ref(null)
+const panelOpen = computed(() => store.ui.aiPanelOpen)
+function openAi(intent, text) {
+  popoverOpen.value = false
+  store.ui.aiPanelOpen = true
+  if (intent && intent !== 'open') nextTick(() => aiPanel.value?.trigger(intent, text))
+}
 
 // ---- Variant A: the header chip's popover (never open at the same time as the panel) ----
 const popoverOpen = ref(false)
 function togglePopover() {
-  if (store.ui.aiInsightsOpen) return   // panel and popover are never both open
+  if (store.ui.aiPanelOpen) return   // assistant and popover are never both open
   popoverOpen.value = !popoverOpen.value
 }
 // Esc closes the popover
@@ -119,7 +127,7 @@ watch([variant, panelOpen], () => nextTick(measure))
 
     <!-- content column | panel (flex siblings → the panel pushes) -->
     <div class="lab-stage">
-      <div ref="frameEl" class="frame" :class="{ pushed: panelOpen }">
+      <div ref="frameEl" class="frame">
         <div ref="aboveEl" class="above">
           <!-- dashboard header row; Variant A's chip sits here, immediately left of the ⋮ -->
           <header class="fhead">
@@ -137,7 +145,7 @@ watch([variant, panelOpen], () => nextTick(measure))
                     <div class="ai-pop-h"><span class="ai-pop-spark"><Icon name="sparkles" :size="14" /></span> AI insights</div>
                     <p class="ai-pop-sum">{{ dashSummary }}</p>
                     <div class="ai-pop-acts">
-                      <button v-for="c in CTAS" :key="c.label" class="ai-pop-cta" :class="{ primary: c.primary }" @click="openPanel">
+                      <button v-for="c in CTAS" :key="c.label" class="ai-pop-cta" :class="{ primary: c.primary }" @click="openAi(c.intent, c.label)">
                         <Icon :name="c.icon" :size="14" /> <span>{{ c.label }}</span>
                       </button>
                     </div>
@@ -149,7 +157,7 @@ watch([variant, panelOpen], () => nextTick(measure))
           </header>
 
           <!-- Variant C: the current banner, minus "Add a new widget"; its CTAs open the panel -->
-          <AiSummaryCard v-if="variant === 'C'" :board="board" hide-add-widget @ask="openPanel" />
+          <AiSummaryCard v-if="variant === 'C'" :board="board" hide-add-widget @ask="openAi" />
         </div>
 
         <!-- real tiles in a 12-col grid; WidgetCard carries its own span-{w} class.
@@ -161,7 +169,7 @@ watch([variant, panelOpen], () => nextTick(measure))
             <div class="acb-head"><span class="acb-spark"><Icon name="sparkles" :size="15" /></span> AI insights <span class="acb-badge">{{ count }}</span></div>
             <p class="acb-sum">{{ dashSummary }}</p>
             <div class="acb-acts">
-              <button v-for="c in CTAS" :key="c.label" class="acb-cta" :class="{ primary: c.primary }" @click="openPanel">
+              <button v-for="c in CTAS" :key="c.label" class="acb-cta" :class="{ primary: c.primary }" @click="openAi(c.intent, c.label)">
                 <Icon :name="c.icon" :size="13" /> <span>{{ c.label }}</span>
               </button>
             </div>
@@ -170,12 +178,16 @@ watch([variant, panelOpen], () => nextTick(measure))
         </div>
       </div>
 
-      <div class="panel-slot" :class="{ open: panelOpen }">
-        <AiInsightsPanel
-          :open="panelOpen" v-model:pinned="store.ui.aiInsightsPinned"
-          :return-focus-to="trigger" @close="closePanel"
-        />
-      </div>
+      <!-- the real assistant — the SAME docked overlay the dashboard uses (fixed, right
+           side, never narrows the board). All three variants open this. -->
+      <teleport to="body">
+        <transition name="ai-slide">
+          <div v-if="store.ui.aiPanelOpen" class="ai-dock">
+            <AiAssistant ref="aiPanel" :board="board" :role="aiRole" :open="store.ui.aiPanelOpen"
+              @update:open="store.ui.aiPanelOpen = $event" @role="aiRole = $event" />
+          </div>
+        </transition>
+      </teleport>
     </div>
   </div>
 </template>
@@ -283,9 +295,10 @@ watch([variant, panelOpen], () => nextTick(measure))
   .grid :deep(.span-6) { grid-column: span 12; }
 }
 
-/* panel push: a flex sibling that animates its width */
-.panel-slot { flex: none; width: 0; transition: width .2s ease; overflow: hidden; }
-.panel-slot.open { width: 360px; }
-@media (prefers-reduced-motion: reduce) { .panel-slot { transition: none; } }
-@media (max-width: 720px) { .panel-slot.open { width: 100%; } .frame.pushed { display: none; } }
+/* the real assistant overlay — identical to the dashboard's .ai-dock (fixed, right side,
+   z-index 200), so opening it never narrows the board */
+.ai-dock { position: fixed; top: var(--topbar-h); right: 0; width: 480px; max-width: 94vw; height: calc(100vh - var(--topbar-h)); z-index: 200; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--sh-lg); }
+.ai-slide-enter-active, .ai-slide-leave-active { transition: transform .22s ease, opacity .22s ease; }
+.ai-slide-enter-from, .ai-slide-leave-to { transform: translateX(24px); opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .ai-slide-enter-active, .ai-slide-leave-active { transition: none; } }
 </style>
