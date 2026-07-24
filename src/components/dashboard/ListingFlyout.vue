@@ -23,9 +23,11 @@ const tabbed = computed(() => {
   return arr
 })
 
-// groups: My Favourite → Recently used → category-wise. The default landing board is
-// NOT pulled out any more — it lives in its own category like everything else, and a
-// static home icon beside its name is the only thing that marks it (see the row below).
+/* The default dashboard is pinned on its own row under the search — the one board you can
+ * always reach without opening a group. It follows the tab + search so the pin never lies. */
+const defaultDash = computed(() => tabbed.value.find((d) => d.default) || null)
+
+// groups: My Favourite → Recently used → category-wise
 const groups = computed(() => {
   const set = new Set(tabbed.value.map((d) => d.id))
   const inTab = (d) => set.has(d.id)
@@ -36,6 +38,7 @@ const groups = computed(() => {
   if (rec.length) g.push({ name: 'Recently used', items: rec })
   const cats = {}
   tabbed.value.forEach((d) => {
+    if (d.default) return   // the pin above already stands in for it in its category
     const c = d.category || 'Other'; (cats[c] ||= []).push(d)
   })
   Object.keys(cats).sort().forEach((c) => g.push({ name: c, items: cats[c] }))
@@ -107,6 +110,19 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 
     <div class="fsearch"><Icon name="search" :size="15" class="muted" /><input v-model="store.ui.listingQuery" placeholder="Search dashboards…" /></div>
 
+    <!-- default dashboard: pinned above the groups, home icon leading the name, ⋯ on hover -->
+    <div v-if="defaultDash" class="def-row">
+      <div class="item def" :class="{ active: route.params.id === defaultDash.id, 'menu-open': menuId === defaultDash.id }"
+        title="Default dashboard — the one you land on" @click="openBoard(defaultDash)">
+        <Icon name="default-home" :size="15" class="def-lead" />
+        <span class="iname ellip">{{ defaultDash.name }}</span>
+        <!-- home icon only + ⋯ on hover; this row IS the default, so no set-default action -->
+        <span class="hov">
+          <button class="hb" title="Actions" @click.stop="openMenu(defaultDash, $event)"><Icon name="dots-v" :size="14" /></button>
+        </span>
+      </div>
+    </div>
+
     <div class="glist">
       <section v-for="grp in groups" :key="grp.name" class="grp">
           <button class="grp-head" @click="toggleGroup(grp.name)">
@@ -118,11 +134,8 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
             <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id, 'menu-open': menuId === d.id }" @click="openBoard(d)">
               <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
               <span class="iname ellip">{{ d.name }}</span>
-              <!-- static marker for the ONE default landing board, wherever it lives.
-                   Setting a different default is a set-once preference, so it lives in ⋯
-                   — not a home button repeated on every row. -->
-              <Icon v-if="d.default" name="default-home" :size="13" class="def-mark" title="Default dashboard — the one you land on" />
-              <!-- favourite is the quick action upfront on hover, and stays lit once set -->
+              <!-- favourite is the quick action upfront on hover, and stays lit once set;
+                   setting a different default landing board is a set-once action in ⋯ -->
               <button class="hb fav" :class="{ show: d.favorite }" :title="d.favorite ? 'Remove from favourites' : 'Add to favourites'" @click.stop="toggleFavorite(d)">
                 <Icon :name="d.favorite ? 'star-fill' : 'star'" :size="14" />
               </button>
@@ -216,8 +229,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .lk.ic-mine { color: var(--green); }
 .iname { flex: 0 1 auto; min-width: 0; font-size: 13px; }
 .tag-pre { font-size: 9.5px; font-weight: 500; color: var(--primary-700); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; flex: none; }
-/* the static "default landing board" marker, sat right after the board name */
-.def-mark { flex: none; color: var(--primary); }
+/* pinned default row — sits above the groups, so no chevron indent; home icon + ⋯ only */
+.def-row { margin: 0 8px 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.item.def { padding-left: 8px; }
+.item.def .iname { flex: 1; font-weight: 600; color: var(--ink); }
+.def-lead { color: var(--primary); flex: none; }
 .lk.arch { color: var(--muted); }
 .hov { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
 .item:hover .hov, .item.menu-open .hov { opacity: 1; }
