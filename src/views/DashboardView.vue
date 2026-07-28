@@ -660,18 +660,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <span class="gsb-desc">{{ LSTYLES.find(s => s.id === ls)?.desc }}</span>
       </div>
 
-      <!-- DEMO (for management): flip the AI-insights entry between its three placements —
-           A header chip · B KPI-row card · C banner. The destination is always the same
-           real assistant; only WHERE the entry point sits changes. -->
-      <div v-if="!loadingBoard" class="gstyle-bar ai-bar">
-        <span class="gsb-label"><Icon name="sparkles" :size="14" /> AI placement</span>
-        <div class="gsb-seg">
-          <button v-for="p in PLACEMENTS" :key="p.id" class="gsb-b" :class="{ on: ap === p.id }" :title="p.desc" @click="store.ui.aiPlacement = p.id">
-            <span class="gsb-n">{{ p.n }}</span> {{ p.label }}
-          </button>
-        </div>
-        <span class="gsb-desc">{{ PLACEMENTS.find(p => p.id === ap)?.desc }}</span>
-      </div>
+      <!-- The AI-insights entry point defaults to placement A (a compact header chip). The
+           A/B/C switcher bar has been removed from the board; the destination is the same
+           real assistant regardless of which placement is set. -->
 
       <!-- C (baseline): the collapsible "AI insights" banner, upfront above the grid. Shown
            even on an empty board — a just-created dashboard still needs the AI entry point,
