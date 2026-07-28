@@ -31,7 +31,7 @@ function openAi() { store.ui.aiPanelOpen = true }
       <button class="ic" :title="store.ui.theme === 'dark' ? 'Light mode' : 'Dark mode'" @click="store.ui.theme = store.ui.theme === 'dark' ? 'light' : 'dark'">
         <Icon :name="store.ui.theme === 'dark' ? 'sun' : 'moon'" :size="18" />
       </button>
-      <button class="ic" title="Info" @click="nyi('Info')"><Icon name="info" :size="18" /></button>
+      <button class="ic tour-btn" title="Take a tour" @click="store.ui.tourOpen = true"><Icon name="flag" :size="18" /></button>
       <div class="avatar" :title="store.currentUser">{{ initials }}</div>
     </div>
   </header>

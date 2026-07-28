@@ -6,6 +6,7 @@ import ModuleListing from './components/shell/ModuleListing.vue'
 import AppTopbar from './components/shell/AppTopbar.vue'
 import Toasts from './components/ui/Toasts.vue'
 import CreateDashboardPanel from './components/dashboard/CreateDashboardPanel.vue'
+import TourGuide from './components/shell/TourGuide.vue'
 import { store } from './store/index.js'
 watchEffect(() => { document.documentElement.dataset.theme = store.ui.theme })
 
@@ -39,6 +40,7 @@ watch(() => store.ui.listingOpen, (v) => { if (v) store.ui.railExpanded = false 
     </div>
     <Toasts />
     <transition name="fade"><CreateDashboardPanel v-if="store.ui.createOpen" /></transition>
+    <TourGuide />
   </div>
 </template>
 

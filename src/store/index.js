@@ -30,7 +30,9 @@ export const store = reactive({
     // narrates the answer — so "investigate" points at the real tile instead of a table.
     aiHighlight: null,
     // { title, type } — a widget to scroll to and flash once the board has loaded
-    focusTile: null },
+    focusTile: null,
+    // guided spotlight tour of the revamped dashboard (top bar → "Take a tour")
+    tourOpen: false },
   // global view-time controls (per the rebuilt Time Filter + Auto-Refresh)
   timeFilter: { preset: 'last30', label: 'Last 30 days', from: null, to: null },
   autoRefresh: { interval: 'off', label: 'Off' },
