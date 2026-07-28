@@ -13,7 +13,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Icon from '../ui/Icon.vue'
-import GroupSelectAnim from './GroupSelectAnim.vue'
+import GroupWaysCarousel from './GroupWaysCarousel.vue'
 import { store } from '../../store/index.js'
 
 const router = useRouter()
@@ -23,50 +23,30 @@ const route = useRoute()
 const STEPS = [
   {
     center: true, title: 'Welcome to the revamped Dashboards',
-    body: 'A quick tour of what’s new — the two-sidebar navigation, the grounded AI layer, and the redesigned create flow. About a minute.',
-  },
-  {
-    sel: '.rail', place: 'right', title: 'A two-sidebar shell',
-    body: 'Every module lives on this slim icon rail. Hover a module for its sub-menu; expand the rail for labels. Opening a module’s list collapses the rail to keep the canvas wide.',
-    before: () => { store.ui.activeModule = 'dashboard'; store.ui.listingOpen = true; store.ui.railExpanded = false },
+    body: 'A quick tour of what’s new — the dashboards listing, the grounded AI layer, and the redesigned create & grouping flows.',
   },
   {
     sel: '.flyout', place: 'right', title: 'Your dashboards, on the left',
     body: 'The listing sidebar: a search, tabs for All / Created by me / Shared with me, and smart groups — Favourites, Recently used and by category.',
-    before: () => { store.ui.listingOpen = true; store.ui.railExpanded = false },
-  },
-  {
-    sel: '.def-row', place: 'right', title: 'Default pinned · favourite on hover',
-    body: 'Your default board is pinned up top with a home icon (it’s also marked in its category). Hover any row to favourite it with a ★, or open its ⋯ menu — Edit, Clone, Set as default, Share, Archive.',
+    before: () => { store.ui.activeModule = 'dashboard'; store.ui.listingOpen = true; store.ui.railExpanded = false },
   },
   {
     sel: '.manage-link', place: 'right', title: 'The full listing',
     body: 'Beyond the sidebar, the complete “Manage all dashboards” grid — sortable and filterable, with bulk actions, a columns picker, and an Archive / restore tab.',
   },
   {
-    sel: '.ai-card', place: 'bottom', title: 'Grounded AI insights',
-    body: 'New: a plain-language read of this board, upfront. Every number is computed from the real data — anomalies, SLA breaches, week-over-week deltas — so it works even with no AI model attached.',
-    before: () => { store.ui.aiPlacement = 'C' },
-  },
-  {
-    sel: '.askai', place: 'bottom', title: 'Ask AI — one shared assistant',
-    body: 'Summarise, explain or investigate the board — or build. Type “/” for commands. Describe a widget, or a whole dashboard, and the assistant drafts it, previews it, and places it.',
+    sel: '.ai-chip', place: 'bottom', title: 'Grounded AI insights',
+    body: 'The ✨ chip in the board header opens a plain-language read of this board plus three actions — insights, every widget explained, and add a widget. Every number is computed from the real data, so it works even with no AI model attached.',
+    before: () => { store.ui.aiPlacement = 'A' },
   },
   {
     sel: '.fab', place: 'left', title: 'Create, the new way',
-    body: 'Add a widget or a group here. The builder starts from what you want — Widget, KPI or Shortcut — with a live preview and no-code fields; SQL only when you ask for it.',
+    body: 'The + is your one place to build:',
+    points: ['Create a dashboard from scratch', 'Add a widget to this board', 'Or just describe either — and let AI generate it for you'],
   },
   {
-    sel: '.bbody .tile', place: 'top', title: 'Smarter tiles',
-    body: 'Each tile carries a per-widget “Ask AI”, live chart-type switching, a Top-N rank control that tames a crowded chart, and a full-screen present mode for reviews.',
-  },
-  {
-    center: true, anim: 'group', title: 'Group widgets into sections',
-    body: 'A hidden gesture worth knowing: drag a box across widgets — or Shift-click them — then Create group. The fastest way to tidy a busy board, with one-click Undo.',
-  },
-  {
-    center: true, title: 'That’s the tour',
-    body: 'Explore freely — nothing here is destructive. You can replay this walkthrough anytime from the flag icon in the top bar.',
+    center: true, anim: 'groupways', title: 'Four ways to group widgets',
+    body: 'Tidy a busy board into named sections — here are all four ways to do it.',
   },
 ]
 
@@ -172,18 +152,17 @@ onBeforeUnmount(() => { window.removeEventListener('resize', reposition); window
         <div v-else class="tour-dim" />
 
         <div ref="tipEl" class="tour-tip" :class="{ centered: !rect }" :style="{ top: tip.top + 'px', left: tip.left + 'px' }">
-          <div class="tt-top">
-            <span class="tt-badge"><Icon name="flag" :size="13" /> Tour</span>
-            <span class="tt-count">{{ i + 1 }} / {{ STEPS.length }}</span>
-            <button class="tt-skip" @click="finish">Skip</button>
+          <div class="tt-head">
+            <h3 class="tt-title">{{ step.title }}</h3>
+            <button class="tt-x" title="Skip tour" @click="finish"><Icon name="x" :size="16" /></button>
           </div>
-          <h3 class="tt-title">{{ step.title }}</h3>
-          <GroupSelectAnim v-if="step.anim === 'group'" class="tt-anim" />
+          <GroupWaysCarousel v-if="step.anim === 'groupways'" class="tt-anim" />
           <p class="tt-body">{{ step.body }}</p>
+          <ul v-if="step.points" class="tt-points">
+            <li v-for="(p, k) in step.points" :key="k"><Icon name="check" :size="13" /> <span>{{ p }}</span></li>
+          </ul>
           <div class="tt-foot">
-            <div class="tt-dots">
-              <span v-for="(s, k) in STEPS" :key="k" class="dot" :class="{ on: k === i, done: k < i }" @click="i = k; place()" />
-            </div>
+            <span class="tt-num">{{ i + 1 }} / {{ STEPS.length }}</span>
             <div class="tt-btns">
               <button v-if="i > 0" class="tb ghost" @click="back">Back</button>
               <button class="tb primary" @click="next">{{ isLast ? 'Done' : 'Next' }}</button>
@@ -214,25 +193,21 @@ onBeforeUnmount(() => { window.removeEventListener('resize', reposition); window
 }
 .tour-tip.centered { width: 380px; }
 
-.tt-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
-.tt-badge {
-  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
-  color: var(--ai-ink); background: var(--ai-grad-soft); border: 1px solid var(--ai-border); border-radius: 999px; padding: 2px 9px;
-}
-.tt-badge :deep(.ico) { color: var(--ai); }
-.tt-count { font-size: 11.5px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-.tt-skip { margin-left: auto; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 3px 6px; border-radius: 6px; }
-.tt-skip:hover { background: var(--surface-2); color: var(--ink); }
-
-.tt-title { margin: 0 0 5px; font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
-.tt-anim { margin: 8px 0 10px; }
+/* title row with a close (skip) icon beside the title */
+.tt-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.tt-title { flex: 1; margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.tt-x { flex: none; width: 26px; height: 26px; margin: -2px -4px 0 0; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
+.tt-x:hover { background: var(--surface-2); color: var(--ink); }
+.tt-anim { margin: 6px 0 10px; }
 .tt-body { margin: 0; font-size: 12.75px; line-height: 1.5; color: var(--ink-2); }
+/* the extra guidance points (Create step) */
+.tt-points { list-style: none; margin: 9px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tt-points li { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.tt-points li :deep(.ico) { color: var(--ai, #6d28d9); flex: none; margin-top: 1px; }
 
 .tt-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
-.tt-dots { display: flex; align-items: center; gap: 5px; flex: 1; flex-wrap: wrap; }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong, #c9d2de); cursor: pointer; transition: all .15s; }
-.dot.done { background: var(--ai, #6d28d9); opacity: .5; }
-.dot.on { background: var(--ai, #6d28d9); width: 18px; border-radius: 3px; }
+/* progress as a number, not dots */
+.tt-num { flex: 1; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .03em; }
 .tt-btns { display: flex; align-items: center; gap: 7px; flex: none; }
 .tb { height: 32px; padding: 0 15px; border-radius: 8px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); }
 .tb.ghost:hover { background: var(--surface-2); color: var(--ink); }
