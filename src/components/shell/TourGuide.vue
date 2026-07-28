@@ -13,6 +13,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Icon from '../ui/Icon.vue'
+import GroupSelectAnim from './GroupSelectAnim.vue'
 import { store } from '../../store/index.js'
 
 const router = useRouter()
@@ -58,6 +59,10 @@ const STEPS = [
   {
     sel: '.bbody .tile', place: 'top', title: 'Smarter tiles',
     body: 'Each tile carries a per-widget “Ask AI”, live chart-type switching, a Top-N rank control that tames a crowded chart, and a full-screen present mode for reviews.',
+  },
+  {
+    center: true, anim: 'group', title: 'Group widgets into sections',
+    body: 'A hidden gesture worth knowing: drag a box across widgets — or Shift-click them — then Create group. The fastest way to tidy a busy board, with one-click Undo.',
   },
   {
     center: true, title: 'That’s the tour',
@@ -173,6 +178,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', reposition); window
             <button class="tt-skip" @click="finish">Skip</button>
           </div>
           <h3 class="tt-title">{{ step.title }}</h3>
+          <GroupSelectAnim v-if="step.anim === 'group'" class="tt-anim" />
           <p class="tt-body">{{ step.body }}</p>
           <div class="tt-foot">
             <div class="tt-dots">
@@ -219,6 +225,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', reposition); window
 .tt-skip:hover { background: var(--surface-2); color: var(--ink); }
 
 .tt-title { margin: 0 0 5px; font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.tt-anim { margin: 8px 0 10px; }
 .tt-body { margin: 0; font-size: 12.75px; line-height: 1.5; color: var(--ink-2); }
 
 .tt-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
