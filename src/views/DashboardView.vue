@@ -110,7 +110,7 @@ const GSTYLES = [
   { id: 8, n: '⑧', label: 'Sections', desc: 'F — Typed section headings; drag widgets under them' },
   { id: 9, n: '⑨', label: 'Auto-group', desc: 'G — Group automatically by Type or Source' },
 ]
-const showGroupDemo = false   // grouping-demo bar hidden; default grouping is ① Select
+const showGroupDemo = true    // grouping-options bar shown upfront on the board; default is ① Select
 const gs = computed(() => store.ui.groupStyle)
 
 // ---- Legend-strategy DEMO switcher.
