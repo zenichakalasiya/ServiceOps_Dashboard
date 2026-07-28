@@ -16,19 +16,20 @@ const WAYS = [
   { title: 'Drag a selection box', caption: 'Drag a box across the widgets, then Create group.' },
   { title: 'Shift + click', caption: 'Hold Shift and click each widget, then Create group.' },
   { title: 'Add an empty group', caption: 'Drop an empty group at the end of the board and drag widgets in.' },
-  { title: 'From the + menu', caption: 'The + (Create) menu has an “Empty group” option too.' },
+  { title: 'From the widget panel', caption: 'In Add New Widget → Create Widget, the Layout section has an “Empty group”.' },
 ]
 const idx = ref(0)
 const DWELL = 5200
 let timer = null
 function arm() { clearInterval(timer); timer = setInterval(() => { idx.value = (idx.value + 1) % WAYS.length }, DWELL) }
+function pause() { clearInterval(timer) }
 function go(n) { idx.value = (n + WAYS.length) % WAYS.length; arm() }
 onMounted(arm)
 onBeforeUnmount(() => clearInterval(timer))
 </script>
 
 <template>
-  <div class="gwc">
+  <div class="gwc" @mouseenter="pause" @mouseleave="arm">
     <div class="gwc-stage">
       <transition name="gwc-fade" mode="out-in">
         <div class="gwc-anim" :key="idx">
@@ -51,16 +52,22 @@ onBeforeUnmount(() => clearInterval(timer))
             <div class="cur" />
           </div>
 
-          <!-- 4 · from the + menu -->
-          <div v-else class="wa menu">
-            <div class="tile m1" /><div class="tile m2" />
-            <div class="grp mbox"><span class="glabel">New group</span></div>
-            <div class="menu-pop">
-              <span class="mrow"><i class="mi ai" />Generate with AI</span>
-              <span class="mrow"><i class="mi" />Create widget</span>
-              <span class="mrow hot"><i class="mi grp-ic" />Empty group</span>
+          <!-- 4 · from the Add New Widget panel → Create Widget → Layout → Empty group -->
+          <div v-else class="wa addw">
+            <div class="np">
+              <div class="np-tabs"><b>Create Widget</b><span>All</span><span>Predefined</span></div>
+              <div class="np-lab">Widget</div>
+              <div class="np-row">
+                <span class="np-t"><Icon name="chart-line" :size="15" /></span>
+                <span class="np-t"><Icon name="chart-hbar" :size="15" /></span>
+                <span class="np-t"><Icon name="chart-bar" :size="15" /></span>
+                <span class="np-t"><Icon name="chart-pie" :size="15" /></span>
+              </div>
+              <div class="np-lab">Layout</div>
+              <div class="np-row">
+                <span class="np-t wide hot"><Icon name="new-group" :size="15" /> Empty group</span>
+              </div>
             </div>
-            <div class="fab">+</div>
             <div class="cur" />
           </div>
         </div>
@@ -131,26 +138,28 @@ onBeforeUnmount(() => clearInterval(timer))
 @keyframes en-bar { 0%, 34% { opacity: 1; } 42%, 100% { opacity: 0; } }
 @keyframes en-grp { 0%, 40% { opacity: 0; transform: scale(.97); } 48%, 92% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.97); } }
 
-/* ── 4 · from the + menu ── */
-.menu .m1 { left: 16px; top: 14px; width: 82px; height: 50px; }
-.menu .m2 { left: 110px; top: 14px; width: 82px; height: 50px; }
-.menu .mbox { left: 12px; top: 10px; width: 184px; height: 58px; animation: mn-grp 5s ease-in-out infinite; }
-.menu .fab { position: absolute; right: 12px; bottom: 12px; width: 30px; height: 30px; border-radius: 50%; background: var(--primary, #2563eb); color: #fff; display: grid; place-items: center; font-size: 20px; font-weight: 300; line-height: 1; }
-.menu .menu-pop { position: absolute; right: 12px; bottom: 48px; width: 150px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--sh-pop, 0 8px 24px rgba(0,0,0,.14)); padding: 4px; transform-origin: bottom right; animation: mn-pop 5s ease-in-out infinite; }
-.menu .mrow { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--ink-2); padding: 5px 6px; border-radius: 6px; }
-.menu .mrow.hot { animation: mn-hot 5s ease-in-out infinite; }
-.menu .mi { width: 12px; height: 12px; border-radius: 3px; background: var(--muted-2, #9aa6b5); flex: none; }
-.menu .mi.ai { background: var(--ai, #6d28d9); } .menu .mi.grp-ic { background: var(--ai, #6d28d9); opacity: .6; }
-.menu .cur { right: 40px; bottom: 40px; left: auto; top: auto; animation: mn-cur 5s ease-in-out infinite; }
-@keyframes mn-pop { 0%, 16% { opacity: 0; transform: scale(.9); } 22%, 66% { opacity: 1; transform: scale(1); } 74%, 100% { opacity: 0; transform: scale(.9); } }
-@keyframes mn-hot { 0%, 40% { background: transparent; } 46%, 66% { background: var(--ai-soft, #f2ecfe); } 100% { background: transparent; } }
-@keyframes mn-grp { 0%, 68% { opacity: 0; transform: scale(.97); } 76%, 94% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.97); } }
-@keyframes mn-cur {
-  0%, 6% { right: 28px; bottom: 28px; transform: scale(1); }
-  16% { right: 26px; bottom: 30px; transform: scale(.7); } 20% { transform: scale(1); }
-  48% { right: 120px; bottom: 66px; transform: scale(1); }
-  54% { transform: scale(.7); } 60% { transform: scale(1); }
-  90% { right: 120px; bottom: 66px; opacity: 1; } 100% { right: 28px; bottom: 28px; opacity: 0; }
+/* ── 4 · from the Add New Widget panel → Layout → Empty group ── */
+.addw .np { position: absolute; inset: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; overflow: hidden; }
+.addw .np-tabs { display: flex; gap: 11px; font-size: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 7px; }
+.addw .np-tabs b { color: var(--primary, #2563eb); font-weight: 700; border-bottom: 2px solid var(--primary, #2563eb); padding-bottom: 6px; margin-bottom: -7px; }
+.addw .np-tabs span { color: var(--muted-2); }
+.addw .np-lab { font-size: 8px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted-2); margin: 6px 0 4px; }
+.addw .np-row { display: flex; gap: 7px; }
+.addw .np-t { width: 36px; height: 26px; border: 1px solid var(--border); border-radius: 6px; display: grid; place-items: center; color: var(--muted); }
+.addw .np-t :deep(.ico) { color: inherit; }
+.addw .np-t.wide { width: auto; padding: 0 11px; height: 28px; display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600; color: var(--ink-2); }
+.addw .np-t.hot { animation: aw-hot 5s ease-in-out infinite; }
+.addw .cur { left: 30px; top: 26px; animation: aw-cur 5s ease-in-out infinite; }
+@keyframes aw-hot {
+  0%, 42% { border-color: var(--border); background: transparent; color: var(--ink-2); }
+  50%, 90% { border-color: var(--ai, #6d28d9); background: var(--ai-soft, #f2ecfe); color: var(--ai-ink, #6d28d9); }
+  100% { border-color: var(--border); background: transparent; color: var(--ink-2); }
+}
+@keyframes aw-cur {
+  0%, 10% { left: 30px; top: 26px; transform: scale(1); }
+  42% { left: 64px; top: 104px; transform: scale(1); }
+  48% { transform: scale(.7); } 54% { transform: scale(1); }
+  90% { left: 64px; top: 104px; opacity: 1; } 100% { left: 30px; top: 26px; opacity: 0; }
 }
 
 /* caption + nav */
@@ -164,9 +173,9 @@ onBeforeUnmount(() => clearInterval(timer))
 
 @media (prefers-reduced-motion: reduce) {
   .wa * { animation: none !important; }
-  .shift .t1, .shift .t2, .endg .gbox, .menu .mbox { }
-  .shift .grp, .endg .gbox, .menu .mbox { opacity: 1; }
-  .endg .bar, .menu .menu-pop, .cur { display: none; }
+  .shift .grp, .endg .gbox { opacity: 1; }
+  .endg .bar, .cur { display: none; }
   .shift .t1, .shift .t2 { border-color: var(--ai, #6d28d9); background: color-mix(in srgb, var(--ai, #6d28d9) 10%, var(--surface)); }
+  .addw .np-t.hot { border-color: var(--ai, #6d28d9); background: var(--ai-soft, #f2ecfe); color: var(--ai-ink, #6d28d9); }
 }
 </style>
