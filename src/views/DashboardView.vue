@@ -110,7 +110,7 @@ const GSTYLES = [
   { id: 8, n: '⑧', label: 'Sections', desc: 'F — Typed section headings; drag widgets under them' },
   { id: 9, n: '⑨', label: 'Auto-group', desc: 'G — Group automatically by Type or Source' },
 ]
-const showGroupDemo = true    // grouping-options bar shown upfront on the board; default is ① Select
+const showGroupDemo = false   // grouping-options tabs removed; the 4 methods are always on
 const gs = computed(() => store.ui.groupStyle)
 
 // ---- Legend-strategy DEMO switcher.
@@ -171,10 +171,14 @@ watch(() => store.ui.aiHighlight, (title) => {
     setTimeout(() => { if (highlightId.value === t.id) highlightId.value = null }, 2600)
   })
 })
-const gUseMarquee = computed(() => gs.value === 1 || gs.value === 5)      // select-to-group
-const gShowAddGroupBtn = computed(() => gs.value === 2 || gs.value === 5)  // big toolbar button (not inline)
-const gShowInserters = computed(() => gs.value === 3 || gs.value === 5)   // hover "+ New group here" between groups
-const gShowRowInserters = computed(() => gs.value === 3)                  // inline: hover inserters between ungrouped widget ROWS
+// Grouping is fixed to FOUR methods now (the style switcher is gone): 1+2 marquee
+// select & Shift-click, 3 a persistent "New group" bar at the board's end, and 4 the
+// Add-New-Widget panel's Empty group. Right-click / hover-chip / sections / auto-group
+// / inline row-inserters are all off.
+const gUseMarquee = computed(() => true)          // 1 + 2: marquee-drag & Shift-click select-to-group
+const gShowAddGroupBtn = computed(() => false)
+const gShowInserters = computed(() => false)
+const gShowRowInserters = computed(() => false)
 
 // Detect the vertical gaps between ungrouped widget rows so an inline "+ New group here"
 // inserter can appear on hover in each gap (no permanent CTA, zero upfront space).
@@ -209,13 +213,13 @@ onMounted(() => {
 watch([gs, () => d.value?.tiles?.length, () => (d.value?.groups || []).length], () => nextTick(computeRowGaps))
 watch(ugGridEl, (el) => { ugRO?.disconnect(); if (el) ugRO?.observe(el); nextTick(computeRowGaps) })
 onBeforeUnmount(() => ugRO?.disconnect())
-const gShowFabGroup = computed(() => gs.value === 4 || gs.value === 5)    // Empty Group in the FAB menu
-const gShowTip = computed(() => gs.value === 1 || gs.value === 5)         // "drag a box" hint
-const gShowEmptyGroupCta = computed(() => [2, 3, 5, 8].includes(gs.value)) // empty-state "or create a group"
-const gRightClick = computed(() => gs.value === 6)   // B — right-click context menu
-const gHoverIcon = computed(() => gs.value === 7)    // E — per-widget hover chip
-const gSections = computed(() => gs.value === 8)     // F — section headings
-const gAutoBy = computed(() => gs.value === 9)       // G — auto-group by attribute
+const gShowFabGroup = computed(() => false)       // sidebar Empty group covers this instead
+const gShowTip = computed(() => true)             // "drag a box (or Shift-click)" hint
+const gShowEmptyGroupCta = computed(() => true)   // empty-state "or create a group"
+const gRightClick = computed(() => false)
+const gHoverIcon = computed(() => false)
+const gSections = computed(() => false)
+const gAutoBy = computed(() => false)
 
 // ---- B & E: a per-tile group menu (New group / Add to group ▸ / Remove) ----
 const tileMenu = ref({ open: false, tile: null, top: 0, left: 0 })
@@ -774,6 +778,8 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <div v-if="gShowInserters && (d.groups || []).length" class="grp-insert" @click.stop="insertEmptyGroup((d.groups || []).length)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
         <!-- F: a slim full-width "+ New section" bar (sections are typed headings) -->
         <button v-if="gSections" class="new-section-bar" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> New section</button>
+        <!-- 3 · always-available: add a new group at the end of the board -->
+        <button v-if="!loadingBoard && (d.tiles.length || (d.groups && d.groups.length))" class="new-group-bar" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> New group</button>
         </template>
       </div>
     </div>
@@ -1027,6 +1033,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .group.as-section > .grid { padding: 12px 0 4px; }
 .new-section-bar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; padding: 9px; border: 1px dashed var(--border-strong); background: transparent; border-radius: 9px; color: var(--primary-700); font-weight: 600; font-size: 12.5px; }
 .new-section-bar:hover { background: var(--primary-softer); border-color: var(--primary); }
+/* persistent "New group" bar at the board's end (grouping method 3) */
+.new-group-bar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 14px; padding: 10px; border: 1px dashed var(--border-strong); background: transparent; border-radius: 10px; color: var(--primary-700); font-weight: 600; font-size: 12.5px; }
+.new-group-bar:hover { background: var(--primary-softer); border-color: var(--primary); }
 /* ⑦ per-widget group chip (hover-reveal, bottom-left, out of the header actions' way) */
 .cell-grp-chip { position: absolute; left: 10px; bottom: 8px; z-index: 7; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border: 1px solid var(--primary-soft); background: var(--surface); color: var(--primary-700); border-radius: 999px; font-size: 11.5px; font-weight: 600; box-shadow: var(--sh-sm); opacity: 0; transition: opacity .14s; }
 .cell:hover .cell-grp-chip { opacity: 1; }
