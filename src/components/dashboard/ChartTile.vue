@@ -27,10 +27,10 @@
  * were prototyped, compared, and cut.
  */
 import { computed, ref, shallowRef, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { use } from 'echarts/core'
+import { use, registerMap, getMap } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, LineChart, PieChart, FunnelChart, HeatmapChart, GaugeChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GraphicComponent } from 'echarts/components'
+import { BarChart, LineChart, PieChart, FunnelChart, HeatmapChart, GaugeChart, MapChart, ScatterChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GraphicComponent, GeoComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { store } from '../../store'
 import Icon from '../ui/Icon.vue'
@@ -41,8 +41,17 @@ import { CHART_OPT, NEW_KINDS } from '../../data/chartOptions.js'
 // Register only what we render. MarkLine/MarkArea come back with SLA threshold
 // bands; DataZoom went out with the ranked-bar re-encode. Heatmap+VisualMap (heatmap),
 // Gauge (gauge) and Graphic (the donut centre total) are the PMG-ACT-01 additions.
-use([CanvasRenderer, BarChart, LineChart, PieChart, FunnelChart, HeatmapChart, GaugeChart,
-  GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GraphicComponent])
+use([CanvasRenderer, BarChart, LineChart, PieChart, FunnelChart, HeatmapChart, GaugeChart, MapChart, ScatterChart,
+  GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GraphicComponent, GeoComponent])
+
+/* The India geo (§4.6 Map Bubble) is ~175KB, so it is code-split and registered on
+ * demand — only when a map tile actually renders, never in the main bundle. */
+async function ensureIndiaMap() {
+  if (getMap('india')) return true
+  const mod = await import('../../data/indiaMap.json')
+  if (!getMap('india')) registerMap('india', mod.default)
+  return true
+}
 
 const props = defineProps({
   chart: Object,
@@ -98,6 +107,12 @@ const kind = computed(() => props.chart?.kind || 'bar')
  * chartData engine + a CHART_OPT builder, not from labels/series. They carry their
  * own (native) legend, so the custom legend/rank machinery below sits them out. */
 const isNewKind = computed(() => NEW_KINDS.has(kind.value))
+/* Map Bubble needs the India geo registered first (lazy). mapReady flips true once
+ * it is, which re-runs the option computed to draw the real map. */
+const mapReady = ref(!!getMap('india'))
+watch(kind, (k) => {
+  if (k === 'mapbubble' && !mapReady.value) ensureIndiaMap().then(() => { mapReady.value = true })
+}, { immediate: true })
 const labels = computed(() => props.chart?.labels || [])
 const series = computed(() => props.chart?.series || [])
 /* Part-of-whole charts name *slices*; cartesian charts name *series*, because
@@ -240,6 +255,8 @@ const option = computed(() => {
   // additional PMG-ACT-01 kinds: recompute display data from the stored spec and
   // hand it to the matching option builder. Everything below is the legacy path.
   if (isNewKind.value) {
+    // the map needs its geo registered first — hold an empty option until then
+    if (kind.value === 'mapbubble' && !mapReady.value) return {}
     const spec = props.chart?.spec
     const build = CHART_OPT[kind.value]
     if (spec && build) return build(chartData(spec), spec, chartT.value)

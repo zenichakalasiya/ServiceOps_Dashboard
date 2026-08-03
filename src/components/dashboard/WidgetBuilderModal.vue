@@ -35,6 +35,7 @@ const TYPES = [
   { id: 'funnel', label: 'Funnel', icon: 'chart-funnel', type: 'chart', kind: 'funnel' },
   { id: 'heatmap', label: 'Heatmap', icon: 'chart-heatmap', type: 'chart', kind: 'heatmap' },
   { id: 'gauge', label: 'Gauge', icon: 'chart-gauge', type: 'chart', kind: 'gauge' },
+  { id: 'mapbubble', label: 'Map Bubble', icon: 'chart-map', type: 'chart', kind: 'mapbubble' },
   { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null },
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
   { id: 'text', label: 'Free Text', icon: 'chart-text', type: 'text', kind: null },
@@ -162,6 +163,9 @@ function initCfg() {
     histField: ex?.chart?.spec?.histField || 'Resolution time',
     histBucket: ex?.chart?.spec?.histBucket || 4,
     stageField: ex?.chart?.spec?.stageField || 'Status',
+    // map bubble (§4.6) — geographic dimension is fixed to Site
+    mapFn: ex?.chart?.spec?.mapFn || 'Count',
+    mapField: ex?.chart?.spec?.mapField || 'Resolution time',
     // heatmap (§4.5)
     heatX: ex?.chart?.spec?.heatX || 'Priority',
     heatY: ex?.chart?.spec?.heatY || 'Team',
@@ -190,6 +194,7 @@ const chartSpec = computed(() => {
   if (k === 'combo') return { kind: 'combo', xDim: cfg.comboXDim, comboFn: cfg.comboFn, comboField: cfg.comboField, conds: cfg.conds }
   if (k === 'hist') return { kind: 'hist', histField: cfg.histField, histBucket: cfg.histBucket, conds: cfg.conds }
   if (k === 'funnel') return { kind: 'funnel', stageField: cfg.stageField, conds: cfg.conds }
+  if (k === 'mapbubble') return { kind: 'mapbubble', mapFn: cfg.mapFn, mapField: cfg.mapField, conds: cfg.conds }
   if (k === 'heatmap') return { kind: 'heatmap', heatX: cfg.heatX, heatY: cfg.heatY, heatFn: cfg.heatFn, heatField: cfg.heatField, conds: cfg.conds }
   if (k === 'gauge') return {
     kind: 'gauge',
@@ -199,7 +204,7 @@ const chartSpec = computed(() => {
   return null
 })
 // heatmap and gauge carry no legend / Top-N — their Display section is suppressed
-const noDisplay = computed(() => ['heatmap', 'gauge'].includes(curType.value.kind))
+const noDisplay = computed(() => ['heatmap', 'gauge', 'mapbubble'].includes(curType.value.kind))
 const rankN = computed({
   get: () => cfg.rankN,
   // keep it a number and never let it reach 0 — a chart of nothing is not a view
@@ -479,7 +484,7 @@ function save(place) {
 
               <!-- Series / Buckets / Stages / Matrix — the additional PMG-ACT-01 kinds (§4). -->
               <div v-if="isChart && manualMode && isNewKind && curType.kind !== 'gauge'" class="sec">
-                <div class="sec-h">{{ curType.kind === 'hist' ? 'Buckets' : curType.kind === 'funnel' ? 'Stages' : curType.kind === 'heatmap' ? 'Matrix' : 'Series' }}</div>
+                <div class="sec-h">{{ curType.kind === 'hist' ? 'Buckets' : curType.kind === 'funnel' ? 'Stages' : curType.kind === 'heatmap' ? 'Matrix' : curType.kind === 'mapbubble' ? 'Bubbles' : 'Series' }}</div>
                 <!-- Stacked / Grouped (§4.1) -->
                 <template v-if="curType.kind === 'stack'">
                   <div class="grid2">
@@ -537,6 +542,14 @@ function save(place) {
                   <p class="hint">{{ cfg.heatFn === 'Count'
                     ? 'Record count per cell, colour-scaled across the grid.'
                     : `${cfg.heatFn} of ${cfg.heatField} per cell, colour-scaled across the grid. A cell with no matching value reads as 0.` }}</p>
+                </template>
+                <!-- Map Bubble (§4.6) — one bubble per Site, sized by the value -->
+                <template v-else-if="curType.kind === 'mapbubble'">
+                  <div class="grid2">
+                    <div class="fld"><label>Bubble value <i>*</i></label><Dropdown v-model="cfg.mapFn" :options="MAP_FNS" /></div>
+                    <div v-if="cfg.mapFn !== 'Count'" class="fld"><label>Field <i>*</i></label><Dropdown v-model="cfg.mapField" :options="NUMERIC_FIELD_LABELS" /></div>
+                  </div>
+                  <p class="hint">One bubble per Site (the geographic dimension is fixed to Site), positioned by its coordinates and sized by {{ cfg.mapFn === 'Count' ? 'the record count' : `${cfg.mapFn} of ${cfg.mapField}` }}. Sites with no matching records get no bubble.</p>
                 </template>
               </div>
 

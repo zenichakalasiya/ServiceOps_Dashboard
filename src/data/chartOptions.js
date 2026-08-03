@@ -13,7 +13,7 @@
  */
 import { gaugeBands, niceCeil } from './records.js'
 
-export const NEW_KINDS = new Set(['stack', 'multiline', 'combo', 'hist', 'funnel', 'heatmap', 'gauge'])
+export const NEW_KINDS = new Set(['stack', 'multiline', 'combo', 'hist', 'funnel', 'heatmap', 'gauge', 'mapbubble'])
 
 // a native ECharts legend, styled to match the product (used by the multi-series
 // new kinds; single-series kinds omit it, funnel prints its labels on the bands)
@@ -309,6 +309,40 @@ export function optGauge(out, spec, t) {
   }
 }
 
+// ── Map Bubble (§4.6) ─────────────────────────────────────────────────────────────
+// One bubble per Site, positioned by [lng,lat] on the registered India geo, sized by
+// the mapped value. The 'india' map must be registered (ChartTile does this lazily)
+// before this option renders. Geographic dimension is fixed to Site.
+export function optMapBubble(out, spec, t) {
+  const points = out?.points || []
+  const maxVal = Math.max(1, out?.max || 1)
+  const caption = out?.caption || 'Value'
+  const unit = out?.unit || ''
+  return {
+    tooltip: {
+      ...tipBox(t), trigger: 'item',
+      formatter: (p) => `<div style="color:${t.ink};font-weight:600;margin-bottom:2px">${p.name}</div>`
+        + `<div style="white-space:nowrap;color:${t.ink2}">${caption}: <b style="color:${t.ink}">${p.value[2]}${unit}</b></div>`,
+    },
+    geo: {
+      map: 'india', roam: false, layoutCenter: ['50%', '52%'], layoutSize: '122%',
+      itemStyle: { areaColor: '#eef4fb', borderColor: t.border, borderWidth: 0.5 },
+      emphasis: { itemStyle: { areaColor: '#e3edf7' }, label: { show: false } },
+    },
+    series: [{
+      type: 'scatter', coordinateSystem: 'geo',
+      data: points.map((p) => ({ name: p.name, value: [p.coord[0], p.coord[1], p.value] })),
+      symbolSize: (val) => 9 + 26 * (val[2] / maxVal),
+      itemStyle: { color: t.primary, opacity: 0.85, borderColor: '#fff', borderWidth: 1.5 },
+      label: { show: true, formatter: '{b}', position: 'right', fontSize: 10.5, fontFamily: t.font, color: t.ink2 },
+      emphasis: { scale: 1.25, itemStyle: { opacity: 1 } },
+      animation: true, animationDuration: 900, animationEasing: 'cubicOut',
+      animationDelay: (i) => ENTER_DELAY + i * 70,
+    }],
+    animationDurationUpdate: 300, animationEasingUpdate: 'cubicOut',
+  }
+}
+
 // kind → option builder. ChartTile calls CHART_OPT[kind](out, spec, t). Grows per batch.
 export const CHART_OPT = {
   stack: optStacked,
@@ -318,4 +352,5 @@ export const CHART_OPT = {
   funnel: optFunnel,
   heatmap: optHeatmap,
   gauge: optGauge,
+  mapbubble: optMapBubble,
 }

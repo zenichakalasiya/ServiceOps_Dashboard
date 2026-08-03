@@ -38,7 +38,7 @@ const MAP = {
   // PMG-ACT-01 additional chart kinds
   'chart-stack': 'stacked_bar_chart', 'chart-multiline': 'multiline_chart',
   'chart-combo': 'insert_chart', 'chart-hist': 'bar_chart', 'chart-heatmap': 'grid_on',
-  'chart-gauge': 'speed', 'chart-text': 'notes',
+  'chart-gauge': 'speed', 'chart-text': 'notes', 'chart-map': 'public',
   'open-in': 'arrow_forward', chat: 'chat_bubble', 'auto-graph': 'auto_graph', bolt: 'bolt',
   send: 'send', attach: 'attach_file', brain: 'neurology', flag: 'flag', research: 'travel_explore',
   target: 'center_focus_strong', insights: 'insights',
