@@ -290,7 +290,7 @@ function save(place) {
                 <Icon :name="f.icon" :size="16" /> {{ f.label }}
               </button>
             </div>
-            <div v-else-if="editTabs.length" class="pv-tabs">
+            <div v-else-if="editTabs.length && !predefinedEdit" class="pv-tabs">
               <button
                 v-for="t in editTabs" :key="t.id" class="pv-tab"
                 :class="{ on: curType.id === t.id }" :title="`Show as ${t.label}`"
@@ -312,15 +312,29 @@ function save(place) {
           <!-- RIGHT: scrollable config (ServiceOps fields) -->
           <aside class="config">
             <div class="cfg-scroll">
-              <!-- predefined widget: only the chart type (above) + Highlights (below) can change -->
+              <!-- predefined widget: only the chart type + Highlights (both below) can change -->
               <div v-if="predefinedEdit" class="sec pe-note">
                 <Icon name="verified" :size="15" />
                 <span v-if="frozenType">
                   This is a <b>predefined {{ curType.label }}</b> — its type can’t be changed, and only <b>Highlights</b> below are editable.
                 </span>
                 <span v-else>
-                  This is a <b>predefined</b> widget — you can switch it between <b>Bar, Column and Line</b> (tabs above) and edit <b>Highlights</b> below. Nothing else.
+                  This is a <b>predefined</b> widget — you can switch it between <b>Bar, Column and Line</b> and edit <b>Highlights</b>, both below. Nothing else.
                 </span>
+              </div>
+              <!-- predefined switchable widget: the Bar/Column/Line switch lives here as tiles
+                   in the config panel now (per spec), not as tabs above the preview -->
+              <div v-if="predefinedEdit && editTabs.length" class="sec">
+                <div class="sec-h">Chart Type</div>
+                <div class="kinds">
+                  <button
+                    v-for="t in editTabs" :key="t.id" class="kind"
+                    :class="{ on: curType.id === t.id }" :title="`Show as ${t.label}`" @click="pickKind(t)"
+                  >
+                    <Icon :name="t.icon" :size="22" :class="{ rot90: t.id === 'bar' }" />
+                    <span class="kind-l">{{ t.label }}</span>
+                  </button>
+                </div>
               </div>
               <template v-if="!predefinedEdit">
               <!-- Basic Details -->
