@@ -26,11 +26,16 @@ export const CHART_TYPES = [
  * frozen: it cannot be converted at all. A custom one may still leave for one of
  * the three (it just can't come back inside the same edit — Reset restores it).
  */
+import { NEW_KINDS } from './chartOptions.js'
+
 export const SWITCHABLE_KINDS = ['bar', 'hbar', 'line']   // Column · Bar · Line
 const isSwitchable = (k) => SWITCHABLE_KINDS.includes(k)
 
-// A predefined pie/KPI/shortcut can't be recast at all.
+// A predefined pie/KPI/shortcut can't be recast at all. The additional PMG-ACT-01
+// kinds (stacked, multi-line, heatmap, …) are configured, not shape-compatible with
+// bar/line, so they can never be switched into another type either.
 export function isFrozen(tile) {
+  if (NEW_KINDS.has(tile?.chart?.kind)) return true
   return tile?.prov === 'predefined' && !isSwitchable(tile?.chart?.kind)
 }
 

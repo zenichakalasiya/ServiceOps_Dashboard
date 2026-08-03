@@ -3,8 +3,11 @@ import { reactive, computed, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import ChartTile from './ChartTile.vue'
+import MeasureConditions from './MeasureConditions.vue'
 import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut } from '../../data/mock.js'
+import { CONDITION_FIELD_LABELS } from '../../data/records.js'
+import { NEW_KINDS } from '../../data/chartOptions.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
 const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary', 'duplicated'])
 
@@ -23,6 +26,9 @@ const TYPES = [
   { id: 'bar', label: 'Bar', icon: 'chart-bar', type: 'chart', kind: 'hbar' },
   { id: 'column', label: 'Column', icon: 'chart-bar', type: 'chart', kind: 'bar' },
   { id: 'pie', label: 'Pie', icon: 'chart-pie', type: 'chart', kind: 'donut' },
+  // PMG-ACT-01 additional chart kinds (each carries its own config + engine spec)
+  { id: 'stack', label: 'Stacked', icon: 'chart-stack', type: 'chart', kind: 'stack' },
+  { id: 'multiline', label: 'Multi-line', icon: 'chart-multiline', type: 'chart', kind: 'multiline' },
   { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null },
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
 ]
@@ -133,9 +139,24 @@ function initCfg() {
     // display properties, saved on the widget. undefined = on / off respectively.
     legend: ex?.legend !== false,
     dataLabels: ex?.dataLabels === true,
+    // ── PMG-ACT-01 additional-kind config (prefilled from the tile's saved spec) ──
+    conds: ex?.chart?.spec?.conds ? ex.chart.spec.conds.map((c) => ({ ...c })) : [],
+    stackXDim: ex?.chart?.spec?.xDim || 'Priority',
+    stackSplit: ex?.chart?.spec?.splitDim || 'Status',
+    stackMode: ex?.chart?.spec?.stackMode || 'stacked',
+    mlXDim: ex?.chart?.spec?.xDim || 'Priority',
+    mlSplit: ex?.chart?.spec?.splitDim || 'Status',
   }
 }
 const isPie = computed(() => curType.value.kind === 'donut')
+// additional PMG-ACT-01 kinds render from a chartSpec through the records.js engine
+const isNewKind = computed(() => NEW_KINDS.has(curType.value.kind))
+const chartSpec = computed(() => {
+  const k = curType.value.kind
+  if (k === 'stack') return { kind: 'stack', xDim: cfg.stackXDim, splitDim: cfg.stackSplit, stackMode: cfg.stackMode, conds: cfg.conds }
+  if (k === 'multiline') return { kind: 'multiline', xDim: cfg.mlXDim, splitDim: cfg.mlSplit, conds: cfg.conds }
+  return null
+})
 const rankN = computed({
   get: () => cfg.rankN,
   // keep it a number and never let it reach 0 — a chart of nothing is not a view
@@ -179,6 +200,12 @@ const previewTile = computed(() => {
       : mkKpi(title, 128, '', { dir: 'up', pct: 5.2 }, 'good', cfg.description)
   }
   if (isChart.value) {
+    // additional kinds carry a chartSpec; ChartTile computes the display from it
+    if (isNewKind.value) {
+      const t = mkChart(title, { kind: curType.value.kind, spec: chartSpec.value }, cfg.description)
+      t.legend = cfg.legend
+      return t
+    }
     let labels, series
     if (ex?.chart) {
       labels = ex.chart.labels
@@ -393,14 +420,41 @@ function save(place) {
                 <div class="qrow"><span class="hint" style="margin:0">{{ isShortcut ? 'Write a query to return the records this Shortcut lists.' : 'Write a query to return the data this widget plots.' }}</span><button class="btn btn-sm btn-primary" @click="refreshPreview"><Icon name="eye" :size="13" /> Tap Preview</button></div>
               </div>
 
-              <!-- Axes (charts, Manual mode only) -->
-              <div v-if="isChart && manualMode" class="sec">
+              <!-- Axes (classic charts, Manual mode only) -->
+              <div v-if="isChart && manualMode && !isNewKind" class="sec">
                 <div class="sec-h">Axes</div>
                 <div class="fld"><label>X-Axis <i>*</i></label><Dropdown v-model="cfg.xAxis" :options="XAXIS_OPTS" /></div>
                 <div class="grid2">
                   <div class="fld"><label>Y-Axis Function <i>*</i></label><Dropdown v-model="cfg.yFunc" :options="YFUNC_OPTS" /></div>
                   <div class="fld"><label>Y-Axis Column <i>*</i></label><Dropdown v-model="cfg.yColumn" :options="YCOL_OPTS" /></div>
                 </div>
+              </div>
+
+              <!-- Series — the additional PMG-ACT-01 kinds (§4). Each kind's own fields. -->
+              <div v-if="isChart && manualMode && isNewKind" class="sec">
+                <div class="sec-h">Series</div>
+                <!-- Stacked / Grouped (§4.1) -->
+                <template v-if="curType.kind === 'stack'">
+                  <div class="grid2">
+                    <div class="fld"><label>X-Axis <i>*</i></label><Dropdown v-model="cfg.stackXDim" :options="CONDITION_FIELD_LABELS" /></div>
+                    <div class="fld"><label>Split by <i>*</i></label><Dropdown v-model="cfg.stackSplit" :options="CONDITION_FIELD_LABELS" /></div>
+                  </div>
+                  <div class="seg">
+                    <button class="seg-b" :class="{ on: cfg.stackMode==='stacked' }" @click="cfg.stackMode='stacked'">Stacked</button>
+                    <button class="seg-b" :class="{ on: cfg.stackMode==='grouped' }" @click="cfg.stackMode='grouped'">Grouped</button>
+                  </div>
+                  <p class="hint">{{ cfg.stackMode === 'grouped'
+                    ? 'One column per split value, side by side within each X value — compares totals directly instead of composing them.'
+                    : 'One stacked column per X value, one colour per split value — two grouping dimensions on one chart.' }}</p>
+                </template>
+                <!-- Multi-line (§4.2) -->
+                <template v-else-if="curType.kind === 'multiline'">
+                  <div class="grid2">
+                    <div class="fld"><label>X-Axis <i>*</i></label><Dropdown v-model="cfg.mlXDim" :options="CONDITION_FIELD_LABELS" /></div>
+                    <div class="fld"><label>Split by <i>*</i></label><Dropdown v-model="cfg.mlSplit" :options="CONDITION_FIELD_LABELS" /></div>
+                  </div>
+                  <p class="hint">One line per split value, plotted across the same X-Axis — trends across a category compared side by side on a shared scale.</p>
+                </template>
               </div>
 
               <!-- Data Configuration -->
@@ -410,11 +464,17 @@ function save(place) {
                 <div class="fld"><label>Description</label><textarea class="input" rows="3" v-model="cfg.description" placeholder="Description" /></div>
               </div>
 
-              <!-- Conditions -->
-              <div v-if="manualMode" class="sec">
+              <!-- Conditions — classic kinds get the placeholder line; additional kinds
+                   get the real shared `field is value` editor bound to the engine (§5). -->
+              <div v-if="manualMode && !isNewKind" class="sec">
                 <div class="sec-h">Conditions</div>
                 <p class="hint">Add conditions to filter records. If none are set, all records are counted.</p>
                 <button class="add-line"><Icon name="plus" :size="14" /> Add Condition</button>
+              </div>
+              <div v-if="isChart && manualMode && isNewKind" class="sec">
+                <div class="sec-h">Conditions</div>
+                <p class="hint">Filter the records this widget plots. Rows are ANDed; leave empty to count every record.</p>
+                <MeasureConditions v-model="cfg.conds" />
               </div>
               </template>
 
@@ -426,7 +486,7 @@ function save(place) {
               <div v-if="isChart && !predefinedEdit" class="sec">
                 <div class="sec-h">Display</div>
 
-                <div v-if="manualMode" class="fld">
+                <div v-if="manualMode && !isNewKind" class="fld">
                   <label>Show</label>
                   <div class="rank-row">
                     <div class="seg">

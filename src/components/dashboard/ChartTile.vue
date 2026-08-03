@@ -35,6 +35,8 @@ import VChart from 'vue-echarts'
 import { store } from '../../store'
 import Icon from '../ui/Icon.vue'
 import SeriesManager from './SeriesManager.vue'
+import { chartData } from '../../data/records.js'
+import { CHART_OPT, NEW_KINDS } from '../../data/chartOptions.js'
 
 // Register only what we render. MarkLine/MarkArea come back with SLA threshold
 // bands; DataZoom went out with the ranked-bar re-encode.
@@ -90,6 +92,10 @@ const otherColor = computed(() => { themeTick.value; return cssVar('--chart-othe
 const HIGH_CARD = 12
 
 const kind = computed(() => props.chart?.kind || 'bar')
+/* The additional PMG-ACT-01 kinds render from a stored `chartSpec` through the
+ * chartData engine + a CHART_OPT builder, not from labels/series. They carry their
+ * own (native) legend, so the custom legend/rank machinery below sits them out. */
+const isNewKind = computed(() => NEW_KINDS.has(kind.value))
 const labels = computed(() => props.chart?.labels || [])
 const series = computed(() => props.chart?.series || [])
 /* Part-of-whole charts name *slices*; cartesian charts name *series*, because
@@ -198,6 +204,10 @@ const tokens = computed(() => {
     primary: cssVar('--primary', '#3d8bd0'),
   }
 })
+/* Token bundle the CHART_OPT builders expect: the theme tokens plus the categorical
+ * palette + Other stop, so an additional kind paints from the same --chart-* stops
+ * (and repaints on a theme switch via themeTick, which `tokens` already reads). */
+const chartT = computed(() => ({ ...tokens.value, pal: pal.value, other: otherColor.value }))
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /* Hold the chart back until its card has faded in (the board staggers cards in over
@@ -225,6 +235,14 @@ const pctOf = (v) => ((v / trueTotal.value) * 100).toFixed(2)
 const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:7px"></span>`
 
 const option = computed(() => {
+  // additional PMG-ACT-01 kinds: recompute display data from the stored spec and
+  // hand it to the matching option builder. Everything below is the legacy path.
+  if (isNewKind.value) {
+    const spec = props.chart?.spec
+    const build = CHART_OPT[kind.value]
+    if (spec && build) return build(chartData(spec), spec, chartT.value)
+  }
+
   const t = tokens.value
   const k = kind.value
   const rows = plotted.value
@@ -562,8 +580,9 @@ onBeforeUnmount(() => {
         </span>
       </div>
 
-      <!-- bottom legend — cartesian charts only (classic ⓪, bounded ②, truncated ④, merged ⑥) -->
-      <div v-if="showInlineLegend && !sideLegend" class="legend">
+      <!-- bottom legend — cartesian charts only (classic ⓪, bounded ②, truncated ④, merged ⑥).
+           New kinds carry their own native legend inside the option, so they sit this out. -->
+      <div v-if="showInlineLegend && !sideLegend && !isNewKind" class="legend">
         <!-- the rank pill states the truncation and opens the one panel that can
              change it. It sits outside the scroll box so it never scrolls away. -->
         <button

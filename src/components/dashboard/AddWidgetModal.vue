@@ -25,6 +25,9 @@ const GROUPS = [
     { id: 'bar', label: 'Bar', icon: 'chart-bar', type: 'chart', kind: 'hbar' },
     { id: 'column', label: 'Column', icon: 'chart-bar', type: 'chart', kind: 'bar' },
     { id: 'pie', label: 'Pie', icon: 'chart-pie', type: 'chart', kind: 'donut' },
+    // PMG-ACT-01 additional chart kinds
+    { id: 'stack', label: 'Stacked', icon: 'chart-stack', type: 'chart', kind: 'stack' },
+    { id: 'multiline', label: 'Multi-line', icon: 'chart-multiline', type: 'chart', kind: 'multiline' },
   ] },
   { cat: 'KPI', types: [{ id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null }] },
   { cat: 'Shortcut', types: [{ id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null }] },

@@ -35,6 +35,10 @@ const MAP = {
   erase: 'ink_eraser', mail: 'mail', cursor: 'arrow_selector_tool',
   'chart-area': 'area_chart', 'chart-donut': 'donut_large', 'chart-funnel': 'filter_alt',
   'chart-pyramid': 'change_history', 'chart-hbar': 'align_horizontal_left',
+  // PMG-ACT-01 additional chart kinds
+  'chart-stack': 'stacked_bar_chart', 'chart-multiline': 'multiline_chart',
+  'chart-combo': 'insert_chart', 'chart-hist': 'bar_chart', 'chart-heatmap': 'grid_on',
+  'chart-gauge': 'speed', 'chart-text': 'notes',
   'open-in': 'arrow_forward', chat: 'chat_bubble', 'auto-graph': 'auto_graph', bolt: 'bolt',
   send: 'send', attach: 'attach_file', brain: 'neurology', flag: 'flag', research: 'travel_explore',
   target: 'center_focus_strong', insights: 'insights',

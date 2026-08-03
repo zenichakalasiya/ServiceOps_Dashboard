@@ -239,3 +239,35 @@ export function gaugeBands(max, amberFrom, badFrom, higherIsBetter) {
     { to: 1, color: BAND_COLORS[last] },
   ]
 }
+
+// Part-of-whole count by one categorical dimension — the Pie/Doughnut source (§4 pie).
+function pieData(spec) {
+  const recs = applyConds(REQUEST_RECORDS, spec.conds)
+  const labels = valuesFor(spec.xDim)
+  return { labels, series: [{ name: 'Requests', values: labels.map((v) => recs.filter((rec) => catVal(rec, spec.xDim) === v).length) }] }
+}
+
+/* chartData — the single dispatch every additional kind renders through. A tile
+ * of a new kind stores its `chartSpec` (built in the widget builder); ChartTile
+ * passes that spec here to recompute the display data from the live records, so a
+ * saved tile and a builder preview always agree. Returns the engine output the
+ * matching option builder in chartOptions.js expects. */
+export function chartData(spec) {
+  if (!spec) return { labels: [], series: [] }
+  switch (spec.kind) {
+    case 'stack':
+    case 'multiline': return chartTwoDim(spec.xDim, spec.splitDim, spec.conds)
+    case 'combo': return chartCombo(spec.xDim, spec.comboFn, spec.comboField, spec.conds)
+    case 'hist': return chartHistogram(spec.histField, spec.histBucket, spec.conds)
+    case 'funnel': return chartFunnel(spec.stageField, spec.conds)
+    case 'heatmap': return chartHeatmap(spec.heatX, spec.heatY, spec.conds, spec.heatFn, spec.heatField)
+    case 'mapbubble': return chartMapBubble(spec.mapFn, spec.mapField, spec.conds)
+    case 'pie': return pieData(spec)
+    case 'gauge': {
+      const m = measurement(spec.measure)
+      const max = Number(spec.gaugeMax) > 0 ? Number(spec.gaugeMax) : niceCeil(Math.max(m.value || 0, 10))
+      return { ...m, max, bands: gaugeBands(max, spec.warnAt, spec.badAt, spec.invert) }
+    }
+    default: return { labels: [], series: [] }
+  }
+}
