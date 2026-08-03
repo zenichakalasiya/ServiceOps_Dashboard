@@ -52,8 +52,9 @@ Pages. Routes: `/dashboard/:id` (a board), `/dashboards` (the Manage listing), `
 redirects to the user's default board. Note the mismatch between the mock URLs here and the live
 product's `/dashboard` singular route.
 
-**Three tile types**, each carrying a **provenance** tag that drives locking:
-- `kpi` (headline number) · `chart` (ECharts widget) · `shortcut` (record table).
+**Tile types**, each carrying a **provenance** tag that drives locking:
+- `kpi` (headline number) · `chart` (ECharts widget) · `shortcut` (record table) · `text` (Free Text,
+  no data query — stores `content`, rendered by `FreeTextTile.vue`).
 - `tile.prov` ∈ `predefined | user | shared`; `tile.seeded` marks a tile shipped *with* a
   predefined board. These flags are enforced **in the store** (`removeTile`, `archiveDashboard`,
   `archiveMany` all guard and *say so* rather than silently doing less than asked), not just hidden
@@ -64,6 +65,26 @@ product's `/dashboard` singular route.
 part-of-whole (`slice:true`) and can't be switched into; a predefined pie/KPI/shortcut is frozen.
 Both the tile ⋯ menu and the builder call `typesFor()` / `isFrozen()` / `whyDisabled()` — don't
 re-derive these rules anywhere else.
+
+**The 12 chart types + Free Text (PMG-ACT-01).** Beyond the four legacy kinds (Line/Bar/Column/Pie)
+the builder ships eight additional chart kinds — **Stacked · Multi-line · Combo · Histogram · Funnel ·
+Heatmap · Gauge · Map Bubble** — plus a **Free Text** tile family. These are *spec-driven*: a tile
+stores a `chart.spec` (its per-kind config), and everything computes deterministically from a single
+48-record demo dataset:
+- `src/data/records.js` — the dataset (solved to reproduce **every** worked example in the reference
+  *including the resolution averages*, 73/73) + the engine (`chartTwoDim`, `chartCombo`,
+  `chartHistogram`, `chartHeatmap`, `chartMapBubble`, `chartFunnel`, `measurement`, `gaugeBands`) +
+  `chartData(spec)`, the one dispatch every additional kind renders through. Shared vocab:
+  `CONDITION_FIELD_LABELS`, `NUMERIC_FIELD_LABELS`, `AGG_FNS`, `MAP_FNS`, `valuesFor`, `SITE_COORDS`.
+- `src/data/chartOptions.js` — one `opt*` ECharts-option builder per kind, the `CHART_OPT` map, and
+  **`NEW_KINDS`** (the authority for "is this a spec-driven kind?"). `ChartTile` dispatches new kinds
+  here; the legacy kinds stay inline in `ChartTile`.
+- A **spec-driven tile carries `chart.spec`, not `chart.series`** — so `WidgetCard.tileState` returns
+  `'ok'` when `chart.spec` is present (else a placed new-kind tile falsely reads "no data"), and the
+  AI chart-summary recomputes `{labels,series}` from `chartData(spec)`.
+- New kinds are **frozen** (`isFrozen` true via `NEW_KINDS`) — never offered a ⋯-menu type switch.
+- **Map Bubble** registers a code-split India geo (`src/data/indiaMap.json`, ~35KB gzip) lazily via
+  `ChartTile`'s `ensureIndiaMap()` — never in the main bundle.
 
 **Filterability heuristic:** `src/data/filters.js` decides which columns are worth offering as
 filter fields — a field whose values never repeat is a *list*, not a filter, so it's excluded.
@@ -102,7 +123,13 @@ positioned in viewport coordinates — follow that pattern for any new floating 
 |---|---|
 | `store/index.js` | The single source of state + every mutation and getter. |
 | `data/mock.js` | Seed data + `kpi`/`chart`/`shortcut` tile factories. |
-| `data/chartTypes.js` | **Authoritative** chart type-switch / freeze rules. |
+| `data/chartTypes.js` | **Authoritative** chart type-switch / freeze rules (imports `NEW_KINDS`). |
+| `data/records.js` | The 48-record demo dataset + engine + `chartData(spec)` for the additional kinds. |
+| `data/chartOptions.js` | One ECharts `opt*` builder per additional kind + `CHART_OPT` + `NEW_KINDS`. |
+| `data/freeText.js` | Parser for the Free Text tile (`# `/`- `/paragraph, `[label](url)`). |
+| `data/indiaMap.json` | Simplified India geo for Map Bubble — code-split, lazy-registered. |
+| `components/dashboard/MeasureConditions.vue` | The shared `field is value` (ANDed) conditions editor. |
+| `components/dashboard/FreeTextTile.vue` | Renders a Free Text tile's parsed content. |
 | `data/filters.js` | Which columns qualify as filter fields. |
 | `views/DashboardView.vue` | The board: grid, grouping, undo/redo, skeleton + reveal, rearrange. |
 | `views/ManageDashboards.vue` | The "All Dashboards" data grid — sort, filter, bulk actions. |
