@@ -415,7 +415,9 @@ const legendClickable = computed(() => true)
  *
  * Cartesian charts keep the bottom legend: they name *series*, of which there are
  * usually two or three, and a side column would steal width from the plot. */
-const sideLegend = computed(() => sliceBased.value && props.legend)
+// new kinds (e.g. the engine-driven funnel) carry their own legend/labels in the
+// option, so they sit out the custom side legend even when their kind is slice-based
+const sideLegend = computed(() => sliceBased.value && props.legend && !isNewKind.value)
 
 const ROW_H = 22          // one legend row, incl. gap — keep in step with .lg-side
 const legendCol = ref(null)

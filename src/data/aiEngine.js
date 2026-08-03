@@ -10,6 +10,7 @@
  *
  * Shared by P1-D (Focus summary), P3-B (Anomaly badge) and P2-A (Deep-dive).
  */
+import { chartData } from './records.js'
 
 // ---------------------------------------------------------------------------
 // Anomaly — a robust z-score over a KPI's own recent history.
@@ -227,10 +228,13 @@ export function widgetBrief(tile) {
       { label: 'Find similar tickets', intent: 'drill', text: `Find tickets similar to those in ${t.title}` },
     ] }
   }
-  // chart — a WRITTEN summary of the shape of the data, not a copy of the legend
+  // chart — a WRITTEN summary of the shape of the data, not a copy of the legend.
+  // Additional PMG-ACT-01 kinds carry a chartSpec instead of labels/series; the
+  // {labels,series}-shaped ones recompute from the engine so the summary is real.
   const ch = t.chart || {}
-  const series = ch.series || []
-  const labels = ch.labels || []
+  const derived = ch.spec ? chartData(ch.spec) : null
+  const series = ch.series || derived?.series || []
+  const labels = ch.labels || derived?.labels || []
   const summary = chartSummary(ch, series, labels)
   return { summary, actions: [
     { label: 'Explain the trend', intent: 'explain', text: `Explain the trend in ${t.title}` },

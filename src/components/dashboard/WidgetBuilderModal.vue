@@ -6,7 +6,7 @@ import ChartTile from './ChartTile.vue'
 import MeasureConditions from './MeasureConditions.vue'
 import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut } from '../../data/mock.js'
-import { CONDITION_FIELD_LABELS } from '../../data/records.js'
+import { CONDITION_FIELD_LABELS, NUMERIC_FIELD_LABELS, AGG_FNS } from '../../data/records.js'
 import { NEW_KINDS } from '../../data/chartOptions.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
 const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary', 'duplicated'])
@@ -29,6 +29,9 @@ const TYPES = [
   // PMG-ACT-01 additional chart kinds (each carries its own config + engine spec)
   { id: 'stack', label: 'Stacked', icon: 'chart-stack', type: 'chart', kind: 'stack' },
   { id: 'multiline', label: 'Multi-line', icon: 'chart-multiline', type: 'chart', kind: 'multiline' },
+  { id: 'combo', label: 'Combo', icon: 'chart-combo', type: 'chart', kind: 'combo' },
+  { id: 'hist', label: 'Histogram', icon: 'chart-hist', type: 'chart', kind: 'hist' },
+  { id: 'funnel', label: 'Funnel', icon: 'chart-funnel', type: 'chart', kind: 'funnel' },
   { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null },
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
 ]
@@ -146,6 +149,12 @@ function initCfg() {
     stackMode: ex?.chart?.spec?.stackMode || 'stacked',
     mlXDim: ex?.chart?.spec?.xDim || 'Priority',
     mlSplit: ex?.chart?.spec?.splitDim || 'Status',
+    comboXDim: ex?.chart?.spec?.xDim || 'Priority',
+    comboFn: ex?.chart?.spec?.comboFn || 'Average',
+    comboField: ex?.chart?.spec?.comboField || 'Resolution time',
+    histField: ex?.chart?.spec?.histField || 'Resolution time',
+    histBucket: ex?.chart?.spec?.histBucket || 4,
+    stageField: ex?.chart?.spec?.stageField || 'Status',
   }
 }
 const isPie = computed(() => curType.value.kind === 'donut')
@@ -155,6 +164,9 @@ const chartSpec = computed(() => {
   const k = curType.value.kind
   if (k === 'stack') return { kind: 'stack', xDim: cfg.stackXDim, splitDim: cfg.stackSplit, stackMode: cfg.stackMode, conds: cfg.conds }
   if (k === 'multiline') return { kind: 'multiline', xDim: cfg.mlXDim, splitDim: cfg.mlSplit, conds: cfg.conds }
+  if (k === 'combo') return { kind: 'combo', xDim: cfg.comboXDim, comboFn: cfg.comboFn, comboField: cfg.comboField, conds: cfg.conds }
+  if (k === 'hist') return { kind: 'hist', histField: cfg.histField, histBucket: cfg.histBucket, conds: cfg.conds }
+  if (k === 'funnel') return { kind: 'funnel', stageField: cfg.stageField, conds: cfg.conds }
   return null
 })
 const rankN = computed({
@@ -430,9 +442,9 @@ function save(place) {
                 </div>
               </div>
 
-              <!-- Series — the additional PMG-ACT-01 kinds (§4). Each kind's own fields. -->
+              <!-- Series / Buckets / Stages — the additional PMG-ACT-01 kinds (§4). -->
               <div v-if="isChart && manualMode && isNewKind" class="sec">
-                <div class="sec-h">Series</div>
+                <div class="sec-h">{{ curType.kind === 'hist' ? 'Buckets' : curType.kind === 'funnel' ? 'Stages' : 'Series' }}</div>
                 <!-- Stacked / Grouped (§4.1) -->
                 <template v-if="curType.kind === 'stack'">
                   <div class="grid2">
@@ -454,6 +466,28 @@ function save(place) {
                     <div class="fld"><label>Split by <i>*</i></label><Dropdown v-model="cfg.mlSplit" :options="CONDITION_FIELD_LABELS" /></div>
                   </div>
                   <p class="hint">One line per split value, plotted across the same X-Axis — trends across a category compared side by side on a shared scale.</p>
+                </template>
+                <!-- Combo (§4.3) — count bars + an aggregate line on a second axis -->
+                <template v-else-if="curType.kind === 'combo'">
+                  <div class="fld"><label>X-Axis <i>*</i></label><Dropdown v-model="cfg.comboXDim" :options="CONDITION_FIELD_LABELS" /></div>
+                  <div class="grid2">
+                    <div class="fld"><label>Line Function <i>*</i></label><Dropdown v-model="cfg.comboFn" :options="AGG_FNS" /></div>
+                    <div class="fld"><label>Line Field <i>*</i></label><Dropdown v-model="cfg.comboField" :options="NUMERIC_FIELD_LABELS" /></div>
+                  </div>
+                  <p class="hint">Count bars on the left axis; the aggregate line rides the secondary axis.</p>
+                </template>
+                <!-- Histogram (§4.4) — gap-free equal-width bands over a numeric field -->
+                <template v-else-if="curType.kind === 'hist'">
+                  <div class="grid2">
+                    <div class="fld"><label>Field <i>*</i></label><Dropdown v-model="cfg.histField" :options="NUMERIC_FIELD_LABELS" /></div>
+                    <div class="fld"><label>Bucket size <i>*</i></label><input class="input" type="number" min="0.5" step="0.5" v-model.number="cfg.histBucket" /></div>
+                  </div>
+                  <p class="hint">Named, gap-free ranges in field order. Records without a value are excluded — never counted as zero.</p>
+                </template>
+                <!-- Funnel (§4.7) — cumulative stage counts in the field's defined order -->
+                <template v-else-if="curType.kind === 'funnel'">
+                  <div class="fld"><label>Stage field <i>*</i></label><Dropdown v-model="cfg.stageField" :options="CONDITION_FIELD_LABELS" /></div>
+                  <p class="hint">Stages keep the field's defined order — never alphabetical. Each band counts records that reached that stage or beyond, shown as a share of the first.</p>
                 </template>
               </div>
 

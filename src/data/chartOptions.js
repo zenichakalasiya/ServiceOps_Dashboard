@@ -11,7 +11,15 @@
  * uses it to decide whether to compute from a spec or from labels/series, and the
  * builder uses it to pick the right config sections. Grows one batch at a time.
  */
-export const NEW_KINDS = new Set(['stack', 'multiline'])
+export const NEW_KINDS = new Set(['stack', 'multiline', 'combo', 'hist', 'funnel'])
+
+// a native ECharts legend, styled to match the product (used by the multi-series
+// new kinds; single-series kinds omit it, funnel prints its labels on the bands)
+const nativeLegend = (t) => ({
+  show: true, type: 'scroll', bottom: 0, icon: 'roundRect',
+  itemWidth: 9, itemHeight: 9, itemGap: 12,
+  textStyle: { color: t.muted, fontSize: 11.5, fontFamily: t.font }, inactiveColor: t.border,
+})
 
 // shared chrome — mirrors the cartesian idioms in ChartTile.vue so the additional
 // kinds read as the same product, not a bolt-on.
@@ -98,8 +106,139 @@ export function optMultiline(out, spec, t) {
   }
 }
 
+// ── Combo (§4.3) ──────────────────────────────────────────────────────────────────
+// Count bars on the primary (left) value axis + an aggregate line on a SECOND value
+// axis (no split lines, so the two grids never fight). Line nulls are genuine gaps.
+export function optCombo(out, spec, t) {
+  const barColor = t.pal[0], lineColor = t.pal[4]   // blue bars, violet line — separable
+  const axis = axisChrome(t)
+  const step = (n) => Math.min(70, Math.max(18, 500 / Math.max(1, n)))
+  const series = (out.series || []).map((s) => {
+    if (s.role === 'line') {
+      return {
+        name: s.name, type: 'line', yAxisIndex: 1, data: s.values,
+        connectNulls: true, smooth: 0.35, symbolSize: 7,
+        lineStyle: { width: 2.5, cap: 'round', join: 'round', color: lineColor },
+        itemStyle: { color: lineColor },
+        emphasis: { focus: 'series' }, blur: { lineStyle: { opacity: 0.18 }, itemStyle: { opacity: 0.18 } },
+        animation: true, animationDuration: 1500, animationEasing: 'cubicOut', animationDelay: ENTER_DELAY,
+      }
+    }
+    return {
+      name: s.name, type: 'bar', yAxisIndex: 0, data: s.values, barMaxWidth: 26,
+      itemStyle: { borderRadius: [3, 3, 0, 0], color: barColor },
+      emphasis: { focus: 'series' }, blur: { itemStyle: { opacity: 0.18 } },
+      animation: true, animationDuration: 900, animationEasing: 'cubicOut',
+      animationDelay: (i) => ENTER_DELAY + i * step(s.values.length),
+    }
+  })
+  return {
+    tooltip: {
+      ...tipBox(t), trigger: 'axis', axisPointer: { type: 'shadow', lineStyle: { color: t.border } },
+      formatter: (ps) => {
+        const head = `<div style="color:${t.ink};font-weight:600;margin-bottom:3px">${ps[0]?.axisValueLabel ?? ''}</div>`
+        const body = ps.map((p) => {
+          const raw = (p.value == null || p.value === '-') ? '—' : p.value
+          return `<div style="white-space:nowrap">${dot(p.color)}${p.seriesName}: <b style="color:${t.ink}">${raw}</b></div>`
+        }).join('')
+        return head + body
+      },
+    },
+    legend: nativeLegend(t),
+    grid: { left: 6, right: 14, top: 14, bottom: 30, containLabel: true },
+    xAxis: { type: 'category', data: out.labels, boundaryGap: true, ...axis },
+    yAxis: [
+      { type: 'value', ...axis, splitLine: dashedSplit(t) },
+      { type: 'value', ...axis, splitLine: { show: false } },   // aggregate axis — no grid
+    ],
+    series,
+    animationDurationUpdate: 300, animationEasingUpdate: 'cubicOut', animationDelayUpdate: 0,
+  }
+}
+
+// ── Histogram (§4.4) ────────────────────────────────────────────────────────────────
+// Single series over gap-free, equal-width bands; bars nearly touch (no barMaxWidth).
+export function optHist(out, spec, t) {
+  const labels = out.labels || []
+  const s0 = out.series?.[0] || { name: 'Records', values: [] }
+  const values = s0.values || [], name = s0.name || 'Records'
+  const total = values.reduce((a, b) => a + b, 0) || 1
+  const step = Math.min(70, Math.max(18, 500 / Math.max(1, values.length)))
+  return {
+    tooltip: {
+      ...tipBox(t), trigger: 'axis', axisPointer: { type: 'shadow', lineStyle: { color: t.border } },
+      formatter: (ps) => {
+        const p = ps[0]; if (!p) return ''
+        const pct = ((p.value / total) * 100).toFixed(2)
+        return `<div style="color:${t.ink};font-weight:600;margin-bottom:3px">${p.axisValueLabel ?? ''}</div>`
+          + `<div style="white-space:nowrap">${dot(p.color)}${name}: ${pct}% <b style="color:${t.ink}">(${p.value})</b></div>`
+      },
+    },
+    legend: { show: false },
+    grid: { left: 6, right: 14, top: 14, bottom: 4, containLabel: true },
+    xAxis: { type: 'category', data: labels, boundaryGap: true, ...axisChrome(t) },
+    yAxis: { type: 'value', ...axisChrome(t), splitLine: dashedSplit(t) },
+    series: [{
+      name, type: 'bar', data: values, barCategoryGap: '8%',
+      itemStyle: { borderRadius: [3, 3, 0, 0], color: t.pal[0] },
+      emphasis: { focus: 'series' }, blur: { itemStyle: { opacity: 0.18 } },
+      animation: true, animationDuration: 900, animationEasing: 'cubicOut',
+      animationDelay: (i) => ENTER_DELAY + i * step,
+    }],
+    animationDurationUpdate: 300, animationEasingUpdate: 'cubicOut', animationDelayUpdate: 0,
+  }
+}
+
+// ── Funnel (§4.7) ─────────────────────────────────────────────────────────────────
+// Cumulative stage bands in the field's DEFINED order; each labelled with its count
+// and its share of the FIRST stage (never a slice-of-total). Self-labelling — no legend.
+const FUNNEL_SEMANTIC = {
+  p1: 4, p2: 3, p3: 1, p4: 8,
+  open: 1, 'in progress': 3, pending: 1,
+  resolved: 2, closed: 2, compliant: 2,
+  breached: 4, overdue: 4, failed: 4, critical: 4,
+}
+export function optFunnel(out, spec, t) {
+  const labels = out?.labels || [], values = out?.values || [], shares = out?.shares || []
+  const pal = t.pal || []
+  const colorFor = (name, i) => {
+    const sem = FUNNEL_SEMANTIC[String(name).toLowerCase()]
+    return (sem ? pal[sem - 1] : null) || pal[i % (pal.length || 1)] || t.ink
+  }
+  const data = labels.map((name, i) => ({
+    name, value: values[i] == null ? 0 : values[i], share: shares[i] == null ? 0 : shares[i],
+    itemStyle: { color: colorFor(name, i), borderColor: t.surface, borderWidth: 2 },
+  }))
+  const step = Math.min(70, Math.max(18, 500 / Math.max(1, data.length)))
+  return {
+    tooltip: {
+      ...tipBox(t), trigger: 'item',
+      formatter: (p) => `${dot(p.color)}${p.name}: ${p.data.share}% of first <b style="color:${t.ink}">(${p.value})</b>`,
+    },
+    legend: { show: false },
+    series: [{
+      type: 'funnel', left: '8%', right: '8%', top: 10, bottom: 10,
+      sort: 'descending', funnelAlign: 'center', gap: 2, minSize: '12%',
+      label: {
+        show: true, position: 'inside', color: '#fff', fontWeight: 600,
+        fontSize: 11, fontFamily: t.font, formatter: (p) => `${p.value} · ${p.data.share}%`,
+      },
+      labelLine: { show: false },
+      itemStyle: { borderColor: t.surface, borderWidth: 2 },
+      emphasis: { focus: 'self' }, blur: { itemStyle: { opacity: 0.18 } },
+      data,
+      animation: true, animationDuration: 900, animationEasing: 'cubicOut',
+      animationDelay: (i) => ENTER_DELAY + i * step,
+    }],
+    animationDurationUpdate: 300, animationEasingUpdate: 'cubicOut', animationDelayUpdate: 0,
+  }
+}
+
 // kind → option builder. ChartTile calls CHART_OPT[kind](out, spec, t). Grows per batch.
 export const CHART_OPT = {
   stack: optStacked,
   multiline: optMultiline,
+  combo: optCombo,
+  hist: optHist,
+  funnel: optFunnel,
 }

@@ -28,6 +28,9 @@ const GROUPS = [
     // PMG-ACT-01 additional chart kinds
     { id: 'stack', label: 'Stacked', icon: 'chart-stack', type: 'chart', kind: 'stack' },
     { id: 'multiline', label: 'Multi-line', icon: 'chart-multiline', type: 'chart', kind: 'multiline' },
+    { id: 'combo', label: 'Combo', icon: 'chart-combo', type: 'chart', kind: 'combo' },
+    { id: 'hist', label: 'Histogram', icon: 'chart-hist', type: 'chart', kind: 'hist' },
+    { id: 'funnel', label: 'Funnel', icon: 'chart-funnel', type: 'chart', kind: 'funnel' },
   ] },
   { cat: 'KPI', types: [{ id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null }] },
   { cat: 'Shortcut', types: [{ id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null }] },
