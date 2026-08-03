@@ -291,14 +291,26 @@ const option = computed(() => {
   const sliceTip = { ...tip, trigger: 'item', formatter: (p) => `${dot(p.color)}${p.name}: ${pctOf(p.value)}% <b style="color:${t.ink}">(${p.value})</b>` }
   const sliceData = rows.map((e) => ({ name: e.name, value: e.value, itemStyle: { color: e.color } }))
 
-  /* Pie / Doughnut — same series, different inner radius. */
+  /* Pie / Doughnut — same series, different inner radius. The Donut toggle (§4 pie)
+   * lives on the tile as chart.donut; legacy seeded tiles have kind:'donut' and no
+   * flag, so they stay rings (undefined → default from the kind). A ring shows the
+   * record total in the hole via a stable-id graphic; a flat pie removes that id. */
   if (k === 'pie' || k === 'donut') {
+    const isDonut = props.chart?.donut === undefined ? (k === 'donut') : props.chart.donut === true
+    const centre = {
+      type: 'group', id: 'donut-total', left: 'center', top: 'middle', silent: true,
+      children: [
+        { type: 'text', left: 'center', top: -15, style: { text: String(trueTotal.value), fill: t.ink, font: '700 26px ' + t.font, textAlign: 'center' } },
+        { type: 'text', left: 'center', top: 16, style: { text: 'Total', fill: t.muted, font: '500 12px ' + t.font, textAlign: 'center' } },
+      ],
+    }
     return {
       tooltip: sliceTip,
       legend: { show: false },
+      graphic: isDonut ? [centre] : [{ id: 'donut-total', $action: 'remove' }],
       series: [{
         type: 'pie',
-        radius: k === 'donut' ? ['52%', '78%'] : ['0%', '74%'],
+        radius: isDonut ? ['52%', '78%'] : ['0%', '74%'],
         center: ['50%', '50%'],   // the legend is its own flex column, so the plot area is already narrowed
         // data labels sit *inside* the slice: leader lines outside would fight the
         // side legend for the same strip of space

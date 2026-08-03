@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from './ChartTile.vue'
 import DataTable from './DataTable.vue'
+import FreeTextTile from './FreeTextTile.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
 import FilterMenu from '../ui/FilterMenu.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
@@ -220,7 +221,10 @@ const tileState = computed(() => {
   if (props.tile.state === 'error') return 'error'
   if (props.tile.state === 'unconfigured') return 'unconfigured'
   if (props.tile.type === 'kpi') return (props.tile.value == null || props.tile.value === '') ? 'nodata' : 'ok'
+  if (props.tile.type === 'text') return props.tile.content && props.tile.content.trim() ? 'ok' : 'nodata'
   if (props.tile.type === 'chart') {
+    // the additional PMG-ACT-01 kinds carry a chartSpec and compute their own data
+    if (props.tile.chart?.spec) return 'ok'
     const s = props.tile.chart?.series || []
     const total = s.flatMap((x) => x.values || []).reduce((a, b) => a + b, 0)
     return (!s.length || total === 0) ? 'nodata' : 'ok'
@@ -416,6 +420,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         <ChartTile v-if="tile.chart" :chart="tile.chart" :legend="showLegend" :data-labels="tile.dataLabels === true" :height="chartH" />
       </template>
 
+      <template v-else-if="tile.type === 'text'">
+        <FreeTextTile :content="tile.content" />
+      </template>
+
       <template v-else>
         <div class="stbl">
           <!-- search bar (toggled from the header search icon, beside Refresh) -->
@@ -466,6 +474,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <div class="pbody">
             <ChartTile v-if="tile.type === 'chart'" :chart="tile.chart" :legend="showLegend" :data-labels="tile.dataLabels === true" :height="620" />
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
+            <FreeTextTile v-else-if="tile.type === 'text'" :content="tile.content" />
             <div v-else class="stbl big">
               <DataTable :columns="tile.columns" :rows="tile.rows || []">
                 <template #cell="{ value }">

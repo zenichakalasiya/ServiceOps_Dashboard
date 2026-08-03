@@ -36,6 +36,7 @@ const GROUPS = [
   ] },
   { cat: 'KPI', types: [{ id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null }] },
   { cat: 'Shortcut', types: [{ id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null }] },
+  { cat: 'Text', types: [{ id: 'text', label: 'Free Text', icon: 'chart-text', type: 'text', kind: null }] },
 ]
 const filteredGroups = computed(() => GROUPS.map((g) => ({
   cat: g.cat, types: g.types.filter((t) => t.label.toLowerCase().includes(search.value.toLowerCase())),

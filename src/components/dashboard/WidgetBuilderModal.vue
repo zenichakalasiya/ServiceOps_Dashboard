@@ -4,8 +4,9 @@ import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import ChartTile from './ChartTile.vue'
 import MeasureConditions from './MeasureConditions.vue'
+import FreeTextTile from './FreeTextTile.vue'
 import { store } from '../../store/index.js'
-import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut } from '../../data/mock.js'
+import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut, text as mkText } from '../../data/mock.js'
 import { CONDITION_FIELD_LABELS, NUMERIC_FIELD_LABELS, AGG_FNS, MAP_FNS } from '../../data/records.js'
 import { NEW_KINDS } from '../../data/chartOptions.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
@@ -36,6 +37,7 @@ const TYPES = [
   { id: 'gauge', label: 'Gauge', icon: 'chart-gauge', type: 'chart', kind: 'gauge' },
   { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null },
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
+  { id: 'text', label: 'Free Text', icon: 'chart-text', type: 'text', kind: null },
 ]
 /* Start on the tile's own tab, but keep the tile's REAL kind. The six tabs don't
  * cover every kind the ⋯ menu can produce (area, funnel, pyramid all fold into a
@@ -86,6 +88,7 @@ const FAMILIES = [
   { id: 'widget', label: 'Widget', icon: 'chart-bar', type: 'chart' },
   { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi' },
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut' },
+  { id: 'text', label: 'Free Text', icon: 'chart-text', type: 'text' },
 ]
 const CHART_KINDS = TYPES.filter((t) => t.type === 'chart')
 // remembers which chart you were on, so leaving the Widget family and coming back
@@ -105,6 +108,7 @@ function pickKind(t) { lastChartId.value = t.id; switchType(t) }
 const isChart = computed(() => curType.value.type === 'chart')
 const isKpi = computed(() => curType.value.type === 'kpi')
 const isShortcut = computed(() => curType.value.type === 'shortcut')
+const isText = computed(() => curType.value.type === 'text')
 const ctaLabel = computed(() => (isChart.value ? 'Widget' : curType.value.label))
 function switchType(t) {
   if (typeBlock(t)) return
@@ -144,6 +148,7 @@ function initCfg() {
     // display properties, saved on the widget. undefined = on / off respectively.
     legend: ex?.legend !== false,
     dataLabels: ex?.dataLabels === true,
+    donut: ex?.chart?.donut !== false,   // Pie/Donut split — ring by default (§4 pie)
     // ── PMG-ACT-01 additional-kind config (prefilled from the tile's saved spec) ──
     conds: (ex?.chart?.spec?.conds || ex?.chart?.spec?.measure?.conds || []).map((c) => ({ ...c })),
     stackXDim: ex?.chart?.spec?.xDim || 'Priority',
@@ -171,6 +176,8 @@ function initCfg() {
     gaugeHigherBetter: ex?.chart?.spec?.invert === true,
     gaugeWarnAt: ex?.chart?.spec?.warnAt ?? 70,
     gaugeBadAt: ex?.chart?.spec?.badAt ?? 90,
+    // Free Text (§4) — the tile's markdown-lite content
+    content: ex?.content || '',
   }
 }
 const isPie = computed(() => curType.value.kind === 'donut')
@@ -230,6 +237,7 @@ const ctaHint = computed(() =>
 
 const previewTile = computed(() => {
   const title = cfg.name || `New ${curType.value.label}`
+  if (isText.value) return mkText(title, cfg.content, cfg.description)
   if (isKpi.value) {
     return ex
       ? mkKpi(title, ex.value, ex.unit, ex.delta, ex.status, cfg.description)
@@ -267,6 +275,7 @@ const previewTile = computed(() => {
     t.legend = cfg.legend          // so the live preview reflects the toggle
     t.dataLabels = cfg.dataLabels
     t.rank = cfg.rank; t.rankN = cfg.rankN
+    if (isPie.value) t.chart.donut = cfg.donut   // ring vs flat pie
     return t
   }
   return ex
@@ -306,7 +315,8 @@ function save(place) {
     }
     else if (isShortcut.value) { t.columns = pv.columns; t.rows = pv.rows; t.sql = cfg.sqlQuery; t.chart = undefined }
     else if (isKpi.value) { t.value = pv.value; t.unit = pv.unit; t.chart = undefined; t.columns = undefined; t.rows = undefined }
-    if (!isShortcut.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
+    else if (isText.value) { t.content = cfg.content; t.chart = undefined; t.columns = undefined; t.rows = undefined; t.value = undefined }
+    if (!isShortcut.value && !isText.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
     t.sharedAccess = cfg.sharedAccess
     props.d.updated = new Date().toISOString()
     emit('saved', { id: t.id, place })
@@ -314,8 +324,8 @@ function save(place) {
   }
   // --- create new ---
   if (place) {
-    pv.w = isChart.value ? 6 : isShortcut.value ? 6 : 3
-    pv.h = isKpi.value ? 1 : 2
+    if (isText.value) { pv.w = 4; pv.h = 1 }
+    else { pv.w = isChart.value ? 6 : isShortcut.value ? 6 : 3; pv.h = isKpi.value ? 1 : 2 }
     if (queryMode.value) pv.sql = cfg.sqlQuery
     pv.sharedAccess = cfg.sharedAccess
     props.d.tiles.push(pv)
@@ -366,6 +376,7 @@ function save(place) {
               <div class="pv-canvas">
                 <div v-if="isKpi" class="pv-kpi">{{ previewTile.value }}<span v-if="previewTile.unit" class="u">{{ previewTile.unit }}</span><span class="d">▲ {{ previewTile.delta?.pct }}%</span></div>
                 <ChartTile v-else-if="isChart" :chart="previewTile.chart" :legend="cfg.legend" :data-labels="cfg.dataLabels" :height="320" />
+                <div v-else-if="isText" class="pv-text"><FreeTextTile :content="cfg.content" /></div>
                 <table v-else class="pv-tbl"><thead><tr><th v-for="c in previewTile.columns" :key="c">{{ c }}</th></tr></thead><tbody><tr v-for="(r,i) in previewTile.rows" :key="i"><td v-for="(c,j) in r" :key="j">{{ c }}</td></tr></tbody></table>
               </div>
             </div>
@@ -434,7 +445,7 @@ function save(place) {
                     </button>
                   </div>
                 </div>
-                <template v-if="!isShortcut">
+                <template v-if="!isShortcut && !isText">
                   <div class="seg">
                     <button class="seg-b" :class="{ on: cfg.mode==='manual' }" @click="cfg.mode='manual'">Manual</button>
                     <button class="seg-b" :class="{ on: cfg.mode==='query' }" @click="cfg.mode='query'">Query Based</button>
@@ -578,8 +589,15 @@ function save(place) {
                 </div>
               </template>
 
+              <!-- Content — Free Text only (§4). The one section this family shows. -->
+              <div v-if="isText" class="sec">
+                <div class="sec-h">Content</div>
+                <textarea class="input" rows="7" v-model="cfg.content" placeholder="# Section heading&#10;- A bullet point&#10;A paragraph of note text, with a [link](https://example.com) inline." />
+                <p class="hint">Lines starting with '# ' render as headings, '- ' as bullets; [label](url) anywhere becomes a link. No data query behind this widget.</p>
+              </div>
+
               <!-- Data Configuration -->
-              <div v-if="manualMode" class="sec">
+              <div v-if="manualMode && !isText" class="sec">
                 <div class="sec-h">Data Configuration</div>
                 <div class="fld"><label>Date Filter <i>*</i></label><Dropdown v-model="cfg.dateFilter" :options="DATEF_OPTS" /></div>
                 <div class="fld"><label>Description</label><textarea class="input" rows="3" v-model="cfg.description" placeholder="Description" /></div>
@@ -587,7 +605,7 @@ function save(place) {
 
               <!-- Conditions — classic kinds get the placeholder line; additional kinds
                    get the real shared `field is value` editor bound to the engine (§5). -->
-              <div v-if="manualMode && !isNewKind" class="sec">
+              <div v-if="manualMode && !isNewKind && !isText" class="sec">
                 <div class="sec-h">Conditions</div>
                 <p class="hint">Add conditions to filter records. If none are set, all records are counted.</p>
                 <button class="add-line"><Icon name="plus" :size="14" /> Add Condition</button>
@@ -633,6 +651,15 @@ function save(place) {
 
                 <label v-if="isPie" class="tgl-row">
                   <span class="tgl-txt">
+                    <b>Donut</b>
+                    <em>Render as a ring with the record total in the centre.</em>
+                  </span>
+                  <button class="tgl" :class="{ on: cfg.donut }" role="switch" :aria-checked="cfg.donut"
+                    @click.prevent="cfg.donut = !cfg.donut"><i /></button>
+                </label>
+
+                <label v-if="isPie" class="tgl-row">
+                  <span class="tgl-txt">
                     <b>Data labels</b>
                     <em>Print each slice’s value on the chart itself.</em>
                   </span>
@@ -645,7 +672,7 @@ function save(place) {
 
               <!-- Highlights (also the only editable section for a predefined widget).
                    New kinds carry their own (Gauge Range) or don't use it. -->
-              <div v-if="(manualMode && !isNewKind) || predefinedEdit" class="sec">
+              <div v-if="(manualMode && !isNewKind && !isText) || predefinedEdit" class="sec">
                 <div class="sec-h">Highlights</div>
                 <p class="hint">Color the value when it crosses a threshold.</p>
                 <button class="add-line"><Icon name="plus" :size="14" /> Add Highlights</button>
@@ -706,6 +733,7 @@ function save(place) {
 .pv-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; }
 .pv-canvas { flex: 1; display: grid; place-items: center; padding: 22px; min-height: 0; }
 .pv-canvas > * { width: 100%; }
+.pv-text { align-self: stretch; max-height: 100%; overflow: auto; }
 .pv-kpi { font-size: 72px; font-weight: 700; letter-spacing: -2px; text-align: center; }
 .pv-kpi .d { font-size: 20px; color: var(--green); margin-left: 12px; font-weight: 600; }
 .pv-tbl { width: 100%; border-collapse: collapse; font-size: 13px; align-self: start; }

@@ -43,6 +43,9 @@ export const chart = (title, data, info) =>
   ({ id: uid('t'), type: 'chart', title, info, chart: data, w: 6, h: 2 })
 export const shortcut = (title, columns, rows, info) =>
   ({ id: uid('t'), type: 'shortcut', title, info, columns, rows, w: 6, h: 2 })
+// Free Text tile (§4 Free Text) — banner/annotation text, no data query. Wider than tall.
+export const text = (title, content, info) =>
+  ({ id: uid('t'), type: 'text', title, info, content, w: 4, h: 1 })
 
 // Share-widget recipients (technicians + technician groups)
 export const TECHNICIANS = [
