@@ -6,7 +6,7 @@ import ChartTile from './ChartTile.vue'
 import MeasureConditions from './MeasureConditions.vue'
 import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut } from '../../data/mock.js'
-import { CONDITION_FIELD_LABELS, NUMERIC_FIELD_LABELS, AGG_FNS } from '../../data/records.js'
+import { CONDITION_FIELD_LABELS, NUMERIC_FIELD_LABELS, AGG_FNS, MAP_FNS } from '../../data/records.js'
 import { NEW_KINDS } from '../../data/chartOptions.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
 const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary', 'duplicated'])
@@ -32,6 +32,8 @@ const TYPES = [
   { id: 'combo', label: 'Combo', icon: 'chart-combo', type: 'chart', kind: 'combo' },
   { id: 'hist', label: 'Histogram', icon: 'chart-hist', type: 'chart', kind: 'hist' },
   { id: 'funnel', label: 'Funnel', icon: 'chart-funnel', type: 'chart', kind: 'funnel' },
+  { id: 'heatmap', label: 'Heatmap', icon: 'chart-heatmap', type: 'chart', kind: 'heatmap' },
+  { id: 'gauge', label: 'Gauge', icon: 'chart-gauge', type: 'chart', kind: 'gauge' },
   { id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null },
   { id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null },
 ]
@@ -143,7 +145,7 @@ function initCfg() {
     legend: ex?.legend !== false,
     dataLabels: ex?.dataLabels === true,
     // ── PMG-ACT-01 additional-kind config (prefilled from the tile's saved spec) ──
-    conds: ex?.chart?.spec?.conds ? ex.chart.spec.conds.map((c) => ({ ...c })) : [],
+    conds: (ex?.chart?.spec?.conds || ex?.chart?.spec?.measure?.conds || []).map((c) => ({ ...c })),
     stackXDim: ex?.chart?.spec?.xDim || 'Priority',
     stackSplit: ex?.chart?.spec?.splitDim || 'Status',
     stackMode: ex?.chart?.spec?.stackMode || 'stacked',
@@ -155,6 +157,20 @@ function initCfg() {
     histField: ex?.chart?.spec?.histField || 'Resolution time',
     histBucket: ex?.chart?.spec?.histBucket || 4,
     stageField: ex?.chart?.spec?.stageField || 'Status',
+    // heatmap (§4.5)
+    heatX: ex?.chart?.spec?.heatX || 'Priority',
+    heatY: ex?.chart?.spec?.heatY || 'Team',
+    heatFn: ex?.chart?.spec?.heatFn || 'Count',
+    heatField: ex?.chart?.spec?.heatField || 'Resolution time',
+    // gauge (§4.8) — its own base + numerator condition sets
+    gaugeMode: ex?.chart?.spec?.measure?.mode || 'count',
+    gaugeFn: ex?.chart?.spec?.measure?.fn || 'Average',
+    gaugeField: ex?.chart?.spec?.measure?.field || 'CSAT score',
+    gaugeNumConds: ex?.chart?.spec?.measure?.numConds ? ex.chart.spec.measure.numConds.map((c) => ({ ...c })) : [],
+    gaugeMax: ex?.chart?.spec?.gaugeMax || '',
+    gaugeHigherBetter: ex?.chart?.spec?.invert === true,
+    gaugeWarnAt: ex?.chart?.spec?.warnAt ?? 70,
+    gaugeBadAt: ex?.chart?.spec?.badAt ?? 90,
   }
 }
 const isPie = computed(() => curType.value.kind === 'donut')
@@ -167,8 +183,16 @@ const chartSpec = computed(() => {
   if (k === 'combo') return { kind: 'combo', xDim: cfg.comboXDim, comboFn: cfg.comboFn, comboField: cfg.comboField, conds: cfg.conds }
   if (k === 'hist') return { kind: 'hist', histField: cfg.histField, histBucket: cfg.histBucket, conds: cfg.conds }
   if (k === 'funnel') return { kind: 'funnel', stageField: cfg.stageField, conds: cfg.conds }
+  if (k === 'heatmap') return { kind: 'heatmap', heatX: cfg.heatX, heatY: cfg.heatY, heatFn: cfg.heatFn, heatField: cfg.heatField, conds: cfg.conds }
+  if (k === 'gauge') return {
+    kind: 'gauge',
+    measure: { mode: cfg.gaugeMode, fn: cfg.gaugeFn, field: cfg.gaugeField, conds: cfg.conds, numConds: cfg.gaugeNumConds },
+    warnAt: cfg.gaugeWarnAt, badAt: cfg.gaugeBadAt, invert: cfg.gaugeHigherBetter, gaugeMax: cfg.gaugeMax,
+  }
   return null
 })
+// heatmap and gauge carry no legend / Top-N — their Display section is suppressed
+const noDisplay = computed(() => ['heatmap', 'gauge'].includes(curType.value.kind))
 const rankN = computed({
   get: () => cfg.rankN,
   // keep it a number and never let it reach 0 — a chart of nothing is not a view
@@ -442,9 +466,9 @@ function save(place) {
                 </div>
               </div>
 
-              <!-- Series / Buckets / Stages — the additional PMG-ACT-01 kinds (§4). -->
-              <div v-if="isChart && manualMode && isNewKind" class="sec">
-                <div class="sec-h">{{ curType.kind === 'hist' ? 'Buckets' : curType.kind === 'funnel' ? 'Stages' : 'Series' }}</div>
+              <!-- Series / Buckets / Stages / Matrix — the additional PMG-ACT-01 kinds (§4). -->
+              <div v-if="isChart && manualMode && isNewKind && curType.kind !== 'gauge'" class="sec">
+                <div class="sec-h">{{ curType.kind === 'hist' ? 'Buckets' : curType.kind === 'funnel' ? 'Stages' : curType.kind === 'heatmap' ? 'Matrix' : 'Series' }}</div>
                 <!-- Stacked / Grouped (§4.1) -->
                 <template v-if="curType.kind === 'stack'">
                   <div class="grid2">
@@ -489,7 +513,70 @@ function save(place) {
                   <div class="fld"><label>Stage field <i>*</i></label><Dropdown v-model="cfg.stageField" :options="CONDITION_FIELD_LABELS" /></div>
                   <p class="hint">Stages keep the field's defined order — never alphabetical. Each band counts records that reached that stage or beyond, shown as a share of the first.</p>
                 </template>
+                <!-- Heatmap (§4.5) — Columns × Rows grid, cell = count or an aggregate -->
+                <template v-else-if="curType.kind === 'heatmap'">
+                  <div class="grid2">
+                    <div class="fld"><label>Columns <i>*</i></label><Dropdown v-model="cfg.heatX" :options="CONDITION_FIELD_LABELS" /></div>
+                    <div class="fld"><label>Rows <i>*</i></label><Dropdown v-model="cfg.heatY" :options="CONDITION_FIELD_LABELS" /></div>
+                  </div>
+                  <div class="grid2">
+                    <div class="fld"><label>Cell value <i>*</i></label><Dropdown v-model="cfg.heatFn" :options="MAP_FNS" /></div>
+                    <div v-if="cfg.heatFn !== 'Count'" class="fld"><label>Field <i>*</i></label><Dropdown v-model="cfg.heatField" :options="NUMERIC_FIELD_LABELS" /></div>
+                  </div>
+                  <p class="hint">{{ cfg.heatFn === 'Count'
+                    ? 'Record count per cell, colour-scaled across the grid.'
+                    : `${cfg.heatFn} of ${cfg.heatField} per cell, colour-scaled across the grid. A cell with no matching value reads as 0.` }}</p>
+                </template>
               </div>
+
+              <!-- Gauge (§4.8) — Measurement + Gauge Range, with its own condition editors -->
+              <template v-if="curType.kind === 'gauge' && manualMode">
+                <div class="sec">
+                  <div class="sec-h">Measurement</div>
+                  <div class="seg">
+                    <button class="seg-b" :class="{ on: cfg.gaugeMode==='count' }" @click="cfg.gaugeMode='count'">Count</button>
+                    <button class="seg-b" :class="{ on: cfg.gaugeMode==='aggregate' }" @click="cfg.gaugeMode='aggregate'">Aggregate</button>
+                    <button class="seg-b" :class="{ on: cfg.gaugeMode==='percentage' }" @click="cfg.gaugeMode='percentage'">Percentage</button>
+                  </div>
+                  <div v-if="cfg.gaugeMode==='aggregate'" class="grid2">
+                    <div class="fld"><label>Function</label><Dropdown v-model="cfg.gaugeFn" :options="AGG_FNS" /></div>
+                    <div class="fld"><label>Field</label><Dropdown v-model="cfg.gaugeField" :options="NUMERIC_FIELD_LABELS" /></div>
+                  </div>
+                  <template v-if="cfg.gaugeMode==='percentage'">
+                    <div class="fld" style="margin-top:12px">
+                      <label>Base conditions</label>
+                      <p class="hint" style="margin:0 0 8px">The base set — the denominator. Leave empty to measure against every record.</p>
+                      <MeasureConditions v-model="cfg.conds" empty-text="No base conditions — every record counts." />
+                    </div>
+                    <div class="fld" style="margin-top:12px">
+                      <label>Numerator</label>
+                      <p class="hint" style="margin:0 0 8px">The share of the base that also meets these — the numerator.</p>
+                      <MeasureConditions v-model="cfg.gaugeNumConds" empty-text="No numerator conditions yet." />
+                    </div>
+                  </template>
+                  <div v-else class="fld" style="margin-top:12px">
+                    <label>Conditions</label>
+                    <p class="hint" style="margin:0 0 8px">Filter the records this meter measures. If none are set, all records are counted.</p>
+                    <MeasureConditions v-model="cfg.conds" />
+                  </div>
+                </div>
+                <div class="sec">
+                  <div class="sec-h">Gauge Range</div>
+                  <div class="grid2">
+                    <div class="fld"><label>Max</label><input class="input" type="number" min="0" v-model="cfg.gaugeMax" placeholder="Auto" /></div>
+                  </div>
+                  <label class="tgl-row" style="margin-top:12px">
+                    <span class="tgl-txt"><b>Higher is better</b><em>Flip the bands so the top of the range is green, not red.</em></span>
+                    <button class="tgl" :class="{ on: cfg.gaugeHigherBetter }" role="switch" :aria-checked="cfg.gaugeHigherBetter"
+                      @click.prevent="cfg.gaugeHigherBetter = !cfg.gaugeHigherBetter"><i /></button>
+                  </label>
+                  <div class="grid2">
+                    <div class="fld"><label>Amber from</label><input class="input" type="number" v-model.number="cfg.gaugeWarnAt" /></div>
+                    <div class="fld"><label>{{ cfg.gaugeHigherBetter ? 'Green from' : 'Red from' }}</label><input class="input" type="number" v-model.number="cfg.gaugeBadAt" /></div>
+                  </div>
+                  <p class="hint">The bands come from these thresholds — the meter analog of KPI Highlights.</p>
+                </div>
+              </template>
 
               <!-- Data Configuration -->
               <div v-if="manualMode" class="sec">
@@ -505,7 +592,7 @@ function save(place) {
                 <p class="hint">Add conditions to filter records. If none are set, all records are counted.</p>
                 <button class="add-line"><Icon name="plus" :size="14" /> Add Condition</button>
               </div>
-              <div v-if="isChart && manualMode && isNewKind" class="sec">
+              <div v-if="isChart && manualMode && isNewKind && curType.kind !== 'gauge'" class="sec">
                 <div class="sec-h">Conditions</div>
                 <p class="hint">Filter the records this widget plots. Rows are ANDed; leave empty to count every record.</p>
                 <MeasureConditions v-model="cfg.conds" />
@@ -517,7 +604,7 @@ function save(place) {
                    configuration like any other. (This means a predefined widget's legend
                    can no longer be turned off anywhere — "Hide legend" left the ⋯ menu
                    too. That is the rule as stated.) -->
-              <div v-if="isChart && !predefinedEdit" class="sec">
+              <div v-if="isChart && !predefinedEdit && !noDisplay" class="sec">
                 <div class="sec-h">Display</div>
 
                 <div v-if="manualMode && !isNewKind" class="fld">
@@ -556,8 +643,9 @@ function save(place) {
                 <label v-if="manualMode && !predefinedEdit" class="toggle"><span>Exclude Zero Count Values</span><button class="sw" :class="{ on: cfg.excludeZero }" @click="cfg.excludeZero=!cfg.excludeZero"><i /></button></label>
               </div>
 
-              <!-- Highlights (also the only editable section for a predefined widget) -->
-              <div v-if="manualMode || predefinedEdit" class="sec">
+              <!-- Highlights (also the only editable section for a predefined widget).
+                   New kinds carry their own (Gauge Range) or don't use it. -->
+              <div v-if="(manualMode && !isNewKind) || predefinedEdit" class="sec">
                 <div class="sec-h">Highlights</div>
                 <p class="hint">Color the value when it crosses a threshold.</p>
                 <button class="add-line"><Icon name="plus" :size="14" /> Add Highlights</button>

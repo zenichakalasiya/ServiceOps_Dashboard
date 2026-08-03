@@ -11,7 +11,9 @@
  * uses it to decide whether to compute from a spec or from labels/series, and the
  * builder uses it to pick the right config sections. Grows one batch at a time.
  */
-export const NEW_KINDS = new Set(['stack', 'multiline', 'combo', 'hist', 'funnel'])
+import { gaugeBands, niceCeil } from './records.js'
+
+export const NEW_KINDS = new Set(['stack', 'multiline', 'combo', 'hist', 'funnel', 'heatmap', 'gauge'])
 
 // a native ECharts legend, styled to match the product (used by the multi-series
 // new kinds; single-series kinds omit it, funnel prints its labels on the bands)
@@ -234,6 +236,79 @@ export function optFunnel(out, spec, t) {
   }
 }
 
+// ── Heatmap (§4.5) ────────────────────────────────────────────────────────────────
+// Columns × Rows grid; each cell coloured on a hidden 0→max visualMap ramp and
+// printed with its own value. First row sits at the TOP (yAxis inverse).
+export function optHeatmap(out, spec, t) {
+  const maxVal = Math.max(1, out.max)   // stable ramp even for an all-zero / single-value grid
+  return {
+    tooltip: {
+      ...tipBox(t),
+      formatter: (p) => {
+        const col = out.cols[p.value[0]], row = out.rows[p.value[1]]
+        return `<div style="color:${t.ink};font-weight:600;margin-bottom:2px">${row} × ${col}</div>`
+          + `<div style="white-space:nowrap;color:${t.ink2}">${p.value[2]}${out.unit}</div>`
+      },
+    },
+    grid: { left: 6, right: 14, top: 14, bottom: 4, containLabel: true },
+    xAxis: {
+      type: 'category', data: out.cols, splitArea: { show: false },
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: { color: t.muted, fontSize: 11, fontFamily: t.font },
+    },
+    yAxis: {
+      type: 'category', data: out.rows, inverse: true, splitArea: { show: false },
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: { color: t.muted, fontSize: 11, fontFamily: t.font },
+    },
+    visualMap: { show: false, min: 0, max: maxVal, calculable: false, dimension: 2, inRange: { color: ['#eef4fb', t.primary] } },
+    series: [{
+      type: 'heatmap', data: out.data,
+      label: { show: true, fontSize: 10, fontFamily: t.font, color: t.ink2, formatter: (p) => `${p.value[2]}` },
+      itemStyle: { borderColor: t.surface, borderWidth: 2 },
+      emphasis: { itemStyle: { shadowBlur: 8, shadowColor: 'rgba(27,28,46,.20)' } },
+      animation: true, animationDuration: 900, animationEasing: 'cubicOut',
+    }],
+    animationDurationUpdate: 300, animationEasingUpdate: 'cubicOut',
+  }
+}
+
+// ── Gauge (§4.8) ──────────────────────────────────────────────────────────────────
+// A single measurement on a coloured-band arc. Max auto-ceilings ~25% above the value
+// (Percentage pins to 100); bands come from records.js gaugeBands (the KPI-Highlights
+// analog). out = chartData(gauge spec) = measurement(...) enriched.
+export function optGauge(out, spec, t) {
+  const m = spec.measure || {}
+  const isPct = m.mode === 'percentage'
+  const val = out?.value == null ? 0 : out.value
+  const unit = out?.unit || ''
+  const userMax = Number(spec.gaugeMax)
+  const max = isPct ? 100 : (userMax > 0 ? userMax : niceCeil(val * 1.25))
+  const bands = gaugeBands(max, spec.warnAt, spec.badAt, spec.invert)
+  const stops = bands.length ? bands.map((b) => [b.to, b.color]) : [[1, t.muted]]
+  return {
+    animation: true, animationDuration: 1400, animationEasing: 'cubicOut', animationDelay: ENTER_DELAY,
+    series: [{
+      type: 'gauge', startAngle: 205, endAngle: -25, min: 0, max, radius: '92%', center: ['50%', '60%'],
+      progress: { show: false },
+      axisLine: { lineStyle: { width: 14, color: stops } },
+      pointer: { length: '62%', width: 5, itemStyle: { color: t.ink } },
+      anchor: { show: true, size: 14, showAbove: true, itemStyle: { color: t.surface, borderColor: t.ink, borderWidth: 2 } },
+      axisTick: { distance: -14, length: 4, lineStyle: { color: t.surface, width: 1 } },
+      splitLine: { distance: -14, length: 14, lineStyle: { color: t.surface, width: 2 } },
+      splitNumber: 5,
+      axisLabel: { distance: 16, color: t.muted, fontSize: 10, fontFamily: t.font },
+      title: { show: false },
+      detail: {
+        valueAnimation: true, offsetCenter: [0, '40%'],
+        formatter: (v) => `${(v == null ? 0 : v).toFixed(1)}${unit}`,
+        color: t.ink, fontSize: 30, fontWeight: 700, fontFamily: t.font,
+      },
+      data: [{ value: val }],
+    }],
+  }
+}
+
 // kind → option builder. ChartTile calls CHART_OPT[kind](out, spec, t). Grows per batch.
 export const CHART_OPT = {
   stack: optStacked,
@@ -241,4 +316,6 @@ export const CHART_OPT = {
   combo: optCombo,
   hist: optHist,
   funnel: optFunnel,
+  heatmap: optHeatmap,
+  gauge: optGauge,
 }

@@ -31,6 +31,8 @@ const GROUPS = [
     { id: 'combo', label: 'Combo', icon: 'chart-combo', type: 'chart', kind: 'combo' },
     { id: 'hist', label: 'Histogram', icon: 'chart-hist', type: 'chart', kind: 'hist' },
     { id: 'funnel', label: 'Funnel', icon: 'chart-funnel', type: 'chart', kind: 'funnel' },
+    { id: 'heatmap', label: 'Heatmap', icon: 'chart-heatmap', type: 'chart', kind: 'heatmap' },
+    { id: 'gauge', label: 'Gauge', icon: 'chart-gauge', type: 'chart', kind: 'gauge' },
   ] },
   { cat: 'KPI', types: [{ id: 'kpi', label: 'KPI', icon: 'kpi', type: 'kpi', kind: null }] },
   { cat: 'Shortcut', types: [{ id: 'shortcut', label: 'Shortcut', icon: 'table', type: 'shortcut', kind: null }] },

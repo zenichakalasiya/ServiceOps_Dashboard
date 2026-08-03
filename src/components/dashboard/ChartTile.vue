@@ -29,8 +29,8 @@
 import { computed, ref, shallowRef, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, LineChart, PieChart, FunnelChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { BarChart, LineChart, PieChart, FunnelChart, HeatmapChart, GaugeChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GraphicComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { store } from '../../store'
 import Icon from '../ui/Icon.vue'
@@ -39,8 +39,10 @@ import { chartData } from '../../data/records.js'
 import { CHART_OPT, NEW_KINDS } from '../../data/chartOptions.js'
 
 // Register only what we render. MarkLine/MarkArea come back with SLA threshold
-// bands; DataZoom went out with the ranked-bar re-encode.
-use([CanvasRenderer, BarChart, LineChart, PieChart, FunnelChart, GridComponent, TooltipComponent, LegendComponent])
+// bands; DataZoom went out with the ranked-bar re-encode. Heatmap+VisualMap (heatmap),
+// Gauge (gauge) and Graphic (the donut centre total) are the PMG-ACT-01 additions.
+use([CanvasRenderer, BarChart, LineChart, PieChart, FunnelChart, HeatmapChart, GaugeChart,
+  GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, GraphicComponent])
 
 const props = defineProps({
   chart: Object,
