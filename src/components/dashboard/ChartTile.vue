@@ -55,21 +55,37 @@ const props = defineProps({
  * swatch and as a thin donut arc. The old palette opened with two blues
  * (#3d8bd0, #3279be) that were indistinguishable — anti-pattern 14 in
  * docs/chart-library-and-competitor-dashboard-research.md.
- * Beyond 10 series colour stops carrying meaning; the legend must. */
-const PAL = [
-  '#3d8bd0', '#1f9d63', '#d98a0b', '#e0483d', '#8b5cf6',
-  '#16b1c4', '#d9488f', '#6b7f95', '#7a9a01', '#b8560f',
-]
-const OTHER_COLOR = '#9aa8b8'
+ * Beyond 10 series colour stops carrying meaning; the legend must.
+ *
+ * The values live in tokens.css as --chart-1..10 / --chart-other, with a lifted
+ * dark set. They used to be hardcoded here, which made the chart palette the one
+ * part of the UI that ignored the theme — the same #8b5cf6 the token file already
+ * knew to lift to #a78bfa on dark. Read them through `tokens` (below) so a theme
+ * switch repaints the chart; never reintroduce a literal hex in this file. */
+const PAL_STOPS = 10
 
 /* Priority and Status are ordinal/semantic, not nominal — painting P1 calm-blue
- * because it happens to be slice 0 is confidently wrong. These win over PAL. */
-const SEMANTIC = {
-  p1: '#e0483d', p2: '#d98a0b', p3: '#3d8bd0', p4: '#8fa3b8',
-  open: '#3d8bd0', 'in progress': '#d98a0b', pending: '#3d8bd0',
-  resolved: '#1f9d63', closed: '#1f9d63', compliant: '#1f9d63',
-  breached: '#e0483d', overdue: '#e0483d', failed: '#e0483d', critical: '#e0483d',
+ * because it happens to be slice 0 is confidently wrong. These win over PAL.
+ * Values are token *names* resolved per-theme, not hexes. P4 shares the slate
+ * stop: a semantic chart never also spends nominal stop 8, so they can't collide. */
+const SEMANTIC_TOKEN = {
+  p1: 4, p2: 3, p3: 1, p4: 8,
+  open: 1, 'in progress': 3, pending: 1,
+  resolved: 2, closed: 2, compliant: 2,
+  breached: 4, overdue: 4, failed: 4, critical: 4,
 }
+
+/* Theme tokens read at runtime. Declared HERE — above baseColor / otherRow — so
+ * nothing references pal/otherColor in their temporal dead zone (the production
+ * bundle was hitting exactly that: "Cannot access 'U' before initialization").
+ * A theme switch bumps themeTick to repaint the chart. */
+const themeTick = ref(0)
+watch(() => store.ui.theme, () => { themeTick.value++ })
+const cssVar = (n, f) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f
+/* --chart-1..10 categorical stops + --chart-other (see tokens.css); replaces the old
+ * hardcoded PAL array / OTHER_COLOR — read through cssVar so light/dark repaints. */
+const pal = computed(() => { themeTick.value; return Array.from({ length: PAL_STOPS }, (_, i) => cssVar('--chart-' + (i + 1), '#3d8bd0')) })
+const otherColor = computed(() => { themeTick.value; return cssVar('--chart-other', '#7d8ea3') })
 
 const HIGH_CARD = 12
 
@@ -85,7 +101,8 @@ const sliceBased = computed(() => SLICE_KINDS.includes(kind.value))
  * charts, series for multi-series charts. Everything below works on these. --- */
 const overrides = ref({})
 function baseColor(name, i) {
-  return overrides.value[name] || SEMANTIC[String(name).toLowerCase()] || PAL[i % PAL.length]
+  const sem = SEMANTIC_TOKEN[String(name).toLowerCase()]
+  return overrides.value[name] || (sem ? pal.value[sem - 1] : null) || pal.value[i % PAL_STOPS]
 }
 const entities = computed(() => {
   if (sliceBased.value) {
@@ -144,7 +161,7 @@ const windowed = computed(() => {
 })
 const otherCount = computed(() => entities.value.length - windowed.value.length)
 const otherValue = computed(() => trueTotal.value - windowed.value.reduce((a, e) => a + e.value, 0))
-const otherRow = computed(() => ({ key: '__other', name: `Other (${otherCount.value})`, value: otherValue.value, color: OTHER_COLOR }))
+const otherRow = computed(() => ({ key: '__other', name: `Other (${otherCount.value})`, value: otherValue.value, color: otherColor.value }))
 const censusLabel = computed(() => {
   const n = windowed.value.length, t = entities.value.length
   if (rankMode.value === 'all') return `All ${t}`
@@ -170,10 +187,8 @@ const manageable = computed(() => {
 /* Disabling a series removes it from the chart in every mode. */
 const plotted = computed(() => manageable.value.filter((e) => !hidden.value.has(e.key)))
 
-/* --- theme: read design tokens at runtime so dark mode Just Works --- */
-const themeTick = ref(0)
-watch(() => store.ui.theme, () => { themeTick.value++ })
-const cssVar = (n, f) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f
+/* --- theme: chart text/surface tokens (themeTick, cssVar, pal, otherColor are
+ * declared up top, above baseColor, to avoid a TDZ). Repaints via themeTick. --- */
 const tokens = computed(() => {
   themeTick.value
   return {
@@ -543,7 +558,7 @@ onBeforeUnmount(() => {
       <!-- ② only: the "Other" residue spelled out beneath the chart -->
       <div v-if="mode === 2 && !sideLegend" class="census">
         <span v-if="otherCount > 0" class="cs-note">
-          <i :style="{ background: OTHER_COLOR }" /> Other = {{ otherCount }} more ({{ pctOf(otherValue) }}% of total)
+          <i :style="{ background: otherColor }" /> Other = {{ otherCount }} more ({{ pctOf(otherValue) }}% of total)
         </span>
       </div>
 

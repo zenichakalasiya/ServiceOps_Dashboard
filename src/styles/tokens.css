@@ -14,6 +14,22 @@
   --red: #e0483d;    --red-soft: #fdecea;
   --blue: #3279be;   --blue-soft: #e7f0f9;
 
+  /* ── Chart palette ──────────────────────────────────────────────────────────
+     Theme-aware on purpose. The same hex that reads well on white blooms on the
+     dark surface, so every stop has a lifted dark counterpart below — the same
+     discipline --ai already follows. Chart fills are large-area non-text, so the
+     bar is 3:1 against their own surface; every stop clears it, and adjacent
+     stops stay >40 ΔE apart so they separate at a 9px legend swatch.
+     Read at runtime by ChartTile.vue — never hardcode a chart hex in a component. */
+  --chart-1: #3d8bd0;  --chart-2: #1f9d63;  --chart-3: #b7740a;  --chart-4: #e0483d;
+  --chart-5: #7c4ddb;  --chart-6: #0e8fa0;  --chart-7: #c93b7d;  --chart-8: #5d7189;
+  --chart-9: #6b8600;  --chart-10: #b8560f;
+  /* the "+N more" remainder arc. Kept quiet, but it is the largest area on a
+     truncated donut, so it still has to clear 3:1. On light it can only get
+     ~12 ΔE from --chart-8 before it drops under that bar; the remainder is
+     always named in the legend, so colour is not carrying it alone. */
+  --chart-other: #7d8ea3;
+
   /* Date-scope accent — a "time" hue reserved for per-widget date overrides.
      Indigo: distinct from primary sky-blue, from status red/amber/green, and from
      the AI purple/pink gradient, so an override reads as its own kind of thing. */
@@ -78,6 +94,16 @@
   --primary-softer: #0c2937;
 
   --green-soft: #133227; --amber-soft: #332811; --red-soft: #3a1f1d; --blue-soft: #122844;
+
+  /* Chart palette — dark: every stop lifted/desaturated so it clears 3:1 on
+     --surface (#1d1d27) without blooming. --chart-5 lands on the same #a78bfa
+     as --ai, which is the value this file already proved right for dark. */
+  --chart-1: #5aa3e0;  --chart-2: #35b87a;  --chart-3: #e0a020;  --chart-4: #ef6a5f;
+  --chart-5: #a78bfa;  --chart-6: #2cc7d9;  --chart-7: #ef6ba6;  --chart-8: #94a7bd;
+  --chart-9: #9bbd1a;  --chart-10: #d9701f;
+  /* darker than the slate stop, not lighter — on dark the quiet colour is the
+     recessive one, and #9aa8b8 sat only 3.7 ΔE from --chart-8 (indistinguishable) */
+  --chart-other: #6d7a8a;
 
   /* Date-scope accent — dark */
   --df: #8b90ee;  --df-ink: #b6b9f4;  --df-soft: #1e2040;  --df-line: #363a6b;
