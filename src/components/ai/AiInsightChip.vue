@@ -29,7 +29,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 <template>
   <div class="chip-wrap">
     <button class="ai-chip" :class="{ on: open }" :aria-expanded="open" title="AI insights" @click.stop="open = !open">
-      <Icon name="sparkles" :size="15" /><span v-if="count" class="ai-chip-n">{{ count }}</span>
+      <Icon name="sparkles" :size="15" /><span class="ai-chip-l">AI Insights</span><span v-if="count" class="ai-chip-n">{{ count }}</span>
     </button>
     <div v-if="open" class="pop-backdrop" @click="open = false" />
     <transition name="pop">
@@ -55,7 +55,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box;
 }
 .ai-chip :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
-.ai-chip-n { font-size: 12.5px; font-weight: 700; color: var(--ai-ink); font-variant-numeric: tabular-nums; }
+/* the button names itself, as the design does — an icon plus a bare number said what
+   there was but never what it was */
+.ai-chip-l { font-size: 12.5px; font-weight: 600; color: var(--ai-ink); white-space: nowrap; }
+/* the count still rides along: it is the one thing the label cannot carry */
+.ai-chip-n { min-width: 17px; height: 17px; padding: 0 5px; display: grid; place-items: center; border-radius: 999px; background: var(--ai-soft); font-size: 11px; font-weight: 700; color: var(--ai-ink); font-variant-numeric: tabular-nums; }
 .ai-chip:hover, .ai-chip.on { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 .pop-backdrop { position: fixed; inset: 0; z-index: 40; }
 .ai-pop {
