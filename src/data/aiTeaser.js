@@ -30,6 +30,8 @@ export function useAiTeaser(getBoard) {
 // assistant with its own intent (analyzing = full-dashboard insights).
 export const AI_TEASER_CTAS = [
   { label: 'Insights with AI', intent: 'analyzing', icon: 'sparkles', primary: true },
-  { label: 'Every widget explained', intent: 'widgets', icon: 'auto-graph' },
+  // "What needs attention" is wired to the `summary` intent so the button does what it
+  // says — surfaces the attention facts, not the every-widget rundown.
+  { label: 'What needs attention', intent: 'summary', icon: 'auto-graph' },
   { label: 'Add a new widget', intent: 'suggestwidget', icon: 'plus' },
 ]

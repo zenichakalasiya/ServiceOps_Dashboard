@@ -208,8 +208,7 @@ export function widgetBrief(tile) {
     else if (t.status === 'warn') parts.push(`It's sitting just outside the comfortable range — not alarming yet, but worth keeping an eye on.`)
     else if (t.delta) parts.push(`That keeps it within its normal range, so nothing here needs action right now.`)
     return { summary: parts.join(' '), actions: [
-      { label: 'Why did it change?', intent: 'explain', text: `Why did ${t.title} change?` },
-      { label: 'Show the records', intent: 'drill', text: `Show the records behind ${t.title}` },
+      { label: 'Deep dive', intent: 'drill', text: `Show the records behind ${t.title}` },
     ] }
   }
   if (t.type === 'shortcut') {
@@ -224,8 +223,7 @@ export function widgetBrief(tile) {
     else if (open) parts.push(`${open} ${open === 1 ? 'is' : 'are'} still open, sorted with the most recent first.`)
     else parts.push('Everything here is in hand — nothing is flagged as urgent.')
     return { summary: parts.join(' '), actions: [
-      { label: 'Prioritize these', intent: 'drill', text: `Prioritize ${t.title}` },
-      { label: 'Find similar tickets', intent: 'drill', text: `Find tickets similar to those in ${t.title}` },
+      { label: 'Deep dive', intent: 'drill', text: `Prioritize ${t.title}` },
     ] }
   }
   // chart — a WRITTEN summary of the shape of the data, not a copy of the legend.
@@ -237,8 +235,7 @@ export function widgetBrief(tile) {
   const labels = ch.labels || derived?.labels || []
   const summary = chartSummary(ch, series, labels)
   return { summary, actions: [
-    { label: 'Explain the trend', intent: 'explain', text: `Explain the trend in ${t.title}` },
-    { label: 'Break it down', intent: 'drill', text: `Break down ${t.title} by category` },
+    { label: 'Deep dive', intent: 'drill', text: `Break down ${t.title} by category` },
   ] }
 }
 
