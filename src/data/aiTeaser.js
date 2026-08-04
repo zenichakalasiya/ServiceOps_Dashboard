@@ -26,12 +26,10 @@ export function useAiTeaser(getBoard) {
   return { board, attention, count, summary }
 }
 
-// the three deep-dive CTAs, in the order every placement shows them. Each opens the real
-// assistant with its own intent (analyzing = full-dashboard insights).
+// two CTAs, in the order every placement shows them. Each opens the real assistant with
+// its own intent: Deep dive = full-dashboard analysis (`analyzing`); What needs attention
+// = the attention facts triage (`summary`).
 export const AI_TEASER_CTAS = [
-  { label: 'Insights with AI', intent: 'analyzing', icon: 'sparkles', primary: true },
-  // "What needs attention" is wired to the `summary` intent so the button does what it
-  // says — surfaces the attention facts, not the every-widget rundown.
-  { label: 'What needs attention', intent: 'summary', icon: 'auto-graph' },
-  { label: 'Add a new widget', intent: 'suggestwidget', icon: 'plus' },
+  { label: 'Deep dive', intent: 'analyzing', icon: 'auto-graph', primary: true },
+  { label: 'What needs attention', intent: 'summary', icon: 'sparkles' },
 ]

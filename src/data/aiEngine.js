@@ -209,6 +209,7 @@ export function widgetBrief(tile) {
     else if (t.delta) parts.push(`That keeps it within its normal range, so nothing here needs action right now.`)
     return { summary: parts.join(' '), actions: [
       { label: 'Deep dive', intent: 'drill', text: `Show the records behind ${t.title}` },
+      { label: 'What needs attention', intent: 'explain', text: `What needs attention in ${t.title}?` },
     ] }
   }
   if (t.type === 'shortcut') {
@@ -224,6 +225,7 @@ export function widgetBrief(tile) {
     else parts.push('Everything here is in hand — nothing is flagged as urgent.')
     return { summary: parts.join(' '), actions: [
       { label: 'Deep dive', intent: 'drill', text: `Prioritize ${t.title}` },
+      { label: 'What needs attention', intent: 'explain', text: `What needs attention in ${t.title}?` },
     ] }
   }
   // chart — a WRITTEN summary of the shape of the data, not a copy of the legend.
@@ -236,6 +238,7 @@ export function widgetBrief(tile) {
   const summary = chartSummary(ch, series, labels)
   return { summary, actions: [
     { label: 'Deep dive', intent: 'drill', text: `Break down ${t.title} by category` },
+    { label: 'What needs attention', intent: 'explain', text: `What needs attention in ${t.title}?` },
   ] }
 }
 
