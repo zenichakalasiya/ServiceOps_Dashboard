@@ -58,6 +58,44 @@ const rows = computed(() => {
 
 const shownCount = computed(() => props.entities.length - props.hidden.size)
 const pct = (v) => ((v / props.total) * 100).toFixed(1)
+
+/* ---- colour picker -----------------------------------------------------------
+ * Two targets in one row, so each needs its own verb: the NAME toggles the series
+ * (the row's job), the SWATCH recolours it. The swatch therefore stops propagation —
+ * without that, picking a colour would also hide the series you just coloured.
+ *
+ * The palette offered is the chart's own --chart-1..10 stops, not a free spectrum:
+ * those are the values picked to stay separable at a 9px legend swatch, so choosing
+ * from them keeps a recoloured chart as readable as a default one. A native input is
+ * kept as the escape hatch for anything outside the set.
+ *
+ * Teleported: the row sits inside .sm-list, which scrolls (overflow: auto), so a
+ * popover anchored in-flow would be clipped by the list it belongs to. */
+const pickFor = ref(null)                       // entity key whose picker is open
+const pickPos = ref({ top: 0, left: 0 })
+const CP_W = 172
+const cssVar = (n, f) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f
+const palette = computed(() => [
+  ...Array.from({ length: 10 }, (_, i) => cssVar('--chart-' + (i + 1), '#3d8bd0')),
+  cssVar('--chart-other', '#7d8ea3'),
+])
+const colorOf = (key) => props.entities.find((e) => e.key === key)?.color || '#3d8bd0'
+const sameColor = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
+
+function openPick(key, ev) {
+  if (pickFor.value === key) { pickFor.value = null; return }
+  const r = ev.currentTarget.getBoundingClientRect()
+  pickPos.value = {
+    top: Math.min(r.bottom + 8, window.innerHeight - 176),
+    left: Math.max(8, Math.min(r.left - 10, window.innerWidth - CP_W - 8)),
+  }
+  pickFor.value = key
+}
+// a swatch closes the picker; the native input streams while dragging, so it doesn't
+function choose(color) { emit('recolor', { key: pickFor.value, color }); pickFor.value = null }
+function setCustom(color) { emit('recolor', { key: pickFor.value, color }) }
+// the list scrolls under an open picker, which would leave it pointing at nothing
+watch(rows, () => { pickFor.value = null })
 </script>
 
 <template>
@@ -88,9 +126,11 @@ const pct = (v) => ((v / props.total) * 100).toFixed(1)
         :title="hidden.has(e.key) ? `Show ${e.name} on the chart` : `Hide ${e.name} from the chart`"
         @click="emit('toggle', e.key)"
       >
-        <label class="sw" :style="{ background: e.color }" @click.stop>
-          <input type="color" :value="e.color" @input="emit('recolor', { key: e.key, color: $event.target.value })" />
-        </label>
+        <!-- the swatch recolours, the row toggles — hence @click.stop -->
+        <button
+          class="sw" :class="{ open: pickFor === e.key }" :style="{ background: e.color }"
+          :title="`Change ${e.name}’s colour`" @click.stop="openPick(e.key, $event)"
+        />
         <span class="nm">{{ e.name }}</span>
         <span class="vl">{{ e.value }}</span>
         <span class="pc">{{ pct(e.value) }}%</span>
@@ -102,6 +142,25 @@ const pct = (v) => ((v / props.total) * 100).toFixed(1)
       <b>{{ shownCount }}</b> of {{ entities.length }} series shown
       <button v-if="hidden.size" class="rst" @click="emit('reset')">Reset</button>
     </div>
+
+    <!-- colour picker — teleported past .sm-list's scroll box -->
+    <teleport to="body">
+      <div v-if="pickFor" class="cp-back" @click="pickFor = null" />
+      <div v-if="pickFor" class="cp" :style="{ top: pickPos.top + 'px', left: pickPos.left + 'px', width: CP_W + 'px' }" @click.stop>
+        <div class="cp-h">Series colour</div>
+        <div class="cp-grid">
+          <button
+            v-for="c in palette" :key="c" class="cp-sw" :class="{ on: sameColor(c, colorOf(pickFor)) }"
+            :style="{ background: c }" @click="choose(c)"
+          ><Icon v-if="sameColor(c, colorOf(pickFor))" name="check" :size="11" /></button>
+        </div>
+        <label class="cp-custom">
+          <span class="cp-cs" :style="{ background: colorOf(pickFor) }" />
+          <span class="cp-cl">Custom…</span>
+          <input type="color" :value="colorOf(pickFor)" @input="setCustom($event.target.value)" />
+        </label>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -129,8 +188,25 @@ const pct = (v) => ((v / props.total) * 100).toFixed(1)
 .sm-row:hover { background: var(--surface-2); }
 .sm-row.off { opacity: .38; }
 .sm-row.off .nm { text-decoration: line-through; }
-.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; position: relative; overflow: hidden; cursor: pointer; }
-.sw input { position: absolute; inset: -6px; opacity: 0; cursor: pointer; }
+/* the swatch is a control, so it says so on hover — a bare 10px block reads as a bullet */
+.sw { width: 12px; height: 12px; border-radius: 3px; flex: none; padding: 0; border: none; cursor: pointer; box-shadow: 0 0 0 0 var(--primary-soft); transition: box-shadow .12s, transform .12s; }
+.sm-row:hover .sw { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border-strong); }
+.sw:hover, .sw.open { transform: scale(1.15); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--primary) !important; }
+
+/* colour picker popover */
+.cp-back { position: fixed; inset: 0; z-index: 320; }
+.cp { position: fixed; z-index: 321; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--sh-pop); padding: 9px; }
+.cp-h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 7px; }
+.cp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.cp-sw { width: 20px; height: 20px; border-radius: 5px; border: 1px solid rgba(0,0,0,.08); display: grid; place-items: center; padding: 0; }
+.cp-sw:hover { transform: scale(1.12); }
+.cp-sw.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--ink); }
+.cp-sw :deep(.ico) { color: #fff; }
+.cp-custom { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--ink-2); cursor: pointer; position: relative; }
+.cp-cs { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.1); flex: none; }
+.cp-cl { flex: 1; }
+/* the native input is the escape hatch, not the affordance — it sits invisibly over the row */
+.cp-custom input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .vl { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .pc { width: 42px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
