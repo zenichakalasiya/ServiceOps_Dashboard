@@ -6,7 +6,7 @@ import ChartTile from './ChartTile.vue'
 import MeasureConditions from './MeasureConditions.vue'
 import FreeTextTile from './FreeTextTile.vue'
 import { store } from '../../store/index.js'
-import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut, text as mkText } from '../../data/mock.js'
+import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut, text as mkText, ACCESS } from '../../data/mock.js'
 import { CONDITION_FIELD_LABELS, NUMERIC_FIELD_LABELS, AGG_FNS, MAP_FNS } from '../../data/records.js'
 import { NEW_KINDS } from '../../data/chartOptions.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
@@ -127,6 +127,13 @@ const SQL_PLACEHOLDER = "SELECT id, subject, priority, status\nFROM requests\nWH
 
 // dropdown option lists
 const GROUP_OPTS = ['Service Desk', 'Network Team', 'NOC Viewers']
+/* Wording mirrors the dashboard panel's, changed only where "dashboard" would be wrong.
+ * Same ACCESS source, so a Restricted widget and a Restricted board mean the same thing. */
+const ACC_DESC = {
+  public: 'Everyone with portal access can see this widget.',
+  private: 'Only you can see and manage this widget.',
+  restricted: 'Only the technicians / groups you pick below can see it.',
+}
 const XAXIS_OPTS = ['Priority', 'Status', 'Team', 'Created date']
 const YFUNC_OPTS = ['Count Of', 'Sum Of', 'Average Of', 'Distinct Count']
 const YCOL_OPTS = ['Requests', 'Effort hours', 'Resolution time']
@@ -145,7 +152,7 @@ function initCfg() {
     // keep, which is the question a long-tailed chart actually asks.)
     rank: ex?.rank || 'top', rankN: ex?.rankN ?? 10,
     excludeZero: false, sqlQuery: ex?.sql || '',
-    sharedAccess: ex?.sharedAccess || 'view',   // access granted to people it's shared with
+    access: ex?.access || 'public',   // Public / Private / Restricted — as a dashboard has
     // display properties, saved on the widget. undefined = on / off respectively.
     legend: ex?.legend !== false,
     dataLabels: ex?.dataLabels === true,
@@ -298,13 +305,13 @@ function save(place) {
     pv.w = ex.w; pv.h = ex.h
     if (ex.group != null) pv.group = ex.group
     if (queryMode.value) pv.sql = cfg.sqlQuery
-    pv.sharedAccess = cfg.sharedAccess
+    pv.access = cfg.access
     emit('duplicated', { tile: pv, afterId: ex.id })
     return
   }
   // --- library duplicate/edit: hand the config back to the listing ---
   if (props.libItem) {
-    emit('librarySaved', { title: cfg.name, module: cfg.module, type: curType.value.type, sharedAccess: cfg.sharedAccess, place })
+    emit('librarySaved', { title: cfg.name, module: cfg.module, type: curType.value.type, access: cfg.access, place })
     return
   }
   // --- edit an existing board tile in place (type may change for a predefined edit) ---
@@ -322,7 +329,7 @@ function save(place) {
     else if (isKpi.value) { t.value = pv.value; t.unit = pv.unit; t.chart = undefined; t.columns = undefined; t.rows = undefined }
     else if (isText.value) { t.content = cfg.content; t.chart = undefined; t.columns = undefined; t.rows = undefined; t.value = undefined }
     if (!isShortcut.value && !isText.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
-    t.sharedAccess = cfg.sharedAccess
+    t.access = cfg.access
     props.d.updated = new Date().toISOString()
     emit('saved', { id: t.id, place })
     return
@@ -332,12 +339,12 @@ function save(place) {
     if (isText.value) { pv.w = 4; pv.h = 1 }
     else { pv.w = isChart.value ? 6 : isShortcut.value ? 6 : 3; pv.h = isKpi.value ? 1 : 2 }
     if (queryMode.value) pv.sql = cfg.sqlQuery
-    pv.sharedAccess = cfg.sharedAccess
+    pv.access = cfg.access
     props.d.tiles.push(pv)
     props.d.updated = new Date().toISOString()
     emit('created', pv.id)
   } else {
-    emit('savedToLibrary', { title: cfg.name, module: cfg.module, type: curType.value.type, sharedAccess: cfg.sharedAccess })
+    emit('savedToLibrary', { title: cfg.name, module: cfg.module, type: curType.value.type, access: cfg.access })
   }
 }
 </script>
@@ -417,18 +424,6 @@ function save(place) {
                   <div class="fld"><label>Module <i>*</i></label><Dropdown v-model="cfg.module" :options="store.modules" /></div>
                 </div>
                 <p v-if="dupBoards.length" class="dup-warn"><Icon name="alert" :size="13" /> <span>A widget named “{{ cfg.name }}” already exists on {{ dupBoards.slice(0, 2).join(', ') }}<span v-if="dupBoards.length > 2"> +{{ dupBoards.length - 2 }} more</span>. <b>Widget names must be unique</b> — pick another.</span></p>
-                <div class="grid2">
-                  <div class="fld"><label>Technician Access Level <i>*</i></label><Dropdown v-model="cfg.techAccess" :options="store.owners" :multiple="true" placeholder="Select technicians" /></div>
-                  <div class="fld"><label>Technician Group Access Level <i>*</i></label><Dropdown v-model="cfg.groupAccess" :options="GROUP_OPTS" placeholder="Select" /></div>
-                </div>
-                <div class="fld" style="margin-top:12px">
-                  <label>Access when shared</label>
-                  <div class="seg">
-                    <button class="seg-b" :class="{ on: cfg.sharedAccess==='view' }" @click="cfg.sharedAccess='view'">View</button>
-                    <button class="seg-b" :class="{ on: cfg.sharedAccess==='edit' }" @click="cfg.sharedAccess='edit'">Edit</button>
-                  </div>
-                  <p class="hint" style="margin:6px 0 0">People you share this with can Edit only if you grant Edit access here.</p>
-                </div>
                 <!-- how the Widget is drawn — a property of the widget, so it sits with
                      the rest of its configuration rather than in the family row above -->
                 <div v-if="showFamilies && isChart" class="fld" style="margin-top:12px">
@@ -456,6 +451,27 @@ function save(place) {
                     <div class="open-dd"><button v-for="a in ['Hardware','Software','Non-IT','Consumable']" :key="a" class="dd-opt" :class="{ on: cfg.assetType===a }" @click="cfg.assetType=a">{{ a }} <Icon v-if="cfg.assetType===a" name="check" :size="13"/></button></div>
                   </div>
                 </template>
+              </div>
+
+              <!-- Visibility & Sharing — the same three-way choice a dashboard has, from the
+                   same ACCESS source, so "Restricted" means one thing across the product.
+                   The technician / group pickers belong to Restricted and appear with it:
+                   asking who may open a Public widget is a question with no answer. -->
+              <div class="sec">
+                <div class="sec-h">Visibility &amp; Sharing</div>
+                <div class="acc-seg">
+                  <button
+                    v-for="(a, k) in ACCESS" :key="k" class="acc-btn" :class="{ on: cfg.access === k }"
+                    @click="cfg.access = k"
+                  >
+                    <Icon :name="a.icon" :size="15" /> {{ a.label }}
+                  </button>
+                </div>
+                <p class="hint acc-note"><Icon name="info" :size="13" /> {{ ACC_DESC[cfg.access] }}</p>
+                <div v-if="cfg.access === 'restricted'" class="grid2" style="margin-top:12px">
+                  <div class="fld"><label>Technician Access Level <i>*</i></label><Dropdown v-model="cfg.techAccess" :options="store.owners" :multiple="true" placeholder="Select technicians" /></div>
+                  <div class="fld"><label>Technician Group Access Level <i>*</i></label><Dropdown v-model="cfg.groupAccess" :options="GROUP_OPTS" placeholder="Select" /></div>
+                </div>
               </div>
 
               <!-- Query — Shortcuts always; Widget/KPI when "Query Based" tab is active -->
@@ -718,7 +734,9 @@ function save(place) {
 .ic { width: 34px; height: 34px; border: none; background: transparent; color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
 .bbody { flex: 1; display: flex; min-height: 0; }
-.preview { flex: 1.5; display: flex; flex-direction: column; min-width: 0; padding: 18px 22px 22px; background: var(--bg); border-right: 1px solid var(--border); }
+/* No rule between the preview and the config panel: the background change from --bg to
+   --surface already separates them, and a border on top of that reads as a seam. */
+.preview { flex: 1.5; display: flex; flex-direction: column; min-width: 0; padding: 18px 22px 22px; background: var(--bg); }
 .pv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .pv-tab { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 13px; }
 .pv-tab:hover { background: var(--surface-2); }
@@ -792,6 +810,13 @@ function save(place) {
 .seg-b { border: none; background: transparent; padding: 6px 14px; border-radius: 7px; font-weight: 500; font-size: 12.5px; color: var(--muted); }
 .seg-b.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); }
 .hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 10px; }
+/* Visibility & Sharing — the same three-way control the dashboard panel uses, sized for
+   the narrower config column (the board's 38px pills would crowd it). */
+.acc-seg { display: flex; gap: 6px; }
+.acc-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 12.5px; }
+.acc-btn:hover { background: var(--surface-2); }
+.acc-btn.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-700); }
+.acc-note { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; }
 .open-dd { display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--primary-soft); border-radius: 9px; padding: 5px; background: var(--primary-softer); }
 .dd-opt { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border: none; background: transparent; border-radius: 6px; font-size: 13px; text-align: left; }
 .dd-opt:hover { background: var(--surface); } .dd-opt.on { background: var(--surface); color: var(--primary-700); font-weight: 600; }
@@ -810,7 +835,7 @@ function save(place) {
 .cfg-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--surface-2); flex: none; }
 @media (max-width: 900px) {
   .bbody { flex-direction: column; }
-  .preview { flex: none; height: 240px; border-right: none; border-bottom: 1px solid var(--border); }
+  .preview { flex: none; height: 240px; border-right: none; }
   .config { width: auto; flex: 1; }
 }
 </style>
