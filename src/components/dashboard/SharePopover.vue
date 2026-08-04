@@ -7,11 +7,11 @@
  * as a PDF" mails a snapshot. Putting both in one flat form made half the fields
  * irrelevant whichever one you actually wanted.
  *
- * Copy link sits in the HEADER rather than in a tab: the link is a property of the
- * dashboard, not of either action, so burying it under one of them would hide it from
- * the other.
+ * Email addresses are added one at a time: the [+] opens a single input, committing it
+ * turns the address into a row and brings the [+] back. That keeps an empty input from
+ * sitting on screen pretending to be a required field.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import { store, toast } from '../../store/index.js'
@@ -34,6 +34,10 @@ function setLevel(l) { level.value = l; lvlMenu.value = false }
 // --- Export as PDF
 const emails = ref([])
 const newEmail = ref('')
+const adding = ref(false)
+const emailEl = ref(null)
+function startEmail() { adding.value = true; nextTick(() => emailEl.value?.focus()) }
+function cancelEmail() { adding.value = false; newEmail.value = '' }
 const pwProtect = ref(false)
 const password = ref('')
 const showPw = ref(false)
@@ -42,14 +46,10 @@ function addEmail() {
   if (!emailValid.value) return
   emails.value.push(newEmail.value.trim())
   newEmail.value = ''
+  adding.value = false          // the [+] comes back, ready for the next one
 }
 function removeEmail(i) { emails.value.splice(i, 1) }
 
-function copyLink() {
-  const url = `${location.origin}${location.pathname}#/dashboard/${props.d.id}`
-  navigator.clipboard?.writeText(url).catch(() => {})
-  toast('Link copied to clipboard')
-}
 function share() {
   if (tab.value === 'access') {
     if (!techs.value.length) { toast('Pick at least one technician or group', 'warn'); return }
@@ -69,7 +69,6 @@ function share() {
   <div class="pv card" @click.stop>
     <header class="pv-head">
       <span class="pv-title">Share Dashboard</span>
-      <button class="link-btn" @click="copyLink"><Icon name="link" :size="14" /> Copy link</button>
     </header>
 
     <div class="tabs">
@@ -95,12 +94,17 @@ function share() {
     <!-- mail a snapshot -->
     <template v-else>
       <label class="fl">Add Email <i>*</i></label>
-      <div class="row">
-        <input class="input grow" v-model="newEmail" placeholder="name@company.com" @keyup.enter="addEmail" />
-        <button class="add-btn" :disabled="!emailValid" title="Add this address" @click="addEmail"><Icon name="plus" :size="16" /></button>
-      </div>
-      <div v-if="emails.length" class="chips">
-        <span v-for="(e, i) in emails" :key="i" class="chip">{{ e }}<button title="Remove" @click="removeEmail(i)"><Icon name="x" :size="10" /></button></span>
+      <div class="emails">
+        <div v-for="(e, i) in emails" :key="i" class="erow">
+          <span class="eaddr">{{ e }}</span>
+          <button class="ex" title="Remove" @click="removeEmail(i)"><Icon name="x" :size="13" /></button>
+        </div>
+        <!-- one input at a time: committing it returns the [+], which is how you add the next -->
+        <div v-if="adding" class="erow">
+          <input ref="emailEl" class="input" v-model="newEmail" placeholder="name@company.com" @keyup.enter="addEmail" @keyup.esc="cancelEmail" />
+          <button class="ex" title="Cancel" @click="cancelEmail"><Icon name="x" :size="13" /></button>
+        </div>
+        <button v-else class="add-btn" title="Add an email address" @click="startEmail"><Icon name="plus" :size="16" /></button>
       </div>
 
       <label class="tgl-row">
@@ -133,8 +137,6 @@ function share() {
 .pv { position: absolute; top: 44px; right: 0; z-index: 60; width: 420px; padding: 14px 16px 12px; }
 .pv-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .pv-title { font-weight: 700; font-size: 15px; color: var(--ink); }
-.link-btn { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--primary-700); font-weight: 600; font-size: 12.5px; padding: 4px 6px; border-radius: 7px; }
-.link-btn:hover { background: var(--primary-softer); }
 
 /* the two acts, as a segmented control — our primary, not a black fill */
 .tabs { display: flex; gap: 4px; margin: 12px 0 14px; padding: 3px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
@@ -143,6 +145,8 @@ function share() {
 .tab.on { background: var(--primary); color: #fff; box-shadow: var(--sh-sm); }
 
 .fl { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+/* the password label belongs to the toggle above it, but not THAT closely */
+.tgl-row + .fl { margin-top: 18px; }
 .fl i { color: var(--red); font-style: normal; }
 .row { display: flex; align-items: center; gap: 8px; }
 .grow { flex: 1; min-width: 0; }
@@ -156,9 +160,15 @@ function share() {
 .lvl-opt:hover { background: var(--surface-2); }
 .lvl-opt.on { color: var(--primary-700); font-weight: 600; }
 
-.add-btn { flex: none; width: 38px; height: 38px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 9px; display: grid; place-items: center; }
-.add-btn:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--primary); }
-.add-btn:disabled { opacity: .45; cursor: not-allowed; }
+/* one address per row, with the [+] as the only affordance when nothing is being typed */
+.emails { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.erow { display: flex; align-items: center; gap: 6px; width: 100%; }
+.erow .input { flex: 1; min-width: 0; }
+.eaddr { flex: 1; min-width: 0; height: 34px; display: flex; align-items: center; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
+.ex:hover { background: var(--surface-2); color: var(--red); }
+.add-btn { flex: none; width: 34px; height: 34px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 8px; display: grid; place-items: center; }
+.add-btn:hover { background: var(--primary-soft); border-color: var(--primary); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 5px; background: var(--primary-soft); color: var(--primary-700); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
 .chip button { border: none; background: transparent; color: var(--primary-700); display: grid; place-items: center; }

@@ -18,6 +18,8 @@ const tabbed = computed(() => {
   let arr = live.value
   if (tab.value === 'mine') arr = arr.filter((d) => d.mine)
   if (tab.value === 'shared') arr = arr.filter((d) => d.sharedWithMe)
+  // Predefined boards ship with the product — the one tab whose members you cannot create
+  if (tab.value === 'predefined') arr = arr.filter((d) => d.predefined)
   const q = store.ui.listingQuery.trim().toLowerCase()
   if (q) arr = arr.filter((d) => d.name.toLowerCase().includes(q))
   return arr
@@ -107,6 +109,7 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <button class="t2" :class="{ on: tab === 'all' }" @click="tab = 'all'">All</button>
       <button class="t2" :class="{ on: tab === 'mine' }" @click="tab = 'mine'">Created by me</button>
       <button class="t2" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
+      <button class="t2" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Predefined</button>
     </div>
 
     <div class="fsearch"><Icon name="search" :size="15" class="muted" /><input v-model="store.ui.listingQuery" placeholder="Search dashboards…" /></div>

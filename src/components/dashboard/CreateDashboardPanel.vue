@@ -118,7 +118,7 @@ function submit(openAdd = false) {
       <div class="head">
         <div>
           <h3>{{ isEdit ? 'Edit dashboard' : isClone ? 'Clone Dashboard' : 'Create dashboard' }}</h3>
-          <p class="muted">{{ isEdit ? 'Update this dashboard’s details and layout.' : isClone ? 'Duplicate this board with its widgets, then tweak it.' : "Classify it now so it's easy to find later." }}</p>
+          <p class="muted">{{ isEdit ? 'Update this dashboard’s details and layout.' : isClone ? 'Duplicate this board with its widgets, then tweak it.' : '' }}</p>
         </div>
         <button class="btn btn-icon" @click="close"><Icon name="x" :size="18" /></button>
       </div>
@@ -293,6 +293,9 @@ function submit(openAdd = false) {
 .cat-pop-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 /* default landing toggle */
 .toggle-grp { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; }
+/* the toggle rows are section-level settings, so their titles read at section weight
+   rather than field-label size */
+.toggle-grp .field { font-size: 14px; font-weight: 600; color: var(--ink); }
 .tg-text { display: flex; flex-direction: column; }
 .sw { width: 40px; height: 22px; border-radius: 999px; border: none; background: var(--border-strong); position: relative; transition: background .15s; flex: none; }
 .sw i { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: var(--sh-sm); }

@@ -792,7 +792,11 @@ table { font-size: 12.5px; }
 /* explorable record ID (task 12) */
 .id-link { border: none; background: transparent; color: var(--primary-700); font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
 .id-link:hover { text-decoration: underline; }
-.present { background: #fff; border-radius: var(--r-xl); width: min(1200px, 95vw); max-height: 90vh; display: flex; flex-direction: column; box-shadow: var(--sh-lg); overflow: hidden; }
+/* same footprint as the builder (live preview + configuration), so full screen and
+   editing a widget frame the content identically — including the 16px gutter, since
+   the shared .overlay uses 24px and the two would otherwise land a few px apart. */
+.overlay { padding: 16px; }
+.present { background: var(--surface); border-radius: var(--r-xl); width: 100%; height: 100%; display: flex; flex-direction: column; box-shadow: var(--sh-lg); overflow: hidden; }
 .phead { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px; border-bottom: 1px solid var(--border); font-size: 16px; flex: none; }
 .pbody { padding: 32px 40px; flex: 1; min-height: 62vh; display: grid; place-items: center; overflow: auto; }
 .pbody > * { width: 100%; }

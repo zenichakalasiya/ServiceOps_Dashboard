@@ -22,8 +22,8 @@ const showPwd = ref(false)
 
 function download() {
   // asking for protection and leaving it blank would write an unprotected file
-  if (pwd.value && !password.value.trim()) { toast('Set an attachment password, or turn the protection off', 'warn'); return }
-  toast(`Downloading “${props.d.name}” as ${fmt.value}${pwd.value ? ' — password protected' : ''}`, 'success')
+  if (pwd.value && fmt.value === 'PDF' && !password.value.trim()) { toast('Set an attachment password, or turn the protection off', 'warn'); return }
+  toast(`Downloading “${props.d.name}” as ${fmt.value}${pwd.value && fmt.value === 'PDF' ? ' — password protected' : ''}`, 'success')
   emit('close')
 }
 </script>
@@ -39,7 +39,8 @@ function download() {
       </button>
     </div>
 
-    <label class="tgl-row">
+    <!-- an image has no container to encrypt, so the option only exists for a PDF -->
+    <label v-if="fmt === 'PDF'" class="tgl-row">
       <span class="tgl-txt">
         <b>Password Protected</b>
         <em>The file is encrypted, and anyone opening it needs this password.</em>
@@ -47,7 +48,7 @@ function download() {
       <button class="tgl" :class="{ on: pwd }" role="switch" :aria-checked="pwd" @click.prevent="pwd = !pwd"><i /></button>
     </label>
 
-    <template v-if="pwd">
+    <template v-if="pwd && fmt === 'PDF'">
       <label class="fl">Attachment Password <i>*</i></label>
       <div class="pw">
         <input class="input" :type="showPwd ? 'text' : 'password'" v-model="password" placeholder="Password" />

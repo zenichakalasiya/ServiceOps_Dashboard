@@ -925,7 +925,9 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .pop-wrap { position: relative; }
 .editbar { display: flex; align-items: center; gap: 9px; padding: 9px 24px; background: var(--primary-softer); border-bottom: 1px solid var(--primary-soft); color: var(--primary-700); font-size: 13px; }
 .unsaved { color: var(--amber); font-weight: 600; font-size: 12px; }
-.bbody { flex: 1; padding: 16px 24px 28px; }
+/* the canvas is white: tiles are --surface too, so the separation comes from their
+   borders and shadow rather than a tinted ground */
+.bbody { flex: 1; padding: 16px 24px 28px; background: var(--surface); }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; align-items: start; }
 /* B placement: the AI card in the KPI row — ~3 KPI widths, height matched to a KPI tile */
 .ai-cell { grid-column: span 6; min-height: 140px; }
