@@ -424,27 +424,6 @@ function save(place) {
                   <div class="fld"><label>Module <i>*</i></label><Dropdown v-model="cfg.module" :options="store.modules" /></div>
                 </div>
                 <p v-if="dupBoards.length" class="dup-warn"><Icon name="alert" :size="13" /> <span>A widget named “{{ cfg.name }}” already exists on {{ dupBoards.slice(0, 2).join(', ') }}<span v-if="dupBoards.length > 2"> +{{ dupBoards.length - 2 }} more</span>. <b>Widget names must be unique</b> — pick another.</span></p>
-                <!-- how the Widget is drawn — a property of the widget, so it sits with
-                     the rest of its configuration rather than in the family row above -->
-                <div v-if="showFamilies && isChart" class="fld" style="margin-top:12px">
-                  <div class="sec-h">Chart type</div>
-                  <div class="kinds">
-                    <button
-                      v-for="k in CHART_KINDS" :key="k.id" class="kind"
-                      :class="{ on: curType.id === k.id }" @click="pickKind(k)"
-                    >
-                      <Icon :name="k.icon" :size="22" :class="{ rot90: k.id === 'bar' }" />
-                      <span class="kind-l">{{ k.label }}</span>
-                    </button>
-                  </div>
-                </div>
-                <template v-if="!isShortcut && !isText">
-                  <div class="seg">
-                    <button class="seg-b" :class="{ on: cfg.mode==='manual' }" @click="cfg.mode='manual'">Manual</button>
-                    <button class="seg-b" :class="{ on: cfg.mode==='query' }" @click="cfg.mode='query'">Query Based</button>
-                  </div>
-                  <p class="hint">A widget counts the records that match its conditions.</p>
-                </template>
                 <div v-if="isShortcut" class="fld" style="margin-top:12px"><label>Description</label><textarea class="input" rows="2" v-model="cfg.description" placeholder="Description" /></div>
                 <template v-if="cfg.module==='Asset' && manualMode">
                   <div class="fld"><label>Asset type</label>
@@ -458,7 +437,8 @@ function save(place) {
                    The technician / group pickers belong to Restricted and appear with it:
                    asking who may open a Public widget is a question with no answer. -->
               <div class="sec">
-                <div class="sec-h">Visibility &amp; Sharing</div>
+                <div class="sec-h">Visibility &amp; sharing</div>
+                <label class="acc-lbl">Widget Access Level <i>*</i></label>
                 <div class="acc-seg">
                   <button
                     v-for="(a, k) in ACCESS" :key="k" class="acc-btn" :class="{ on: cfg.access === k }"
@@ -472,6 +452,39 @@ function save(place) {
                   <div class="fld"><label>Technician Access Level <i>*</i></label><Dropdown v-model="cfg.techAccess" :options="store.owners" :multiple="true" placeholder="Select technicians" /></div>
                   <div class="fld"><label>Technician Group Access Level <i>*</i></label><Dropdown v-model="cfg.groupAccess" :options="GROUP_OPTS" placeholder="Select" /></div>
                 </div>
+              </div>
+
+              <!-- Chart Type is its own section AFTER visibility, as the prototype orders
+                   it: what the widget is called and who can see it are settled before how
+                   it is drawn. The labels stay under the tiles — twelve icon-only squares
+                   is a memory test, and the prototype only had four. -->
+              <div v-if="showFamilies && isChart" class="sec">
+                <div class="sec-h">Chart Type</div>
+                <p class="hint" style="margin:-6px 0 12px">Pick how the data should be visualized.</p>
+                <div class="kinds">
+                  <button
+                    v-for="k in CHART_KINDS" :key="k.id" class="kind"
+                    :class="{ on: curType.id === k.id }" @click="pickKind(k)"
+                  >
+                    <Icon :name="k.icon" :size="22" :class="{ rot90: k.id === 'bar' }" />
+                    <span class="kind-l">{{ k.label }}</span>
+                  </button>
+                </div>
+                <template v-if="!isShortcut && !isText">
+                  <div class="seg" style="margin-top:14px">
+                    <button class="seg-b" :class="{ on: cfg.mode==='manual' }" @click="cfg.mode='manual'">Manual</button>
+                    <button class="seg-b" :class="{ on: cfg.mode==='query' }" @click="cfg.mode='query'">Query Based</button>
+                  </div>
+                  <p class="hint">A widget counts the records that match its conditions.</p>
+                </template>
+              </div>
+              <!-- families without a chart type still need the Manual / Query switch -->
+              <div v-else-if="!isShortcut && !isText" class="sec">
+                <div class="seg">
+                  <button class="seg-b" :class="{ on: cfg.mode==='manual' }" @click="cfg.mode='manual'">Manual</button>
+                  <button class="seg-b" :class="{ on: cfg.mode==='query' }" @click="cfg.mode='query'">Query Based</button>
+                </div>
+                <p class="hint">A widget counts the records that match its conditions.</p>
               </div>
 
               <!-- Query — Shortcuts always; Widget/KPI when "Query Based" tab is active -->
@@ -713,9 +726,12 @@ function save(place) {
                 <button class="btn btn-primary" :disabled="!canSave" :title="ctaHint" @click="save(false)"><Icon name="check" :size="16" /> Update {{ ctaLabel }}</button>
               </template>
               <template v-else>
-                <button class="btn" :disabled="!canSave" :title="ctaHint" @click="save(false)">{{ prefix }} {{ ctaLabel }}</button>
-                <button class="btn btn-primary" :disabled="!canSave" :title="ctaHint" @click="save(true)"><Icon name="plus" :size="16" /> {{ prefix }} &amp; Add {{ ctaLabel }}</button>
+                <!-- the prototype leads with the place-it action, then the plain create,
+                     then Cancel — placing is the common case, so it takes the emphasis -->
+                <button class="btn btn-primary" :disabled="!canSave" :title="ctaHint" @click="save(true)">{{ prefix }} &amp; Add to Dashboard</button>
+                <button class="btn" :disabled="!canSave" :title="ctaHint" @click="save(false)">{{ prefix }}</button>
               </template>
+              <button class="btn" @click="emit('close')">Cancel</button>
             </footer>
           </aside>
         </div>
@@ -812,6 +828,8 @@ function save(place) {
 .hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 10px; }
 /* Visibility & Sharing — the same three-way control the dashboard panel uses, sized for
    the narrower config column (the board's 38px pills would crowd it). */
+.acc-lbl { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+.acc-lbl i { color: var(--red); font-style: normal; }
 .acc-seg { display: flex; gap: 6px; }
 .acc-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 12.5px; }
 .acc-btn:hover { background: var(--surface-2); }
