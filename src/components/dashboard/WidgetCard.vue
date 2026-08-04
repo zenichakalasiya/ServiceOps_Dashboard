@@ -220,7 +220,7 @@ function setKind(ct) {
   menu.value = false; typeOpen.value = false
   toast(`“${props.tile.title}” → ${ct.label}`)
 }
-const EXPORTS = ['PDF', 'PNG', 'JPEG', 'SVG', 'CSV']
+const EXPORTS = ['PDF', 'PNG', 'SVG']   // the three the prototype offers
 const searchOpen = ref(false)
 const tableSearch = ref('')
 /* The Shortcut filter bar is its own component (TableFilterBar): one field that both
@@ -438,17 +438,16 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       <div v-if="menu" class="backdrop" @click="menu = false; exportOpen = false; typeOpen = false" />
       <transition name="pop">
         <div v-if="menu" ref="menuEl" class="menu tile-menu" :class="{ 'sub-right': !subLeft }" :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }" @click.stop>
-          <!-- On a tiny tile the two upfront controls (AI + Refresh) collapse in here too,
-               separated from the widget actions by a rule. -->
-          <template v-if="tiny">
-            <button v-for="c in WIDGET_CTAS" :key="c.label" class="menu-item ai" @click="askWidgetAi(c)"><Icon name="sparkles" :size="15" /> {{ c.label }}</button>
-            <button class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
-            <div class="menu-sep" />
-          </template>
-          <!-- Widget actions -->
+          <!-- AI first, ruled off from the rest: it is the only item that answers a
+               question rather than acting on the widget. Present at every tile size —
+               a small tile has no room for the header sparkle, and this is then the
+               ONLY way to reach it. -->
+          <button v-for="c in WIDGET_CTAS" :key="c.label" class="menu-item ai" @click="askWidgetAi(c)"><Icon name="sparkles" :size="15" /> {{ c.label }}</button>
+          <div v-if="WIDGET_CTAS.length" class="menu-sep" />
+          <!-- Widget actions, in the prototype order: Refresh · Edit · Chart Type ·
+               Full screen · Duplicate -->
+          <button class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
           <button v-if="canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
-          <button class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
-          <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
           <!-- Chart type → submenu. Only Column / Bar / Line can be swapped for one
                another; a predefined pie is frozen, so the item is disabled with the
                reason rather than silently missing. -->
@@ -470,10 +469,12 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
               </button>
             </div></transition>
           </div>
+          <button class="menu-item" @click="menu = false; present = true"><Icon name="maximize-tile" :size="15" /> Full screen</button>
+          <button class="menu-item" @click="duplicate"><Icon name="copy" :size="15" /> Duplicate</button>
           <!-- divider between the widget's own actions and the share / export group -->
           <div class="menu-sep" />
           <button class="menu-item" @click="menu = false; shareOpen = true"><Icon name="share" :size="15" /> Share widget</button>
-          <!-- Export → submenu (PDF / PNG / JPEG / SVG / CSV) -->
+          <!-- Export → submenu (PDF / PNG / SVG) -->
           <div class="menu-item sub" @mouseenter="exportOpen = true; typeOpen = false" @mouseleave="exportOpen = false">
             <span class="mi-l"><Icon name="download" :size="15" /> Export</span><Icon name="chevron-right" :size="14" class="mi-c" />
             <transition name="pop"><div v-if="exportOpen" class="submenu">
