@@ -35,6 +35,20 @@ const base = computed(() => {
 })
 // options come from what's actually in the tab — never offer a filter that matches nothing
 const opts = (fn) => [...new Set(base.value.map(fn))].filter(Boolean).sort()
+/* Active filters render as chips, one per (field, value), so a single value can be
+ * dropped without a round trip through the menu — the same rule as the Shortcut bar. */
+const filterChips = computed(() =>
+  Object.entries(filters.value).flatMap(([key, values]) => {
+    const field = filterFields.value.find((x) => x.key === key)
+    return (values || []).map((value) => ({ key, value, label: field?.label || key }))
+  }))
+function removeChip(chip) {
+  const next = { ...filters.value }
+  const rest = (next[chip.key] || []).filter((v) => v !== chip.value)
+  if (rest.length) next[chip.key] = rest
+  else delete next[chip.key]        // an empty array is not a filter
+  filters.value = next
+}
 const filterFields = computed(() => [
   { key: 'category', label: 'Category', options: opts(CAT) },
   { key: 'access', label: 'Visibility', options: opts(FIELD_OF.access) },
@@ -145,7 +159,7 @@ function onDrop(target) {
 <template>
   <div class="page">
     <div class="page-head">
-      <div><h1>All Dashboards</h1></div>
+      <div><h1>Manage dashboards</h1></div>
       <button class="btn btn-primary" @click="store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true"><Icon name="plus" :size="16" /> New dashboard</button>
     </div>
 
@@ -157,8 +171,18 @@ function onDrop(target) {
         <button class="t" :class="{ on: tab === 'archive' }" @click="tab = 'archive'; sel = new Set()">Archive <span class="c">{{ archived.length }}</span></button>
       </div>
       <div class="tr">
-        <div class="srch"><Icon name="search" :size="14" class="muted" /><input v-model="q" placeholder="Search…" /></div>
-        <FilterMenu v-model="filters" :fields="filterFields" label="Filter" />
+        <!-- one field: magnifier, the active filters as chips, then the query, with the
+             field picker inside at the right — the same bar the Shortcut tables use, and
+             the shape the prototype gives this screen. -->
+        <div class="srch wide">
+          <Icon name="search" :size="14" class="muted" />
+          <span v-for="c in filterChips" :key="c.key + c.value" class="mchip">
+            <b>{{ c.label }}</b><em>is</em><b>{{ c.value }}</b>
+            <button :title="`Remove ${c.label} is ${c.value}`" @click.stop="removeChip(c)"><Icon name="x" :size="10" /></button>
+          </span>
+          <input v-model="q" placeholder="Search a keyword or enter a keyword to search…" />
+          <FilterMenu v-model="filters" :fields="filterFields" label="Filter" class="in-srch" />
+        </div>
         <div class="cols-wrap">
           <button class="fsel colbtn" @click="openCols"><Icon name="rows" :size="14" /> Columns</button>
           <div v-if="colsOpen" class="cols-back" @click="colsOpen = false" />
@@ -294,6 +318,18 @@ function onDrop(target) {
 .tr { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .srch { display: flex; align-items: center; gap: 7px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 10px; height: 34px; width: 200px; }
 .srch input { border: none; outline: none; background: transparent; width: 100%; font-size: 13px; }
+/* the prototype gives this screen ONE wide field carrying the chips and the query,
+   with the picker inside it — the same bar the Shortcut tables use */
+.srch.wide { width: auto; flex: 1; min-width: 320px; background: var(--surface); padding: 0 4px 0 10px; }
+.srch.wide:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.srch.wide input { min-width: 80px; }
+.in-srch :deep(.fm-btn) { width: 26px; height: 26px; border: none; background: transparent; }
+.in-srch :deep(.fm-btn:hover) { background: var(--surface-2); }
+.mchip { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 220px; height: 22px; padding: 0 4px 0 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.mchip b { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.mchip em { font-style: normal; color: var(--muted); }
+.mchip button { flex: none; width: 15px; height: 15px; border: none; background: transparent; color: var(--muted); border-radius: 4px; display: grid; place-items: center; }
+.mchip button:hover { background: var(--border); color: var(--ink); }
 .fsel { height: 34px; border: 1px solid var(--border-strong); background: var(--surface); border-radius: 8px; padding: 0 10px; font-size: 12.5px; color: var(--ink-2); }
 .colbtn { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
 .cols-wrap { position: relative; }
