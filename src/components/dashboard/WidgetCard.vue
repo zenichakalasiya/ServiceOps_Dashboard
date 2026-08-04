@@ -237,6 +237,24 @@ watch(searchOpen, (v) => { if (v) nextTick(() => searchInput.value?.focus()) })
 const hasTableFilters = computed(() => Object.values(tableFilters.value).some((v) => v && v.length))
 function toggleFilter() { if (searchOpen.value) closeFilter(); else searchOpen.value = true }
 function closeFilter() { searchOpen.value = false; tableSearch.value = ''; tableFilters.value = {} }
+
+/* Active filters render as chips INSIDE the search field — "Status is Active" — so the
+ * bar reads as one control rather than a search box with a separate filter widget beside
+ * it. One chip per (field, value) pair rather than one per field: a chip that reads
+ * "Status is Active, Open, Pending" can only be removed wholesale, which makes dropping
+ * a single value a round-trip through the menu. */
+const filterChips = computed(() =>
+  Object.entries(tableFilters.value).flatMap(([key, values]) => {
+    const field = filterFields.value.find((f) => f.key === key)
+    return (values || []).map((value) => ({ key, value, label: field?.label || key }))
+  }))
+function removeChip(chip) {
+  const next = { ...tableFilters.value }
+  const rest = (next[chip.key] || []).filter((v) => v !== chip.value)
+  if (rest.length) next[chip.key] = rest
+  else delete next[chip.key]          // an empty array is not a filter — drop the key
+  tableFilters.value = next
+}
 // row filtering + sorting now live in DataTable (TanStack); we only own the query
 const present = ref(false)
 const infoHover = ref(false)
@@ -520,11 +538,18 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
                column filters, side by side. ✕ closes and clears both. -->
           <transition name="fade">
             <div v-if="searchOpen" class="stbl-bar">
+              <!-- one control: magnifier, the active filters as chips, then the query.
+                   The field picker sits at the right INSIDE the field, so the bar stays
+                   a single box rather than a box with a widget bolted beside it. -->
               <div class="sbox">
                 <Icon name="search" :size="14" class="muted" />
-                <input v-model="tableSearch" placeholder="Search records…" ref="searchInput" />
+                <span v-for="(c, i) in filterChips" :key="c.key + c.value + i" class="fchip">
+                  <b>{{ c.label }}</b><em>is</em><b>{{ c.value }}</b>
+                  <button :title="`Remove ${c.label} is ${c.value}`" @click.stop="removeChip(c)"><Icon name="x" :size="10" /></button>
+                </span>
+                <input v-model="tableSearch" placeholder="Search a keyword or enter a keyword to search…" ref="searchInput" />
+                <FilterMenu v-if="filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter columns" class="ti-fm" />
               </div>
-              <FilterMenu v-if="filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter columns" class="ti-fm" />
               <button class="sx" title="Close" @click="closeFilter"><Icon name="x" :size="16" /></button>
             </div>
           </transition>
@@ -754,8 +779,19 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .kpinum .unit { font-size: 20px; font-weight: 600; color: var(--muted); margin-left: 3px; }
 .stbl { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .stbl-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.stbl-bar .sbox { flex: 1; min-width: 0; }
-.stbl-bar .ti-fm :deep(.fm-btn) { width: 32px; height: 32px; }
+/* the whole bar is ONE field: chips and the picker live inside the box, so it reads as a
+   single control the way the design draws it */
+.stbl-bar .sbox { flex: 1; min-width: 0; gap: 6px; padding-right: 3px; }
+.stbl-bar .sbox input { flex: 1; min-width: 60px; }
+/* the field picker, tucked inside the field at the right */
+.stbl-bar .ti-fm :deep(.fm-btn) { width: 26px; height: 26px; border: none; background: transparent; }
+.stbl-bar .ti-fm :deep(.fm-btn:hover) { background: var(--surface-2); }
+/* an active filter, as the design states it: Field is Value */
+.fchip { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 190px; height: 22px; padding: 0 4px 0 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.fchip b { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.fchip em { font-style: normal; color: var(--muted); }
+.fchip button { flex: none; width: 15px; height: 15px; border: none; background: transparent; color: var(--muted); border-radius: 4px; display: grid; place-items: center; }
+.fchip button:hover { background: var(--border); color: var(--ink); }
 .sbox { display: flex; align-items: center; gap: 7px; width: 100%; height: 30px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 8px; background: var(--surface); }
 .sbox:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .sbox input { border: none; outline: none; background: transparent; width: 100%; font-size: 12.5px; }

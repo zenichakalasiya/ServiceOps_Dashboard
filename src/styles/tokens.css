@@ -54,16 +54,16 @@
   --ai-grad-card: linear-gradient(90deg, #f1f9ff 0%, #f4edff 41.49%, #feecfd 100%);
 
   /* Neutrals — ServiceOps token source */
-  --bg: #f9fafb;               /* Light BG / Card Foreground */
+  --bg: #f6f9fc;               /* Light BG / Card Foreground — Figma Neutral/10 */
   --surface: #ffffff;          /* White / Widget BG / Nav BG */
-  --surface-2: #eef2f6;        /* Action Box / Switch / Nav Hover BG */
+  --surface-2: #eff2f6;        /* Action Box / Switch / Nav Hover BG — Figma light_bg */
   /* Sidebar tint — the two left sidebars use this to read as a distinct region against
      the near-white main canvas (ClickUp-style). */
   --sidebar: #eef1f6; --sidebar-hover: #e3e8f1; --sidebar-border: #dce2ec;
   --border: #dfe5ed;           /* Border Color */
-  --border-strong: #cbd6e1;
+  --border-strong: #cad3e2;    /* Figma Neutral/40 */
   --ink: #364658;              /* Page Text Color */
-  --ink-2: #4f6075;
+  --ink-2: #516381;            /* Figma Text/Subdued */
   --muted: #7b8fa5;            /* Gray Label / Neutral Regular */
   --muted-2: #a5bad0;          /* Light Gray Text / Neutral Light */
 
