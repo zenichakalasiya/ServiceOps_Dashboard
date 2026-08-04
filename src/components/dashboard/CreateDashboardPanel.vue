@@ -32,6 +32,7 @@ const description = ref(src?.description || '')
 const techAccess = ref(src?.techAccess?.length ? [...src.techAccess] : [store.currentUser])
 const groupAccess = ref((src?.groupAccess && src.groupAccess[0]) || '')
 const defaultLanding = ref(src?.default || false)
+const layoutLock = ref(src?.layoutLock === true)
 const err = ref('')
 
 /* Dashboard names must be unique. The board being edited is excluded by id, so it
@@ -90,6 +91,7 @@ function submit(openAdd = false) {
       }),
       category: category.value,
       headerFont: layout.headerFont, hGap: layout.hGap, vGap: layout.vGap, rowHeight: layout.rowHeight,
+      layoutLock: layoutLock.value,
       updated: new Date().toISOString(),
     })
     if (defaultLanding.value) { store.dashboards.forEach((x) => (x.default = false)); src.default = true }
@@ -99,7 +101,7 @@ function submit(openAdd = false) {
   // ---- create / clone ----
   const opts = {
     name: name.value, access: access.value, category: category.value, description: description.value,
-    techAccess: ta, groupAccess: ga, makeDefault: defaultLanding.value, layout: { ...layout },
+    techAccess: ta, groupAccess: ga, makeDefault: defaultLanding.value, layout: { ...layout }, layoutLock: layoutLock.value,
   }
   if (isClone.value) opts.tiles = src.tiles.map((t) => ({ ...JSON.parse(JSON.stringify(t)), id: uid('t') }))
   const d = createDashboard(opts)
@@ -128,6 +130,8 @@ function submit(openAdd = false) {
           <Icon name="verified" :size="14" />
           <span>This is a <b>predefined dashboard</b> — you can’t edit its <b>Name</b>, <b>Description</b> or <b>Visibility &amp; Sharing</b>. You can still change its Category, layout, and the widgets on it.</span>
         </p>
+
+        <div class="sec-h">Basics</div>
 
         <template v-if="!lockedDash">
           <div class="grp">
@@ -166,8 +170,9 @@ function submit(openAdd = false) {
         </div>
 
         <!-- Access + one-liner -->
+        <div v-if="!lockedDash" class="sec-h">Visibility &amp; sharing</div>
         <div v-if="!lockedDash" class="grp">
-          <label class="field">Visibility &amp; Sharing</label>
+          <label class="field">Dashboard Access Level <span class="req">*</span></label>
           <div class="seg">
             <button v-for="(a, k) in ACCESS" :key="k" class="seg-btn" :class="{ on: access === k }" @click="access = k">
               <Icon :name="a.icon" :size="15" /> {{ a.label }}
@@ -197,7 +202,17 @@ function submit(openAdd = false) {
           <button class="sw" :class="{ on: defaultLanding }" @click="defaultLanding = !defaultLanding"><i /></button>
         </div>
 
-        <!-- Layout + live preview -->
+        <!-- Layout Lock — freezes position AND size for everyone viewing the board -->
+        <div class="grp toggle-grp">
+          <div class="tg-text">
+            <label class="field" style="margin:0">Layout Lock</label>
+            <span class="oneliner plain">A per-dashboard lock that freezes every widget’s position and size, so viewing, presenting, or screen-sharing a board can never accidentally rearrange it.</span>
+          </div>
+          <button class="sw" :class="{ on: layoutLock }" @click="layoutLock = !layoutLock"><i /></button>
+        </div>
+
+        <!-- Layout + live preview. Slider order follows the design: the two gaps sit
+             together, with the row height last. -->
         <div class="grp">
           <label class="field sec-title">Layout</label>
           <div class="lay-grid">
@@ -207,16 +222,16 @@ function submit(openAdd = false) {
               <div class="rng-ticks"><span>S</span><span>M</span><span>L</span></div>
             </div>
             <div class="lay-fld">
-              <span class="lay-lbl">Row height</span>
-              <div class="rng-row"><input type="range" min="110" max="260" step="10" v-model.number="layout.rowHeight" class="rng" /><span class="rng-num">{{ layout.rowHeight }}</span></div>
-            </div>
-            <div class="lay-fld">
               <span class="lay-lbl">Horizontal gap</span>
               <div class="rng-row"><input type="range" min="4" max="32" step="2" v-model.number="layout.hGap" class="rng" /><span class="rng-num">{{ layout.hGap }}</span></div>
             </div>
             <div class="lay-fld">
               <span class="lay-lbl">Vertical gap</span>
               <div class="rng-row"><input type="range" min="4" max="32" step="2" v-model.number="layout.vGap" class="rng" /><span class="rng-num">{{ layout.vGap }}</span></div>
+            </div>
+            <div class="lay-fld">
+              <span class="lay-lbl">Row height</span>
+              <div class="rng-row"><input type="range" min="110" max="260" step="10" v-model.number="layout.rowHeight" class="rng" /><span class="rng-num">{{ layout.rowHeight }}</span></div>
             </div>
           </div>
 
@@ -231,10 +246,10 @@ function submit(openAdd = false) {
       </div>
 
       <div class="foot">
-        <button class="btn" @click="close">Cancel</button>
         <button class="btn btn-primary" :disabled="!canSave" :title="nameTaken ? 'That name is already taken — dashboard names must be unique' : ''" @click="submit(false)">
           <Icon :name="isEdit ? 'check' : isClone ? 'copy' : 'plus'" :size="16" /> {{ isEdit ? 'Save changes' : isClone ? 'Clone Dashboard' : 'Create' }}
         </button>
+        <button class="btn" @click="close">Cancel</button>
       </div>
     </div>
   </div>
@@ -248,6 +263,10 @@ function submit(openAdd = false) {
 .head h3 { margin: 0; font-size: 17px; }
 .head p { margin: 3px 0 0; font-size: 12.5px; }
 .body { flex: 1; padding: 6px 22px 20px; display: flex; flex-direction: column; gap: 16px; overflow: auto; }
+/* section headings — Basics / Visibility & sharing / Layout, as the design groups them.
+   The first one loses its top margin so it doesn't push away from the drawer header. */
+.sec-h { font-size: 14.5px; font-weight: 700; color: var(--ink); margin: 22px 0 -2px; }
+.sec-h:first-of-type { margin-top: 2px; }
 .grp { display: flex; flex-direction: column; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .req { color: var(--red); }

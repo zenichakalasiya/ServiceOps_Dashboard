@@ -231,7 +231,7 @@ export function addCategory(name) {
   if (n && !store.categories.some((c) => c.toLowerCase() === n.toLowerCase())) store.categories.unshift(n)
   return n
 }
-export function createDashboard({ name, access, category, folder, description, techAccess, groupAccess, makeDefault, layout, tiles }) {
+export function createDashboard({ name, access, category, folder, description, techAccess, groupAccess, makeDefault, layout, layoutLock, tiles }) {
   const d = {
     id: uid('d'), name: name.trim(), access, category: category || '', folder: folder || null,
     description: description || '', owner: store.currentUser, mine: true, predefined: false,
@@ -241,6 +241,8 @@ export function createDashboard({ name, access, category, folder, description, t
     groupAccess: groupAccess || (access === 'public' ? ['All technician groups'] : []),
     // per-dashboard layout (from the create/clone panel)
     headerFont: layout?.headerFont || 'M', hGap: layout?.hGap ?? 14, vGap: layout?.vGap ?? 14, rowHeight: layout?.rowHeight ?? 140,
+    // a per-dashboard freeze on widget position + size (create panel)
+    layoutLock: layoutLock === true,
   }
   if (makeDefault) { store.dashboards.forEach((x) => (x.default = false)); d.default = true }
   store.dashboards.unshift(d)

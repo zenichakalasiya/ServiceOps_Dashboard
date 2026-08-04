@@ -48,7 +48,10 @@ const gridEl = ref(null)
 const dragArmed = ref(null)      // tile id currently draggable
 const dragId = ref(null)         // tile id being dragged
 const dropGroup = ref(undefined) // group id currently hovered (undefined=none, null=ungrouped)
-function armDrag(t) { dragArmed.value = t.id; window.addEventListener('mouseup', disarmOnce, { once: true }) }
+/* Layout Lock freezes position AND size. Guarding here rather than only hiding the
+ * handles means a lock cannot be defeated by a stray drag that started before it. */
+const layoutLocked = computed(() => d.value?.layoutLock === true)
+function armDrag(t) { if (layoutLocked.value) return; dragArmed.value = t.id; window.addEventListener('mouseup', disarmOnce, { once: true }) }
 function disarmOnce() { if (dragId.value == null) dragArmed.value = null }
 function onDragStart(t) { dragId.value = t.id }
 function onDragEnd() { dragArmed.value = null; dragId.value = null; dropGroup.value = undefined }
@@ -377,6 +380,7 @@ function cellStyle(t) {
 }
 let resizeCtx = null
 function startResize(e, t) {
+  if (layoutLocked.value) return
   const grid = gridEl.value; if (!grid) return
   const gap = 14, col = (grid.getBoundingClientRect().width - gap * 11) / 12
   resizeCtx = { t, startX: e.clientX, startY: e.clientY, w0: t.w || 3, h0: t.h || 1, col, gap }
@@ -733,7 +737,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
               :class="{ flash: highlightId === t.id, dragging: dragId === t.id, 'pick-on': groupPicks.has(t.id) }" :style="cellStyle(t)" :draggable="dragArmed === t.id && !selecting"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
               <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
-              <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
+              <span v-if="!layoutLocked" class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
           </div>
@@ -765,7 +769,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
               :class="{ flash: highlightId === t.id, dragging: dragId === t.id }" :style="cellStyle(t)" :draggable="dragArmed === t.id"
               @dragstart="onDragStart(t)" @dragend="onDragEnd" @dragover.prevent @drop.stop.prevent="onDropTile(t)" @contextmenu="onCellContext(t, $event)">
               <WidgetCard :tile="t" :edit="edit" @remove="onRemove" @edit="onEditTile" @duplicate="onDuplicate" @pin="onPin" @armdrag="armDrag" />
-              <span class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
+              <span v-if="!layoutLocked" class="resize" title="Drag to resize" @mousedown.stop.prevent="startResize($event, t)" />
               <button v-if="gHoverIcon" class="cell-grp-chip" title="Group this widget" @click.stop="openTileMenu(t, $event)"><Icon name="new-group" :size="13" /> Group</button>
             </div>
             <div v-if="!tilesIn(g.id).length" class="grp-empty">
