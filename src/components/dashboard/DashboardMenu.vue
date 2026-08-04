@@ -19,12 +19,15 @@ const confirmDel = ref(false)
     <div v-if="open" class="backdrop" @click="open = false" />
     <transition name="pop">
       <div v-if="open" class="menu" :class="align" @click.stop>
+        <!-- order and wording follow the prototype (node 437:17124): Edit · Present mode ·
+             Clone Dashboard · Schedule Dashboard · Version History · Archive. "Mark as
+             default" sits after Clone, where the prototype's other menu variant puts it. -->
         <button class="menu-item" @click="act(() => { store.ui.cloneTarget = null; store.ui.editTarget = d; store.ui.createOpen = true })"><Icon name="edit" :size="16" /> Edit</button>
-        <button class="menu-item" @click="act(() => emit('present'))"><Icon name="maximize-tile" :size="16" /> Present</button>
-        <button class="menu-item" @click="act(() => emit('schedule'))"><Icon name="calendar2" :size="16" /> Schedule dashboard</button>
-        <button class="menu-item" @click="act(() => emit('history'))"><Icon name="history" :size="16" /> Version history</button>
-        <button class="menu-item" @click="act(() => { store.ui.cloneTarget = d; store.ui.createOpen = true })"><Icon name="copy" :size="16" /> Clone</button>
-        <button v-if="!d.default" class="menu-item" @click="act(() => markDefault(d))"><Icon name="pin" :size="16" /> Mark as default landing</button>
+        <button class="menu-item" @click="act(() => emit('present'))"><Icon name="maximize-tile" :size="16" /> Present mode</button>
+        <button class="menu-item" @click="act(() => { store.ui.cloneTarget = d; store.ui.createOpen = true })"><Icon name="copy" :size="16" /> Clone Dashboard</button>
+        <button v-if="!d.default" class="menu-item" @click="act(() => markDefault(d))"><Icon name="pin" :size="16" /> Mark as default</button>
+        <button class="menu-item" @click="act(() => emit('schedule'))"><Icon name="calendar2" :size="16" /> Schedule Dashboard</button>
+        <button class="menu-item" @click="act(() => emit('history'))"><Icon name="history" :size="16" /> Version History</button>
         <!-- predefined dashboards ship with the product: they cannot be deleted or
              archived, so the action is absent rather than disabled -->
         <template v-if="!d.predefined">
