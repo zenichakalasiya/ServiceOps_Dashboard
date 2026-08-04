@@ -19,19 +19,15 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   search: { type: String, default: '' },
   sortable: { type: Boolean, default: true },
-  /* { [columnIndex]: string[] } — driven by the shared FilterMenu in the tile
-   * header. Replaces the old per-column input row: one icon, two levels, and the
-   * same interaction as the Manage-all list. */
-  filterModel: { type: Object, default: () => ({}) },
+  /* Row filtering now happens in the PARENT (TableFilterBar owns typed conditions,
+   * and one matcher serves both the tile and the full-screen view). This flag only
+   * tells the empty state WHY the table is empty — "no match" vs "no records". */
+  filtered: { type: Boolean, default: false },
   emptyText: { type: String, default: 'No records in this range' },
 })
 const emit = defineEmits(['clear-filters'])
 
 const sorting = ref([])
-
-// values within a column are OR; columns are AND
-const pickOne = (row, id, picked) =>
-  !picked?.length || picked.includes(String(row.getValue(id) ?? '').trim())
 
 const cols = computed(() =>
   props.columns.map((c, i) => ({
@@ -39,14 +35,8 @@ const cols = computed(() =>
     header: c,
     accessorFn: (row) => row[i],
     enableSorting: props.sortable,
-    filterFn: pickOne,
   })))
 
-// FilterMenu speaks {key: values[]}; TanStack wants [{id, value}]
-const columnFilters = computed(() =>
-  Object.entries(props.filterModel)
-    .filter(([, v]) => v?.length)
-    .map(([id, value]) => ({ id, value })))
 
 const table = useVueTable({
   get data() { return props.rows },
@@ -54,7 +44,6 @@ const table = useVueTable({
   state: {
     get sorting() { return sorting.value },
     get globalFilter() { return props.search },
-    get columnFilters() { return columnFilters.value },
   },
   onSortingChange: (u) => { sorting.value = typeof u === 'function' ? u(sorting.value) : u },
   getCoreRowModel: getCoreRowModel(),
@@ -66,7 +55,7 @@ const table = useVueTable({
 
 const rowModel = computed(() => table.getRowModel().rows)
 const isEmpty = computed(() => rowModel.value.length === 0)
-const filtered = computed(() => columnFilters.value.length > 0)
+const filtered = computed(() => props.filtered)
 </script>
 
 <template>

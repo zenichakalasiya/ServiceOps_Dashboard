@@ -5,10 +5,10 @@ import ChartTile from './ChartTile.vue'
 import DataTable from './DataTable.vue'
 import FreeTextTile from './FreeTextTile.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
-import FilterMenu from '../ui/FilterMenu.vue'
+import TableFilterBar from './TableFilterBar.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { typesFor, isFrozen, frozenReason, whyDisabled } from '../../data/chartTypes.js'
-import { fieldsFrom } from '../../data/filters.js'
+import { conditionFields, matchesConds } from '../../data/filters.js'
 import { widgetBrief } from '../../data/aiEngine.js'
 import { store, toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean })
@@ -223,38 +223,24 @@ function setKind(ct) {
 const EXPORTS = ['PDF', 'PNG', 'JPEG', 'SVG', 'CSV']
 const searchOpen = ref(false)
 const tableSearch = ref('')
-/* Shortcut tables filter through the same two-level FilterMenu as the Manage-all
- * list: one icon → the columns worth filtering on → their values, multi-select.
- * The old per-column input row is gone — it made every column look filterable,
- * including the ones (ID, Subject) where every value is unique. */
-const tableFilters = ref({})
-const filterFields = computed(() => fieldsFrom(props.tile.columns || [], props.tile.rows || []))
-const searchInput = ref(null)
-watch(searchOpen, (v) => { if (v) nextTick(() => searchInput.value?.focus()) })
-// One filter control on a Shortcut: opening reveals the search box + the column
-// filters together; closing (the ✕ or toggling the header icon) clears both, so the
-// filter reads as "unselected" again.
-const hasTableFilters = computed(() => Object.values(tableFilters.value).some((v) => v && v.length))
-function toggleFilter() { if (searchOpen.value) closeFilter(); else searchOpen.value = true }
-function closeFilter() { searchOpen.value = false; tableSearch.value = ''; tableFilters.value = {} }
-
-/* Active filters render as chips INSIDE the search field — "Status is Active" — so the
- * bar reads as one control rather than a search box with a separate filter widget beside
- * it. One chip per (field, value) pair rather than one per field: a chip that reads
- * "Status is Active, Open, Pending" can only be removed wholesale, which makes dropping
- * a single value a round-trip through the menu. */
-const filterChips = computed(() =>
-  Object.entries(tableFilters.value).flatMap(([key, values]) => {
-    const field = filterFields.value.find((f) => f.key === key)
-    return (values || []).map((value) => ({ key, value, label: field?.label || key }))
-  }))
-function removeChip(chip) {
-  const next = { ...tableFilters.value }
-  const rest = (next[chip.key] || []).filter((v) => v !== chip.value)
-  if (rest.length) next[chip.key] = rest
-  else delete next[chip.key]          // an empty array is not a filter — drop the key
-  tableFilters.value = next
+/* The Shortcut filter bar is its own component (TableFilterBar): one field that both
+ * searches records and builds typed conditions — Field · Operator · Value — the way the
+ * Requests list does. Conditions are ANDed; an unfinished chip filters nothing. */
+const tableConds = ref([])
+const filterFields = computed(() => conditionFields(props.tile.columns || [], props.tile.rows || []))
+// Rows are filtered HERE rather than inside DataTable: the table keeps its own search and
+// sorting, and this way one matcher owns condition semantics for both the tile and the
+// full-screen view.
+const filteredRows = computed(() =>
+  matchedRows(props.tile.rows || []))
+function matchedRows(rows) {
+  if (!tableConds.value.length) return rows
+  return rows.filter((r) => matchesConds((key) => r[+key], tableConds.value, filterFields.value))
 }
+const hasTableFilters = computed(() => tableConds.value.length > 0)
+function toggleFilter() { if (searchOpen.value) closeFilter(); else searchOpen.value = true }
+function closeFilter() { searchOpen.value = false; tableSearch.value = ''; tableConds.value = [] }
+
 // row filtering + sorting now live in DataTable (TanStack); we only own the query
 const present = ref(false)
 const infoHover = ref(false)
@@ -537,26 +523,17 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <!-- filter bar (toggled from the header filter icon): free-text search + the
                column filters, side by side. ✕ closes and clears both. -->
           <transition name="fade">
-            <div v-if="searchOpen" class="stbl-bar">
-              <!-- one control: magnifier, the active filters as chips, then the query.
-                   The field picker sits at the right INSIDE the field, so the bar stays
-                   a single box rather than a box with a widget bolted beside it. -->
-              <div class="sbox">
-                <Icon name="search" :size="14" class="muted" />
-                <span v-for="(c, i) in filterChips" :key="c.key + c.value + i" class="fchip">
-                  <b>{{ c.label }}</b><em>is</em><b>{{ c.value }}</b>
-                  <button :title="`Remove ${c.label} is ${c.value}`" @click.stop="removeChip(c)"><Icon name="x" :size="10" /></button>
-                </span>
-                <input v-model="tableSearch" placeholder="Search a keyword or enter a keyword to search…" ref="searchInput" />
-                <FilterMenu v-if="filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter columns" class="ti-fm" />
-              </div>
-              <button class="sx" title="Close" @click="closeFilter"><Icon name="x" :size="16" /></button>
-            </div>
+            <TableFilterBar
+              v-if="searchOpen"
+              :columns="tile.columns || []" :rows="tile.rows || []"
+              v-model="tableConds" v-model:search="tableSearch"
+              @close="closeFilter"
+            />
           </transition>
           <!-- scrollable table container (sticky header); click a header to sort. No
                "View all" — the list scrolls in place, and Full screen shows all of it. -->
           <div class="stbl-scroll">
-            <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch" :filter-model="tableFilters" @clear-filters="tableFilters = {}">
+            <DataTable :columns="tile.columns" :rows="filteredRows" :search="tableSearch" :filtered="hasTableFilters" @clear-filters="tableConds = []">
               <template #cell="{ value }">
                 <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
                 <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
@@ -593,17 +570,15 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
             <FreeTextTile v-else-if="tile.type === 'text'" :content="tile.content" />
             <div v-else class="stbl big">
-              <!-- full screen: the same search + column filters, always available, and the
-                   whole record set scrolls within the dialog -->
-              <div class="stbl-bar">
-                <div class="sbox">
-                  <Icon name="search" :size="15" class="muted" />
-                  <input v-model="tableSearch" placeholder="Search records…" />
-                </div>
-                <FilterMenu v-if="filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter columns" class="ti-fm" />
-              </div>
+              <!-- full screen: the same bar, always available (there is no header icon to
+                   toggle it from here), and the whole record set scrolls in the dialog -->
+              <TableFilterBar
+                :columns="tile.columns || []" :rows="tile.rows || []"
+                v-model="tableConds" v-model:search="tableSearch"
+                @close="tableConds = []; tableSearch = ''"
+              />
               <div class="stbl-scroll">
-                <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch" :filter-model="tableFilters" @clear-filters="tableFilters = {}">
+                <DataTable :columns="tile.columns" :rows="filteredRows" :search="tableSearch" :filtered="hasTableFilters" @clear-filters="tableConds = []">
                   <template #cell="{ value }">
                     <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
                     <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
