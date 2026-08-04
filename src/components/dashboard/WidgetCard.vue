@@ -77,6 +77,56 @@ const dfPos = ref({ top: 0, left: 0 })
 // the quick ranges, mirrored from the topbar TimeFilter — the "small" version is this
 // single column, no absolute-range pane.
 const DF_RANGES = ['Today', 'Yesterday', 'Last 7 days', 'Last 30 days', 'This week', 'This month', 'This quarter', 'Year to date']
+const dfHover = ref(false)
+
+/* The calendar states HOW FAR BACK this widget looks — 'today', '7 days ago',
+ * '2 months ago' — rather than repeating the range's proper name. "Last 30 days" is a
+ * label; "30 days ago" is the answer to the question the icon actually raises. The
+ * tooltip then resolves it to real timestamps, which is the part a name can never carry.
+ *
+ * Every range is resolved to a real window first, so a custom range and a named one go
+ * through exactly the same path — otherwise the two drift and only one of them is right. */
+function dfWindow(range) {
+  const start = new Date(); start.setHours(0, 0, 0, 0)
+  const end = new Date(); end.setHours(23, 59, 0, 0)
+  // a custom range is stored as "DD/MM/YY – DD/MM/YY" (see applyCustom)
+  const m = /^(\d{2})\/(\d{2})\/(\d{2})\s*[–-]\s*(\d{2})\/(\d{2})\/(\d{2})$/.exec(range || '')
+  if (m) {
+    const s = new Date(2000 + +m[3], +m[2] - 1, +m[1]); s.setHours(0, 0, 0, 0)
+    const e = new Date(2000 + +m[6], +m[5] - 1, +m[4]); e.setHours(23, 59, 0, 0)
+    return { start: s, end: e }
+  }
+  const back = (d) => start.setDate(start.getDate() - d)
+  switch (range) {
+    case 'Yesterday': back(1); end.setDate(end.getDate() - 1); break
+    case 'Last 7 days': back(7); break
+    case 'Last 30 days': back(30); break
+    // ISO weeks start Monday; getDay() is 0 for Sunday, which would jump a whole week
+    case 'This week': back(start.getDay() === 0 ? 6 : start.getDay() - 1); break
+    case 'This month': start.setDate(1); break
+    case 'This quarter': start.setMonth(Math.floor(start.getMonth() / 3) * 3, 1); break
+    case 'Year to date': start.setMonth(0, 1); break
+    default: break                                   // 'Today' — the window is today
+  }
+  return { start, end }
+}
+const DAY = 86400000
+function dfRelative(range) {
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0)
+  const days = Math.max(0, Math.round((midnight - dfWindow(range).start) / DAY))
+  if (!days) return 'today'
+  if (days === 1) return '1 day ago'
+  // past ~6 weeks a day count stops being readable — "2 months ago" lands immediately
+  if (days < 45) return `${days} days ago`
+  const mo = Math.round(days / 30)
+  return `${mo} month${mo > 1 ? 's' : ''} ago`
+}
+const dfStamp = (d) => d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ',')
+const dfTitle = computed(() => {
+  if (!hasDateFilter.value) return 'Set a time range for this widget'
+  const { start, end } = dfWindow(props.tile.dateFilter)
+  return `${dfStamp(start)} → ${dfStamp(end)}\nClick to change this widget’s range`
+})
 // custom absolute range — the second pane of the popover (mirrors the topbar TimeFilter)
 const dfCustom = ref(false)
 const dfFrom = ref('')
@@ -273,7 +323,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 </script>
 
 <template>
-  <div ref="cardEl" class="tile card" :class="{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen }">
+  <!-- `acting` holds the cluster open while a popover this header owns is up: the menu
+       and the date popover are teleported, so moving the pointer into them drops :hover
+       and the icons would collapse out from under the thing the user just opened. -->
+  <div ref="cardEl" class="tile card" :class="{ ['span-' + (tile.w || 3)]: true, ['rows-' + (tile.h || 1)]: true, searching: searchOpen, acting: menu || dfOpen || aiHover }">
     <!-- Standardized header: title + info (left) · refresh · fullscreen · edit · ⋯ (right).
          EVERY tile uses this. The click-to-select floating toolbar three tiles used to
          have is gone — one board should not have two different ways to reach the same
@@ -293,20 +346,24 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         <!-- always-visible per-widget time range (the date icon from the design) -->
         <button
           v-if="tile.type !== 'text'" ref="dfChipEl" class="ti df-btn" :class="{ on: hasDateFilter || dfOpen }"
-          @click.stop="toggleDf"
-          :title="hasDateFilter ? `This widget uses its own range (${tile.dateFilter}) — click to change` : 'Set a time range for this widget'"
+          @click.stop="toggleDf" @mouseenter="dfHover = true" @mouseleave="dfHover = false"
+          :title="dfTitle"
         >
           <Icon name="calendar" :size="15" />
-          <span v-if="hasDateFilter" class="dfb-lbl">{{ tile.dateFilter }}</span>
+          <!-- the relative phrase rides in on hover; the tooltip carries the timestamps -->
+          <span v-if="hasDateFilter" class="dfb-lbl" :class="{ show: dfHover || dfOpen }">{{ dfRelative(tile.dateFilter) }}</span>
         </button>
-        <!-- revealed on hover: AI sparkle, the records filter, Refresh, and ⋯ -->
+        <!-- revealed on hover, to the RIGHT of the calendar: AI sparkle, the records
+             filter, Refresh, then ⋯ furthest right -->
         <div class="right">
-          <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
-          <!-- one control: the filter icon reveals search + column filters; closing clears them -->
-          <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen || hasTableFilters }" @click="toggleFilter" title="Filter records"><Icon name="filter" :size="15" /></button>
-          <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
-          <div class="mwrap">
-            <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
+          <div class="r-in">
+            <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
+            <!-- one control: the filter icon reveals search + column filters; closing clears them -->
+            <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen || hasTableFilters }" @click="toggleFilter" title="Filter records"><Icon name="filter" :size="15" /></button>
+            <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
+            <div class="mwrap">
+              <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
+            </div>
           </div>
         </div>
       </div>
@@ -602,16 +659,34 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .tile:hover .info { opacity: 1; }
 .info:hover { color: var(--primary); }
 .info-tt { position: fixed; z-index: 200; width: 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-/* the right cluster: a persistent date control + the hover-revealed actions */
+/* the right cluster: a persistent date control, then the hover-revealed actions.
+   At rest the action cluster takes NO width, so the calendar sits at the far right of
+   the header. On hover the cluster opens to its natural width and the calendar slides
+   left into place — one continuous motion rather than three icons popping in around a
+   stationary one. Order after the calendar: AI · (records filter) · Refresh · ⋯ */
 .ractions { display: flex; align-items: center; gap: 2px; flex: none; }
-.right { display: flex; align-items: center; gap: 1px; opacity: 0; transition: opacity .14s; }
-.tile:hover .right, .tile.searching .right { opacity: 1; }
-/* the persistent per-widget time range — auto-width so the active range label fits */
-.df-btn { width: auto; min-width: 28px; padding: 0 6px; gap: 4px; display: inline-flex; }
-.df-btn :deep(.ico) { color: var(--df); }
-.df-btn.on { background: var(--df-soft); color: var(--df-ink); }
-.df-btn.on :deep(.ico) { color: var(--df); }
-.dfb-lbl { font-size: 11px; font-weight: 600; white-space: nowrap; }
+/* grid 0fr→1fr is what makes an AUTO width animatable at all: max-width would have to
+   ease toward a guessed number and would land with a snap once it passed the real one. */
+.right { display: grid; grid-template-columns: 0fr; opacity: 0; transition: grid-template-columns .24s cubic-bezier(.2,.7,.3,1), opacity .16s ease; }
+.r-in { display: flex; align-items: center; gap: 1px; min-width: 0; overflow: hidden; }
+.tile:hover .right, .tile.searching .right, .tile.acting .right { grid-template-columns: 1fr; opacity: 1; }
+/* the persistent per-widget time range — auto-width so the hover label fits.
+   `.ti` further down sets a fixed 28px `display: grid` box, so this has to beat it on
+   SPECIFICITY (.ti.df-btn), not source order: as a plain `.df-btn` the icon and label
+   became two grid ROWS — the label rendering under the icon — and the width stayed 28px
+   so the label spilled out to the left. Invisible to the build; only shows on screen. */
+.ti.df-btn { width: auto; min-width: 28px; padding: 0 6px; gap: 0; display: inline-flex; align-items: center; }
+.ti.df-btn :deep(.ico) { color: var(--df); flex: none; }
+.ti.df-btn.on { background: var(--df-soft); color: var(--df-ink); }
+.ti.df-btn.on :deep(.ico) { color: var(--df); }
+/* the relative phrase ('7 days ago') opens on hover and closes with the same easing as
+   the cluster, so the header settles as one movement instead of two competing ones */
+.dfb-lbl { font-size: 11px; font-weight: 600; white-space: nowrap; max-width: 0; margin-left: 0; opacity: 0; overflow: hidden; transition: max-width .24s cubic-bezier(.2,.7,.3,1), margin-left .24s cubic-bezier(.2,.7,.3,1), opacity .16s ease; }
+.dfb-lbl.show { max-width: 110px; margin-left: 4px; opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .right, .dfb-lbl { transition: none; }
+}
 .ti { width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; }
 /* hover uses the card surface (white) so it reads against the neutral header band */
 .ti:hover { background: var(--surface); color: var(--ink); }
