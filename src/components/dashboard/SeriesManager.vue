@@ -139,7 +139,7 @@ watch(rows, () => { pickFor.value = null })
     </div>
 
     <div class="sm-foot">
-      <b>{{ shownCount }}</b> of {{ entities.length }} series shown
+      <b>{{ shownCount }}</b> / {{ entities.length }} is shown
       <button v-if="hidden.size" class="rst" @click="emit('reset')">Reset</button>
     </div>
 

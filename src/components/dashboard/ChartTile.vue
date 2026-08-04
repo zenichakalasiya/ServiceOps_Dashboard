@@ -167,11 +167,15 @@ function recolor({ key, color }) { overrides.value = { ...overrides.value, [key]
 const rankMode = ref('top')      // top | bottom | all
 const rankN = ref(10)
 
+/* All first, as the prototype orders them: it is the unfiltered state, so reading
+ * left-to-right the list narrows rather than starting narrowed. */
 const RANKS = [
+  { id: 'all', label: 'All' },
   { id: 'top', label: 'Top N' },
   { id: 'bottom', label: 'Bottom N' },
-  { id: 'all', label: 'All' },
 ]
+// the prototype offers N as a select rather than a free number field
+const RANK_NS = [5, 10, 15, 20, 25, 50]
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : lo))
 
 const sortedDesc = computed(() => [...entities.value].sort((a, b) => b.value - a.value))
@@ -663,25 +667,30 @@ onBeforeUnmount(() => {
         >
           <span class="mp-arrow" :style="{ left: pop.arrow }" />
           <header class="mp-h">
-            {{ rankModes ? 'Which slice of the ranking?' : `All ${entities.length} series` }}
+            Legend Filter
             <button class="mp-x" @click="closePops"><Icon name="x" :size="14" /></button>
           </header>
 
           <template v-if="rankModes">
-            <div class="rp-tabs">
-              <button v-for="r in RANKS" :key="r.id" class="rp-t" :class="{ on: rankMode === r.id }" @click="rankMode = r.id">{{ r.label }}</button>
+            <!-- Sort Order and Value side by side, as the prototype lays them out -->
+            <div class="rp-row">
+              <div class="rp-col">
+                <span class="rp-l">Sort Order</span>
+                <div class="rp-tabs">
+                  <button v-for="r in RANKS" :key="r.id" class="rp-t" :class="{ on: rankMode === r.id }" @click="rankMode = r.id">{{ r.label }}</button>
+                </div>
+              </div>
+              <div class="rp-col n">
+                <span class="rp-l">Value</span>
+                <!-- disabled on All: there is no N to pick when nothing is windowed -->
+                <select class="rp-sel" v-model.number="rankN" :disabled="rankMode === 'all'">
+                  <option v-for="n in RANK_NS" :key="n" :value="n">{{ n }}</option>
+                </select>
+              </div>
             </div>
-
-            <div class="rp-field">
-              <template v-if="rankMode === 'top' || rankMode === 'bottom'">
-                <label>Show the</label>
-                <input class="rp-n" type="number" min="1" :max="entities.length" v-model.number="rankN" />
-                <span>{{ rankMode === 'top' ? 'largest' : 'smallest' }} of {{ entities.length }}</span>
-              </template>
-              <template v-else>
-                <span class="rp-warn"><Icon name="alert" :size="13" /> Colour stops carrying meaning past about 10.</span>
-              </template>
-            </div>
+            <p v-if="rankMode === 'all' && entities.length > 10" class="rp-warn">
+              <Icon name="alert" :size="13" /> Colour stops carrying meaning past about 10.
+            </p>
           </template>
 
           <!-- the series that slice actually plots — click one to drop it from the chart.
@@ -776,6 +785,13 @@ onBeforeUnmount(() => {
 .rp-t { flex: 1; height: 26px; border: none; background: transparent; color: var(--muted); border-radius: 5px; font-size: 11px; font-weight: 600; white-space: nowrap; padding: 0 4px; }
 .rp-t:hover { color: var(--ink); }
 .rp-t.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); }
+/* Sort Order (tabs) and Value (select) share one row, each under its own label */
+.rp-row { display: flex; align-items: flex-end; gap: 10px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
+.rp-col { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+.rp-col.n { flex: none; width: 84px; }
+.rp-l { font-size: 11.5px; font-weight: 500; color: var(--ink-2); }
+.rp-sel { height: 30px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; padding: 0 6px; }
+.rp-sel:disabled { opacity: .5; cursor: not-allowed; }
 .rp-field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 30px; padding-bottom: 7px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .rp-field label { font-size: 12px; color: var(--ink-2); font-weight: 500; }
 .rp-n { width: 56px; height: 26px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; text-align: center; }
