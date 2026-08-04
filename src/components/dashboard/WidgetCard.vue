@@ -164,6 +164,12 @@ const tableFilters = ref({})
 const filterFields = computed(() => fieldsFrom(props.tile.columns || [], props.tile.rows || []))
 const searchInput = ref(null)
 watch(searchOpen, (v) => { if (v) nextTick(() => searchInput.value?.focus()) })
+// One filter control on a Shortcut: opening reveals the search box + the column
+// filters together; closing (the ✕ or toggling the header icon) clears both, so the
+// filter reads as "unselected" again.
+const hasTableFilters = computed(() => Object.values(tableFilters.value).some((v) => v && v.length))
+function toggleFilter() { if (searchOpen.value) closeFilter(); else searchOpen.value = true }
+function closeFilter() { searchOpen.value = false; tableSearch.value = ''; tableFilters.value = {} }
 // row filtering + sorting now live in DataTable (TanStack); we only own the query
 const present = ref(false)
 const infoHover = ref(false)
@@ -260,24 +266,31 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         <span class="draghandle" title="Drag to move" @mousedown="emit('armdrag', tile)"><Icon name="drag" :size="16" /></span>
         <span v-if="tile.pinned" class="pinbadge" title="Pinned"><Icon name="pin" :size="12" /></span>
         <span class="title ellip">{{ tile.title }}</span>
-        <!-- date override: an always-visible pill; click to change this widget's range -->
-        <button v-if="hasDateFilter" ref="dfChipEl" class="df-chip" :class="{ on: dfOpen }" @click.stop="toggleDf" title="This widget uses its own range — click to change">
-          <Icon name="calendar" :size="11" /> {{ tile.dateFilter }} <Icon name="chevron-down" :size="10" />
-        </button>
         <span ref="infoEl" class="info" @mouseenter="showInfo" @mouseleave="infoHover = false">
           <Icon name="info" :size="14" />
         </span>
       </div>
-      <!-- Upfront: only Refresh and the AI sparkle. Every other action lives in ⋯.
-           (Search + Filter stay for a records table — they operate on the table's
-           content, not the widget, so they aren't "actions" in the ⋯ sense.) -->
-      <div class="right">
-        <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
-        <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen }" @click="searchOpen = !searchOpen" title="Search records"><Icon name="search" :size="15" /></button>
-        <FilterMenu v-if="tile.type === 'shortcut' && filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter records" class="ti-fm" />
-        <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
-        <div class="mwrap">
-          <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
+      <!-- Right side (per the header component): a PERSISTENT time-range control that
+           shows even at rest, then the rest of the actions revealed on hover. -->
+      <div class="ractions">
+        <!-- always-visible per-widget time range (the date icon from the design) -->
+        <button
+          v-if="tile.type !== 'text'" ref="dfChipEl" class="ti df-btn" :class="{ on: hasDateFilter || dfOpen }"
+          @click.stop="toggleDf"
+          :title="hasDateFilter ? `This widget uses its own range (${tile.dateFilter}) — click to change` : 'Set a time range for this widget'"
+        >
+          <Icon name="calendar" :size="15" />
+          <span v-if="hasDateFilter" class="dfb-lbl">{{ tile.dateFilter }}</span>
+        </button>
+        <!-- revealed on hover: AI sparkle, the records filter, Refresh, and ⋯ -->
+        <div class="right">
+          <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
+          <!-- one control: the filter icon reveals search + column filters; closing clears them -->
+          <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen || hasTableFilters }" @click="toggleFilter" title="Filter records"><Icon name="filter" :size="15" /></button>
+          <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
+          <div class="mwrap">
+            <button ref="menuBtn" class="ti" @click.stop="toggleMenu" title="More"><Icon name="dots-v" :size="15" /></button>
+          </div>
         </div>
       </div>
     </header>
@@ -426,17 +439,20 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 
       <template v-else>
         <div class="stbl">
-          <!-- search bar (toggled from the header search icon, beside Refresh) -->
+          <!-- filter bar (toggled from the header filter icon): free-text search + the
+               column filters, side by side. ✕ closes and clears both. -->
           <transition name="fade">
             <div v-if="searchOpen" class="stbl-bar">
               <div class="sbox">
                 <Icon name="search" :size="14" class="muted" />
                 <input v-model="tableSearch" placeholder="Search records…" ref="searchInput" />
-                <button class="sx" title="Close" @click="searchOpen = false; tableSearch = ''"><Icon name="x" :size="14" /></button>
               </div>
+              <FilterMenu v-if="filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter columns" class="ti-fm" />
+              <button class="sx" title="Close" @click="closeFilter"><Icon name="x" :size="16" /></button>
             </div>
           </transition>
-          <!-- scrollable table container (sticky header); click a header to sort -->
+          <!-- scrollable table container (sticky header); click a header to sort. No
+               "View all" — the list scrolls in place, and Full screen shows all of it. -->
           <div class="stbl-scroll">
             <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch" :filter-model="tableFilters" @clear-filters="tableFilters = {}">
               <template #cell="{ value }">
@@ -446,7 +462,6 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
               </template>
             </DataTable>
           </div>
-          <a class="viewall">View all <Icon name="chevron-right" :size="13" /></a>
         </div>
       </template>
     </div>
@@ -476,13 +491,24 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
             <div v-else-if="tile.type === 'kpi'" class="kpi big"><div class="kpinum">{{ tile.value }}<span class="unit">{{ tile.unit }}</span></div></div>
             <FreeTextTile v-else-if="tile.type === 'text'" :content="tile.content" />
             <div v-else class="stbl big">
-              <DataTable :columns="tile.columns" :rows="tile.rows || []">
-                <template #cell="{ value }">
-                  <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
-                  <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
-                  <template v-else>{{ value }}</template>
-                </template>
-              </DataTable>
+              <!-- full screen: the same search + column filters, always available, and the
+                   whole record set scrolls within the dialog -->
+              <div class="stbl-bar">
+                <div class="sbox">
+                  <Icon name="search" :size="15" class="muted" />
+                  <input v-model="tableSearch" placeholder="Search records…" />
+                </div>
+                <FilterMenu v-if="filterFields.length" v-model="tableFilters" :fields="filterFields" label="Filter columns" class="ti-fm" />
+              </div>
+              <div class="stbl-scroll">
+                <DataTable :columns="tile.columns" :rows="tile.rows || []" :search="tableSearch" :filter-model="tableFilters" @clear-filters="tableFilters = {}">
+                  <template #cell="{ value }">
+                    <span v-if="pillClass(value)" :class="pillClass(value)">{{ value }}</span>
+                    <button v-else-if="isId(value)" class="id-link" @click.stop="exploreId(value)">{{ value }}</button>
+                    <template v-else>{{ value }}</template>
+                  </template>
+                </DataTable>
+              </div>
             </div>
           </div>
         </div>
@@ -556,8 +582,16 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .tile:hover .info { opacity: 1; }
 .info:hover { color: var(--primary); }
 .info-tt { position: fixed; z-index: 200; width: 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* the right cluster: a persistent date control + the hover-revealed actions */
+.ractions { display: flex; align-items: center; gap: 2px; flex: none; }
 .right { display: flex; align-items: center; gap: 1px; opacity: 0; transition: opacity .14s; }
 .tile:hover .right, .tile.searching .right { opacity: 1; }
+/* the persistent per-widget time range — auto-width so the active range label fits */
+.df-btn { width: auto; min-width: 28px; padding: 0 6px; gap: 4px; display: inline-flex; }
+.df-btn :deep(.ico) { color: var(--df); }
+.df-btn.on { background: var(--df-soft); color: var(--df-ink); }
+.df-btn.on :deep(.ico) { color: var(--df); }
+.dfb-lbl { font-size: 11px; font-weight: 600; white-space: nowrap; }
 .ti { width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--muted); display: grid; place-items: center; }
 /* hover uses the card surface (white) so it reads against the neutral header band */
 .ti:hover { background: var(--surface); color: var(--ink); }
@@ -620,7 +654,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .kpinum { font-size: 46px; font-weight: 500; letter-spacing: -1px; line-height: 1; }
 .kpinum .unit { font-size: 20px; font-weight: 600; color: var(--muted); margin-left: 3px; }
 .stbl { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.stbl-bar { margin-bottom: 6px; }
+.stbl-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.stbl-bar .sbox { flex: 1; min-width: 0; }
+.stbl-bar .ti-fm :deep(.fm-btn) { width: 32px; height: 32px; }
 .sbox { display: flex; align-items: center; gap: 7px; width: 100%; height: 30px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 8px; background: var(--surface); }
 .sbox:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .sbox input { border: none; outline: none; background: transparent; width: 100%; font-size: 12.5px; }
@@ -651,6 +687,9 @@ table { font-size: 12.5px; }
 .pbody { padding: 32px 40px; flex: 1; min-height: 62vh; display: grid; place-items: center; overflow: auto; }
 .pbody > * { width: 100%; }
 .kpi.big { padding: 0; } .kpi.big .kpinum { font-size: 150px; } .kpi.big .kpinum .unit { font-size: 48px; }
-.stbl.big { align-self: start; } .stbl.big table { font-size: 15px; }
+.stbl.big { align-self: stretch; width: 100%; } .stbl.big table { font-size: 15px; }
+/* full screen: the record list scrolls within the dialog (sticky header) instead of
+   a "View all" jump; taller than the tile so more rows show at once. */
+.stbl.big .stbl-scroll { max-height: 72vh; }
 .ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

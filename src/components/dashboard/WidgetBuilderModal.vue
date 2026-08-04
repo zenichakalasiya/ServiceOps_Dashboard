@@ -368,15 +368,6 @@ function save(place) {
                 <Icon :name="f.icon" :size="16" /> {{ f.label }}
               </button>
             </div>
-            <div v-else-if="editTabs.length && !predefinedEdit" class="pv-tabs">
-              <button
-                v-for="t in editTabs" :key="t.id" class="pv-tab"
-                :class="{ on: curType.id === t.id }" :title="`Show as ${t.label}`"
-                @click="pickKind(t)"
-              >
-                <Icon :name="t.icon" :size="16" :class="{ rot90: t.id === 'bar' }" /> {{ t.label }}
-              </button>
-            </div>
             <div class="pv-card">
               <div class="pv-canvas">
                 <div v-if="isKpi" class="pv-kpi">{{ previewTile.value }}<span v-if="previewTile.unit" class="u">{{ previewTile.unit }}</span><span class="d">▲ {{ previewTile.delta?.pct }}%</span></div>
@@ -401,9 +392,11 @@ function save(place) {
                   This is a <b>predefined</b> widget — you can switch it between <b>Bar, Column and Line</b> and edit <b>Highlights</b>, both below. Nothing else.
                 </span>
               </div>
-              <!-- predefined switchable widget: the Bar/Column/Line switch lives here as tiles
-                   in the config panel now (per spec), not as tabs above the preview -->
-              <div v-if="predefinedEdit && editTabs.length" class="sec">
+              <!-- Editing a switchable chart (Bar/Column/Line): the type switch lives here as
+                   tiles in the config panel, never as tabs above the preview — and never a
+                   Widget/KPI/Shortcut family switch, since you can't recast a tile's family
+                   mid-edit. Shown for both predefined and custom edits. -->
+              <div v-if="editTabs.length" class="sec">
                 <div class="sec-h">Chart Type</div>
                 <div class="kinds">
                   <button
