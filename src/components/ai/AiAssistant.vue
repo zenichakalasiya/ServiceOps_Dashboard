@@ -12,8 +12,8 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import Icon from '../ui/Icon.vue'
 import ChartTile from '../dashboard/ChartTile.vue'
-import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, statusUpdate, recoveryPlan, workOrder, changesSinceLastVisit, dashboardSummaryPoints, boardWidgetDigest, FRESHNESS } from '../../data/aiEngine.js'
-import { routeIntent, tileFromText, factFromText, resolveWidget, applyGroupBy, reviseSpec, explicitForm, proposeDashboard, suggestWidgets, GROUP_DIMS, WINDOW_CHOICES, CONDITION_CHOICES, SUGGESTIONS } from '../../data/aiAssistant.js'
+import { facts as computeFacts, confidence, anomalyFor, drillFor, drillNarrative, explainTile, statusUpdate, recoveryPlan, workOrder, changesSinceLastVisit, dashboardSummaryPoints, boardWidgetDigest, deepDiveBoard, deepDiveTile, focusBoard, focusTile, FRESHNESS } from '../../data/aiEngine.js'
+import { routeIntent, tileFromText, tileFromTitle, factFromText, resolveWidget, applyGroupBy, reviseSpec, explicitForm, proposeDashboard, suggestWidgets, GROUP_DIMS, WINDOW_CHOICES, CONDITION_CHOICES, SUGGESTIONS } from '../../data/aiAssistant.js'
 import { useRouter, useRoute } from 'vue-router'
 import { store, toast, createDashboard } from '../../store/index.js'
 import { chart, kpi, shortcut } from '../../data/mock.js'
@@ -44,8 +44,11 @@ const THINK_STEPS = {
   explain: () => ['Fetching this metric’s recent history', 'Computing the z-score against its baseline', 'Deciding whether it’s a real anomaly'],
   changes: () => ['Loading your last-visit snapshot', 'Diffing every metric since then', 'Sorting by what moved the most'],
   analyzing: (n) => [`Reading ${n} widgets`, 'Checking SLA, backlog and anomaly signals', 'Composing a plain-language summary'],
+  // the two universal CTAs
+  deepdive: (scope) => [`Reading everything on ${scope}`, 'Checking each signal against its normal range', 'Working out what is actually happening', 'Writing it up'],
+  focus: (scope) => [`Scoring every signal on ${scope}`, 'Ranking by severity and urgency', 'Attaching the next action to each'],
 }
-const THINK_LABEL = { summary: 'Analyzing what needs attention', drill: 'Investigating', explain: 'Explaining this metric', changes: 'Comparing with your last visit', analyzing: 'Analyzing this dashboard', status: 'Drafting a status update', plan: 'Building a recovery plan', worklist: 'Working out what comes first' }
+const THINK_LABEL = { summary: 'Analyzing what needs attention', drill: 'Investigating', explain: 'Explaining this metric', changes: 'Comparing with your last visit', analyzing: 'Analyzing this dashboard', status: 'Drafting a status update', plan: 'Building a recovery plan', worklist: 'Working out what comes first', deepdive: 'Reading the full picture', focus: 'Working out what needs attention' }
 const thinkLabel = (b) => THINK_LABEL[b.kind] || 'Thinking'
 // only the reasoning steps that have started (so transition-group animates each in)
 const shownSteps = (b) => (b.steps || []).filter((s) => s.state !== 'pending')
@@ -103,6 +106,57 @@ function pushWidget(text) {
 function highlightWidget(fact) {
   const t = fact && props.board.tiles.find((x) => x.id === fact.tileId)
   store.ui.aiHighlight = t ? t.title : null
+}
+
+/* ===== The two universal CTAs — Deep dive · What needs attention ==============
+ * The same pair fires at board level and at widget level; tileFromTitle decides which,
+ * from an explicit title match only (tileFromText would fall back to a tile and silently
+ * scope a board-level deep dive to one widget).
+ *
+ * They are deliberately different SHAPES of answer. Deep dive states a verdict and shows
+ * its receipts; focus reveals a ranked list where every item carries its own next action.
+ * Keep it that way — the moment one starts producing the other's shape, they are one CTA. */
+
+/* Deep dive renders as STRUCTURE, not a paragraph: a stated verdict, the readings as
+ * chips, the drivers as cards, and the consequence as a callout. Only the verdict
+ * streams; the rest reveals under it, so the answer lands as something you scan rather
+ * than four paragraphs of prose you have to read to find the point. */
+function pushDeepDive(text) {
+  const tile = tileFromTitle(props.board, text)
+  const scope = tile ? `“${tile.title}”` : `“${props.board.name}”`
+  const b = push('deepdive', { phase: 'thinking', scope, tile, verdict: null, headline: '', readings: [], drivers: [], shownDrivers: 0, meaning: '', showExtras: false, settled: false })
+  runThinking(b, THINK_STEPS.deepdive(scope), () => {
+    const dd = tile ? deepDiveTile(tile) : deepDiveBoard(props.board, props.role)
+    b.verdict = dd.verdict
+    b.readings = dd.readings
+    b.drivers = dd.drivers
+    b.meaning = dd.meaning
+    if (tile) highlightWidget({ tileId: tile.id })
+    streamText(b, 'headline', dd.verdict.headline, () => {
+      b.showExtras = true
+      revealItems(b, 'shownDrivers', dd.drivers.length, 180, () => { b.settled = true })
+    })
+  })
+}
+
+/* No buttons on a focus item, deliberately. The recommendation is prose: a three-word
+ * button ("Rebalance the queue") states an action without the reasoning that lets the
+ * user judge whether it is the right one, which is the difference between an actionable
+ * insight and an instruction. Anything the user then wants to do is one sentence away in
+ * the composer, already grounded in the answer above it. */
+function pushFocus(text) {
+  const tile = tileFromTitle(props.board, text)
+  const scope = tile ? `“${tile.title}”` : `“${props.board.name}”`
+  const b = push('focus', { phase: 'thinking', scope, tile, lead: '', items: [], notes: [], shown: 0, settled: false })
+  runThinking(b, THINK_STEPS.focus(scope), () => {
+    const f = tile ? focusTile(tile) : focusBoard(props.board, props.role)
+    b.lead = f.lead
+    b.items = f.items
+    b.notes = f.notes || []
+    if (tile) highlightWidget({ tileId: tile.id })
+    if (!b.items.length) { b.settled = true; return }
+    revealItems(b, 'shown', b.items.length, 240, () => { b.settled = true })
+  })
 }
 
 // P1 — what needs attention: think, then reveal each fact one at a time
@@ -1057,7 +1111,9 @@ function suggestNewBoardNamed(text) {
 }
 
 function dispatch(intent, text) {
-  if (intent === 'summary') pushSummary()
+  if (intent === 'deepdive') pushDeepDive(text)
+  else if (intent === 'focus') pushFocus(text)
+  else if (intent === 'summary') pushSummary()
   else if (intent === 'explain') pushExplain(text)
   else if (intent === 'drill') pushDrill(text)
   /* "Create a DASHBOARD" and "create a widget" are the same intent to the router but
@@ -1079,7 +1135,7 @@ const CREATE_FLOW_KINDS = ['create-start', 'cd-intent', 'cd-draft', 'cd-proposal
 /* Follow-ups are for answers that INVITE a next question — a summary, a diff, an
  * explanation, an investigation. A templated note or a generated widget already
  * ends with its own actions, so piling generic follow-ups underneath is noise. */
-const FOLLOWUP_KINDS = ['summary', 'changes', 'analyzing', 'widgets', 'explain', 'drill', 'status', 'plan', 'worklist']
+const FOLLOWUP_KINDS = ['summary', 'changes', 'analyzing', 'widgets', 'explain', 'drill', 'status', 'plan', 'worklist', 'deepdive', 'focus']
 function isAnswer(b) {
   if (!FOLLOWUP_KINDS.includes(b.kind)) return false
   if (b.phase && b.phase !== 'done') return false   // still thinking
@@ -1123,6 +1179,19 @@ function copyBlock(b) {
 
 function followUpsFor(b) {
   const k = b.kind
+  /* The two CTAs hand off to each other, and that handoff IS the conversation: a deep
+   * dive ends by offering the ranked list, and the ranked list ends by offering the
+   * ordering and the write-up. Neither offers itself back. */
+  if (k === 'deepdive') return [
+    { label: 'What needs attention', intent: 'focus' },
+    { label: 'What changed since last visit', intent: 'changes' },
+    { label: 'Draft a status update', intent: 'status' },
+  ]
+  if (k === 'focus') return [
+    { label: 'What should I work on first?', intent: 'worklist' },
+    { label: 'Turn this into a recovery plan', intent: 'plan' },
+    { label: 'Draft a status update', intent: 'status' },
+  ]
   if (k === 'analyzing' || k === 'summary') return [
     { label: 'What should I work on first?', intent: 'worklist' },
     { label: 'What changed since last visit', intent: 'changes' },
@@ -1360,6 +1429,9 @@ function hl(s) {
     .replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
     .replace(/“([^”]+)”/g, '<b>“$1”</b>')
     .replace(/(^|[\s(])([+−-]?\d[\d,.]*\s?%?)(?=$|[\s,.;:)])/g, '$1<b>$2</b>')
+    // **…** — explicit emphasis the engine asks for, e.g. a metric's name inside a
+    // sentence. Runs AFTER escaping, so the markers can never inject markup.
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
 }
 const dotClass = (s) => (s === 'bad' ? 'bad' : s === 'warn' ? 'warn' : 'info')
 
@@ -1439,6 +1511,77 @@ watch(() => props.role, () => {
                   <span class="tstep-x">{{ s.text }}</span>
                 </div>
               </transition-group>
+            </div>
+          </div>
+        </template>
+
+        <!-- Deep dive — verdict, receipts, drivers, consequence. Structured so it is
+             scanned, not read: four paragraphs of prose hide the insight inside them. -->
+        <template v-else-if="b.kind === 'deepdive'">
+          <div class="reasoning"><span class="rz-dot" /> Read {{ b.tile ? 'this widget' : 'every widget on this board' }} in full</div>
+          <div class="blk-h"><Icon name="insights" :size="14" /> Deep dive · {{ b.scope }}</div>
+
+          <div v-if="b.verdict" class="vd" :class="b.verdict.tone">
+            <div class="vd-tag">{{ b.verdict.tone === 'bad' ? 'Needs action' : b.verdict.tone === 'warn' ? 'Watch' : 'Steady' }}</div>
+            <div class="vd-h">{{ b.headline }}<span v-if="!b.showExtras" class="caret" /></div>
+            <div v-if="b.showExtras" class="vd-s" v-html="hl(b.verdict.sub)" />
+          </div>
+
+          <transition name="reveal">
+            <div v-if="b.showExtras">
+              <div v-if="b.readings.length" class="rd">
+                <div v-for="(r, i) in b.readings" :key="i" class="rd-c" :class="r.severity">
+                  <div class="rd-l">{{ r.label }}</div>
+                  <div class="rd-v">{{ r.value }}<span v-if="r.delta" class="rd-d" :class="r.dir">{{ r.delta }}</span></div>
+                </div>
+              </div>
+
+              <div class="sec-l">What’s driving it</div>
+              <template v-for="(d, i) in b.drivers" :key="i">
+                <div v-if="i < b.shownDrivers" class="dv reveal">
+                  <div class="dv-t">{{ d.title }}</div>
+                  <!-- one measure per line: a comma-separated run of five metrics and
+                       five percentages is unreadable at this width -->
+                  <div v-if="d.lines" class="dv-ls">
+                    <div v-for="(l, li) in d.lines" :key="li" class="dv-li" v-html="hl(l)" />
+                    <div v-if="d.more" class="dv-li muted">and {{ d.more }} more</div>
+                  </div>
+                  <div class="dv-b" v-html="hl(d.body)" />
+                </div>
+              </template>
+
+              <div v-if="b.settled && b.meaning" class="mn">
+                <div class="mn-h"><Icon name="bulb" :size="13" /> What it means</div>
+                <div class="mn-b" v-html="hl(b.meaning)" />
+              </div>
+            </div>
+          </transition>
+        </template>
+
+        <!-- What needs attention — recommendations, not a restated threshold list. Every
+             item states WHY IT MATTERS and carries the steps to take; anything already
+             moving the right way is reported separately so nobody works on it. -->
+        <template v-else-if="b.kind === 'focus'">
+          <div class="reasoning"><span class="rz-dot" /> Ranked by what has a deadline attached</div>
+          <div class="blk-h"><Icon name="auto-graph" :size="14" /> What needs attention · {{ b.scope }}</div>
+          <p v-if="b.lead" class="foc-lead">{{ b.lead }}</p>
+          <div class="foc">
+            <template v-for="(it, i) in b.items" :key="it.id">
+              <div v-if="i < b.shown" class="foc-i reveal" :class="it.severity" @mouseenter="emit('cite', it.tileId)" @mouseleave="emit('cite', null)">
+                <div class="foc-hd">
+                  <span class="foc-n" :class="dotClass(it.severity)">{{ it.rank }}</span>
+                  <div class="foc-t" v-html="hl(it.title)" />
+                </div>
+                <div class="foc-why"><b>Why it matters</b> <span v-html="hl(it.why)" /></div>
+                <div class="foc-next"><b>What to do</b> <span v-html="hl(it.next)" /></div>
+              </div>
+            </template>
+            <div v-if="b.settled && !b.items.length" class="calm"><Icon name="check" :size="16" /> Nothing needs action here right now.</div>
+            <!-- what was deliberately left off the list, and why. The judgement about
+                 what NOT to act on is half of what makes this an answer. -->
+            <div v-if="b.settled && b.notes.length" class="imp">
+              <div class="imp-h"><Icon name="check" :size="13" /> Not on the action list</div>
+              <div v-for="(n, i) in b.notes" :key="i" class="imp-r" :class="n.tone">{{ n.text }}</div>
             </div>
           </div>
         </template>
@@ -2028,6 +2171,67 @@ watch(() => props.role, () => {
 .lnk:hover { text-decoration: underline; }
 .calm { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); padding: 8px; }
 .calm > :first-child { color: var(--green); }
+
+/* ---- Deep dive -------------------------------------------------------------
+   Four zones, in the order a reader needs them: the verdict (a position, not a
+   description), the readings (receipts), the drivers (the insight), and the
+   consequence. Prose belongs only in the last two, and only a sentence at a time. */
+.vd { border-radius: 12px; padding: 11px 13px; margin-bottom: 10px; border: 1px solid var(--border); background: var(--surface-2); }
+.vd.bad { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); background: color-mix(in srgb, var(--red) 6%, var(--surface)); }
+.vd.warn { border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); background: color-mix(in srgb, var(--amber) 7%, var(--surface)); }
+.vd.good { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); background: color-mix(in srgb, var(--green) 6%, var(--surface)); }
+.vd-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; margin-bottom: 4px; color: var(--muted-2); }
+.vd.bad .vd-tag { color: var(--red); } .vd.warn .vd-tag { color: var(--amber); } .vd.good .vd-tag { color: var(--green); }
+.vd-h { font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--ink); letter-spacing: -.2px; }
+.vd-s { font-size: 12px; color: var(--ink-2); line-height: 1.5; margin-top: 4px; }
+
+/* readings — chips, so four numbers take one glance instead of a sentence each */
+.rd { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.rd-c { border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; background: var(--surface); }
+.rd-c.bad { border-color: color-mix(in srgb, var(--red) 35%, var(--border)); }
+.rd-c.warn { border-color: color-mix(in srgb, var(--amber) 40%, var(--border)); }
+.rd-l { font-size: 10.5px; color: var(--muted); line-height: 1.3; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-v { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 5px; }
+.rd-d { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.rd-d.up { color: var(--red); } .rd-d.down { color: var(--green); }
+
+.sec-l { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted-2); font-weight: 700; margin: 0 0 6px; }
+.dv { border-left: 2px solid var(--ai); padding: 2px 0 2px 10px; margin-bottom: 9px; }
+.dv-t { font-size: 12.5px; font-weight: 650; color: var(--ink); line-height: 1.4; }
+.dv-ls { margin: 5px 0 6px; display: flex; flex-direction: column; gap: 3px; }
+.dv-li { font-size: 11.5px; color: var(--ink); line-height: 1.45; padding-left: 11px; position: relative; }
+.dv-li::before { content: '•'; position: absolute; left: 0; color: var(--ai); }
+.dv-li.muted { color: var(--muted); }
+.dv-b { font-size: 11.5px; color: var(--ink-2); line-height: 1.55; margin-top: 2px; }
+
+/* the consequence — the one thing on screen that isn't visible on the tiles */
+.mn { margin-top: 12px; border-radius: 10px; padding: 10px 12px; background: var(--ai-grad-soft); border: 1px solid var(--ai-border); }
+.mn-h { display: flex; align-items: center; gap: 5px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; font-weight: 700; color: var(--ai-ink); margin-bottom: 4px; }
+.mn-b { font-size: 12px; line-height: 1.6; color: var(--ink); }
+
+/* ---- What needs attention --------------------------------------------------
+   A recommendation card, not a row in a list: what, why it matters, and the steps.
+   A bare severity list is something a threshold rule could print without any AI. */
+.foc-lead { font-size: 12px; color: var(--ink-2); line-height: 1.55; margin: 0 0 10px; }
+.foc { display: flex; flex-direction: column; gap: 9px; }
+.foc-i { border: 1px solid var(--border); border-left-width: 3px; border-radius: 10px; padding: 10px 12px; background: var(--surface); }
+.foc-i.bad { border-left-color: var(--red); } .foc-i.warn { border-left-color: var(--amber); } .foc-i.good { border-left-color: var(--green); }
+.foc-hd { display: flex; align-items: flex-start; gap: 8px; }
+.foc-n { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10.5px; font-weight: 700; color: #fff; margin-top: 1px; }
+.foc-n.bad { background: var(--red); } .foc-n.warn { background: var(--amber); } .foc-n.info { background: var(--blue); }
+.foc-t { flex: 1; min-width: 0; font-size: 13px; font-weight: 650; line-height: 1.4; color: var(--ink); }
+.foc-why { font-size: 11.5px; color: var(--ink-2); line-height: 1.6; margin: 6px 0 9px; }
+.foc-why b, .foc-next b { font-weight: 700; }
+.foc-why b { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted-2); margin-bottom: 2px; }
+.foc-next { font-size: 11.5px; color: var(--ink); line-height: 1.6; border-top: 1px dashed var(--border); padding-top: 8px; }
+.foc-next b { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--ai-ink); margin-bottom: 2px; }
+
+/* what is already fixing itself — reported, never ranked as work */
+.imp { margin-top: 4px; border-radius: 10px; padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--border); }
+.imp-h { display: flex; align-items: center; gap: 5px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; color: var(--muted-2); margin-bottom: 4px; }
+.imp-r { font-size: 11.5px; color: var(--ink-2); line-height: 1.6; padding-left: 12px; position: relative; }
+.imp-r::before { content: '–'; position: absolute; left: 0; color: var(--muted-2); }
+.imp-r.good::before { content: '✓'; color: var(--green); font-size: 10px; }
 /* what changed since last visit */
 .lastvisit { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); margin-bottom: 11px; }
 /* compact 2-up change cards — one mini stat card per moved metric; the explanatory

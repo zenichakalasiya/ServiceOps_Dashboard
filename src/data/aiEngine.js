@@ -688,3 +688,535 @@ export function drillFor(board, fact) {
   }
   return { chips, baseRows, columns, tier, tierNote, actions: actionsFor(fact), sourceTitle: wl?.title || '' }
 }
+
+/* =====================================================================
+ * The two universal CTAs — Deep dive · What needs attention
+ * =====================================================================
+ * The same pair at board level and widget level; only the scope changes.
+ *
+ * Both return STRUCTURE, not paragraphs:
+ *
+ *   deepDive… → { verdict, readings, drivers, meaning }
+ *                a stated verdict, the numbers behind it, what is DRIVING it, and the
+ *                one non-obvious consequence. The drivers and the meaning are the
+ *                insight; the readings are only the receipts.
+ *
+ *   focus…    → { lead, items[], notes[] }
+ *                each item carries WHY IT MATTERS and the STEPS to take. A signal with
+ *                no step is not an item — it belongs in `notes`, which is the other half
+ *                of the answer: what is already moving the right way (or is too small to
+ *                act on), so nobody spends the morning on it.
+ *
+ * Restating a delta is not attention-worthy. "Unassigned down 6%" is a backlog measure
+ * moving in the RIGHT direction — ranking it as a criticality is exactly the noise that
+ * makes an AI panel feel like a threshold rule with a sparkle on it.
+ */
+
+const pctOf = (n, d) => (d ? Math.round((n / d) * 100) : 0)
+
+/* Backlog-shaped measures are BAD when they rise and GOOD when they fall. Direction
+ * alone is meaningless without knowing which kind of measure it is — that judgement is
+ * the difference between an insight and a restated number. */
+const BACKLOG_RE = /overdue|unassigned|open|backlog|breach|urgent|pending|due|aging|ageing|escalat/i
+const isImprovement = (title, dir) => (BACKLOG_RE.test(title) ? dir === 'down' : dir === 'up')
+
+/* A move smaller than this is not a finding. Ranking "Open Requests +4%" next to a
+ * breach is what makes an attention list read as noise — the judgement about what is
+ * NOT worth acting on is half the answer. */
+const ACT_PCT = 5
+
+/* What a metric IS decides both why it matters and what to do about it. Without this
+ * every item gets the same sentence and the same advice, which is the tell that nothing
+ * intelligent produced them. Order matters: "Urgent Open Requests" is urgent work, not
+ * backlog volume. */
+const METRIC_CLASSES = [
+  { key: 'overdue', re: /overdue|past due|breach/i },
+  { key: 'due', re: /due\b|24 ?h|next \d+ ?h/i },
+  { key: 'urgent', re: /urgent|\bp1\b|critical/i },
+  { key: 'unassigned', re: /unassigned|unowned|untriaged/i },
+  { key: 'backlog', re: /open|backlog|pending|active/i },
+]
+const classOf = (title) => METRIC_CLASSES.find((m) => m.re.test(title || ''))?.key || 'generic'
+
+/* why it matters + what to do, per metric class — both as PROSE. Putting the
+ * recommendation on a button ("Rebalance the queue") reduces the advice to three words
+ * and buries the reasoning that makes it worth taking. A next step the user cannot
+ * evaluate is not an insight; the sentence has to carry why this step and not another. */
+function adviceFor(cls, { n, pctMove, biggest }) {
+  const lead = biggest ? `At +${pctMove}% this is the largest move on the board. ` : ''
+  switch (cls) {
+    case 'overdue': return {
+      why: `${lead}All ${n} are already past their SLA date — each is a reportable miss whether or not it is resolved later. A rise here grows the miss count, not just the queue.`,
+      next: `Work the oldest first rather than the newest: the miss is already booked on all ${n}, so the only thing still moving is how far past due each one gets. Put them with the on-call technician today, and if the same queue is back next week treat it as an intake problem rather than an effort one.`,
+    }
+    case 'due': return {
+      why: `${lead}These ${n} have a deadline inside the current window. Untouched today they become tomorrow’s overdue number — this is the queue that feeds it.`,
+      next: `Bring the ones closest to their due time to the front of today’s queue. This is the cheapest work on the board: every one cleared before end of day is an overdue request that never gets created, and none of them needs escalation to fix.`,
+    }
+    case 'urgent': return {
+      why: `${lead}Urgent work consumes the capacity everything below it needs, so a rise here slows queues whose own numbers still look flat. ${n} in play right now.`,
+      next: `Clear these before touching the wider backlog — while they are open they are taking technicians away from everything else, so the other queues will keep drifting no matter what is done to them directly. If ${n} is more than the shift can absorb, escalate to the shift lead for a second pair of hands rather than re-prioritising twice.`,
+    }
+    case 'unassigned': return {
+      why: `${lead}Nobody owns these ${n}, so the SLA clock runs with no one watching them. This is the one backlog measure where the fix is routing, not capacity.`,
+      next: `Auto-assign by skill group rather than round-robin — round-robin clears the number but sends work to people who then reassign it, which shows up as churn a week later. Adding people will not help here; the requests are not slow, they are unowned.`,
+    }
+    case 'backlog': return {
+      why: `${lead}${n} in the queue and rising. Volume climbing while resolution stays flat means arrival is outpacing the desk — a capacity question rather than a queue that is misbehaving.`,
+      next: `Compare arrival against resolution for the week before adding anyone. If arrival is flat and the queue still grows, the constraint is throughput and more staff will not move it; if arrival is up, the useful question is what changed upstream to send more work in.`,
+    }
+    default: return {
+      why: `${lead}Now at ${n}. It has not broken its normal range, so this is a trend to confirm rather than an incident to handle.`,
+      next: `Leave it one more cycle before acting. One week outside comfortable is a wobble; two consecutive weeks in the same direction is the point at which it is worth spending someone’s time on.`,
+    }
+  }
+}
+
+/* One shape for every chart tile, whatever era it came from.
+ *
+ * A legacy tile carries { labels, series } on `chart`; a PMG-ACT-01 tile carries a
+ * `chart.spec` and computes from records.js. Without this both CTAs would silently read
+ * an empty series for every new kind and answer "nothing stands out" about a chart that
+ * plainly shows something — the same class of bug as the placed-tile "no data" state. */
+function chartShape(tile) {
+  const ch = tile?.chart || {}
+  if (!ch.spec) return { kind: ch.kind, labels: ch.labels || [], series: ch.series || [] }
+  const out = chartData(ch.spec) || {}
+  const kind = ch.spec.kind
+  if (kind === 'gauge') return { kind, gauge: out }
+  if (kind === 'heatmap') return { kind, heat: out }
+  if (kind === 'mapbubble') return { kind, map: out }
+  // funnel returns cumulative stage values rather than a series
+  if (kind === 'funnel') return { kind, labels: out.labels || [], series: [{ name: 'Records', values: out.values || [] }], shares: out.shares || [] }
+  return { kind, labels: out.labels || [], series: out.series || [] }
+}
+
+/* Our gauge bands are FRACTIONS of max with a colour (records.js gaugeBands), and the
+ * direction is already baked in by `higherIsBetter` — so the tone comes from the band’s
+ * COLOUR, never from its index. Reading index 0 as "healthy" (as a bands-are-ordered
+ * model would) inverts the verdict on every higher-is-better meter. */
+const BAND_TONE = { '#1f9d63': 'good', '#d98a0b': 'warn', '#e0483d': 'bad' }
+function gaugeRead(g) {
+  const max = g?.max || 0
+  const value = g?.value == null ? 0 : g.value
+  const bands = g?.bands || []
+  const hit = bands.find((b) => value <= b.to * max) || bands[bands.length - 1]
+  const tone = BAND_TONE[hit?.color] || 'good'
+  // the nearest edges that would change the reading — the only actionable numbers here
+  const edges = bands.map((b) => Math.round(b.to * max * 10) / 10).filter((e) => e > 0 && e < max)
+  const nextEdge = edges.filter((e) => e > value).sort((a, b) => a - b)[0]
+  const prevEdge = edges.filter((e) => e < value).sort((a, b) => b - a)[0]
+  return { value, max, unit: g?.unit || '', tone, nextEdge, prevEdge }
+}
+
+// ---- Deep dive -------------------------------------------------------------
+
+export function deepDiveBoard(board, role = 'technician') {
+  const tiles = board?.tiles || []
+  if (!tiles.length) {
+    return {
+      verdict: { tone: 'good', headline: 'Nothing to read yet', sub: `“${board?.name}” has no widgets on it.` },
+      readings: [], drivers: [], meaning: 'Add a widget and I’ll tell you what it says.',
+    }
+  }
+  const fs = facts(board, role)
+  const bad = fs.filter((f) => f.severity === 'bad')
+  const warn = fs.filter((f) => f.severity === 'warn')
+  const kpis = tiles.filter((t) => t.type === 'kpi')
+
+  // --- verdict: state a position, don't describe the furniture
+  const verdict = bad.length
+    ? { tone: 'bad', headline: `${bad.length} thing${bad.length > 1 ? 's need' : ' needs'} action now`, sub: `Pressure is concentrated on ${bad.slice(0, 2).map((f) => `**${f.chip}**`).join(' and ')}${warn.length ? `, with ${warn.length} more worth watching` : ''}.` }
+    : warn.length
+      ? { tone: 'warn', headline: 'Stretched, but nothing is breaking', sub: `${warn.length} signal${warn.length > 1 ? 's are' : ' is'} outside comfortable range — none of them urgent.` }
+      : { tone: 'good', headline: 'Steady across the board', sub: `All ${tiles.length} widgets are inside their normal range.` }
+
+  // --- readings: the receipts, as scannable chips rather than a paragraph
+  const readings = kpis.slice(0, 4).map((t) => ({
+    label: t.title,
+    value: `${t.value}${t.unit || ''}`,
+    delta: t.delta ? `${t.delta.dir === 'up' ? '+' : '−'}${t.delta.pct}%` : '',
+    dir: t.delta?.dir || '',
+    severity: anomalyFor(t) ? 'bad' : (t.status === 'info' ? 'good' : t.status || 'good'),
+  }))
+
+  // --- drivers: what is actually causing the verdict
+  const drivers = []
+  const breach = fs.find((f) => f.kind === 'breach')
+  if (breach) drivers.push({ title: breach.text, body: `${breach.how} These are the records that breach first if nothing moves today.` })
+
+  fs.filter((f) => f.kind === 'anomaly').slice(0, 2).forEach((f) => {
+    const t = tiles.find((x) => x.id === f.tileId)
+    const a = t ? anomalyFor(t) : null
+    drivers.push({ title: f.text, body: a ? `At ${Math.abs(a.z)}× its normal week-to-week swing this is a break in pattern, not noise — it started moving before anything else on this board did.` : f.how })
+  })
+
+  // rising backlog measures, read TOGETHER — one climbing is a number, several
+  // climbing at once is a cause
+  const rising = kpis.filter((t) => t.delta && !isImprovement(t.title, t.delta.dir) && BACKLOG_RE.test(t.title))
+  if (rising.length >= 2) {
+    const top = [...rising].sort((a, b) => b.delta.pct - a.delta.pct)
+    drivers.push({
+      title: `${rising.length} backlog measures are climbing together`,
+      lines: top.slice(0, 4).map((t) => `**${t.title}** +${t.delta.pct}%`),
+      more: rising.length > 4 ? rising.length - 4 : 0,
+      body: 'When they move as a group the cause is usually upstream — intake or capacity — rather than any single queue.',
+    })
+  }
+
+  /* The reasoning line claims every widget was read, so the drivers have to come from
+   * more than the KPI row — a board-level answer built only from KPIs is one the user
+   * could have assembled by looking at the top of the page. */
+  let worst = null
+  tiles.filter((t) => t.type === 'chart').forEach((t) => {
+    const sh = chartShape(t)
+    if (sh.gauge || sh.heat || sh.map) return
+    if ((sh.series || []).length !== 1) return
+    const labels = sh.labels || [], vals = sh.series[0].values || []
+    if (labels.length <= 2) return
+    const total = vals.reduce((a, b) => a + (b || 0), 0)
+    if (!total) return
+    const maxV = Math.max(...vals)
+    const ratio = (maxV / total) / (1 / labels.length)
+    if (!worst || ratio > worst.ratio) worst = { tile: t, label: labels[vals.indexOf(maxV)], v: maxV, total, ratio, n: labels.length }
+  })
+  /* Two guards, both learned the hard way. The ratio test alone fires on any long-tailed
+   * chart — across 63 technicians an even split is 1.6%, so a 12% leader reads as "7.4×
+   * concentrated" when it is just the shape of a big list. It needs a real share as well
+   * as a relative one, and few enough categories for "concentrated" to mean anything. */
+  if (worst && worst.ratio >= 1.5 && worst.n <= 12 && pctOf(worst.v, worst.total) >= 25) {
+    drivers.push({
+      title: `${worst.label} holds ${pctOf(worst.v, worst.total)}% of ${worst.tile.title}`,
+      body: `${worst.v} of ${worst.total} across ${worst.n} categories — ${Math.round(worst.ratio * 10) / 10}× an even split. Moving that chart means moving ${worst.label}; the rest are too small to change the total.`,
+    })
+  }
+
+  const wl = tiles.find((t) => t.type === 'shortcut' && (t.rows || []).length)
+  if (wl && !breach) {
+    const cols = wl.columns || []
+    const stIdx = cols.indexOf('Status')
+    if (stIdx >= 0) {
+      const by = {}
+      wl.rows.forEach((r) => { const s = r[stIdx] || '—'; by[s] = (by[s] || 0) + 1 })
+      const ranked = Object.entries(by).sort((a, b) => b[1] - a[1])
+      if (ranked.length) drivers.push({
+        title: `${wl.title} is mostly ${ranked[0][0]}`,
+        lines: ranked.map(([k, v]) => `**${k}** ${v}`),
+        body: `${ranked[0][1]} of ${wl.rows.length} records. That is where the hands-on work actually sits.`,
+      })
+    }
+  }
+
+  if (!drivers.length) drivers.push({ title: 'No single driver stands out', body: 'Every measure is inside its own range, so there is nothing on this board pulling the others.' })
+
+  // --- meaning: the one consequence that is NOT visible on the tiles
+  const falling = kpis.filter((t) => t.delta && isImprovement(t.title, t.delta.dir))
+  let meaning
+  if (rising.length && falling.length) {
+    meaning = `${falling.map((t) => `**${t.title}**`).join(' and ')} improving while ${rising.slice(0, 2).map((t) => `**${t.title}**`).join(' and ')} climb usually means work is moving rather than being finished — the queue is draining into a later stage, not out of the system. Worth confirming before this reads as an improvement in a status report.`
+  } else if (rising.length) {
+    meaning = 'Every moving measure is moving the wrong way at once, which points at intake or capacity rather than any one queue. Fixing the biggest single number here will not move the others.'
+  } else if (falling.length) {
+    meaning = 'The measures that are moving are all moving the right way. The useful question this week is whether that holds, not what to fix.'
+  } else {
+    meaning = 'Nothing is moving enough to draw a conclusion from. Come back when a measure breaks its range.'
+  }
+  return { verdict, readings, drivers, meaning }
+}
+
+export function deepDiveTile(tile) {
+  const t = tile || {}
+  const readings = []
+  const drivers = []
+  let verdict = { tone: 'good', headline: t.title || 'This widget', sub: '' }
+  let meaning = ''
+
+  if (t.type === 'text') {
+    return {
+      verdict: { tone: 'good', headline: 'This is a note, not a measure', sub: 'Free Text tiles have no data behind them.' },
+      readings: [], drivers: [{ title: 'Nothing to read', body: 'There is no query behind this widget, so there is nothing for me to analyse.' }],
+      meaning: 'Ask about a widget with data behind it and I can tell you what it is doing.',
+    }
+  }
+
+  if (t.type === 'kpi') {
+    const a = anomalyFor(t)
+    const hist = Array.isArray(t.history) ? t.history : []
+    verdict = a
+      ? { tone: a.severity, headline: `${t.value}${t.unit || ''} — outside its normal range`, sub: `${Math.abs(a.z)}× its usual week-to-week swing, against a ~${a.mean}${t.unit || ''} average.` }
+      : { tone: t.status === 'bad' ? 'bad' : t.status === 'warn' ? 'warn' : 'good', headline: `${t.value}${t.unit || ''}${t.delta ? ` · ${t.delta.dir === 'up' ? '+' : '−'}${t.delta.pct}% week over week` : ''}`, sub: t.status === 'good' ? 'Inside its normal range.' : 'Outside comfortable range, but not an outlier.' }
+    if (hist.length) readings.push({ label: 'Recent readings', value: hist.join(' → '), delta: '', dir: '', severity: a ? a.severity : 'good' })
+    if (a) readings.push({ label: 'Baseline', value: `${a.mean}${t.unit || ''} avg`, delta: `${a.pctVsMean > 0 ? '+' : ''}${a.pctVsMean}%`, dir: a.dir, severity: a.severity })
+    if (hist.length >= 3) {
+      const first = hist[0], last = hist[hist.length - 1]
+      drivers.push({ title: last > first ? `Climbing for ${hist.length} periods` : last < first ? `Falling for ${hist.length} periods` : 'Flat across the window', body: `${first}${t.unit || ''} → ${last}${t.unit || ''}. ${a ? 'The latest reading is the break, not the trend — the trend was already pointing this way.' : 'The movement is gradual, which is why it has not tripped as an outlier.'}` })
+    }
+    meaning = a
+      ? `A single reading this far out is worth acting on now — waiting a cycle to confirm costs a week of ${(t.title || '').toLowerCase()} you cannot get back.`
+      : 'Nothing here justifies action on its own. It is worth watching only if it keeps moving the same way.'
+  } else if (t.type === 'shortcut') {
+    const rows = t.rows || [], cols = t.columns || []
+    const prIdx = cols.indexOf('Priority'), stIdx = cols.indexOf('Status'), dueIdx = cols.indexOf('Due')
+    const p1 = prIdx >= 0 ? rows.filter((r) => /p1|urgent/i.test(r[prIdx] || '')) : []
+    const today = dueIdx >= 0 ? rows.filter((r) => /today/i.test(r[dueIdx] || '')) : []
+    const both = rows.filter((r) => prIdx >= 0 && /p1|urgent/i.test(r[prIdx] || '') && dueIdx >= 0 && /today/i.test(r[dueIdx] || ''))
+    verdict = both.length
+      ? { tone: 'bad', headline: `${both.length} record${both.length > 1 ? 's are' : ' is'} both top-priority and due today`, sub: `Out of ${rows.length} in the list — this is the set that breaches first.` }
+      : { tone: p1.length ? 'warn' : 'good', headline: `${rows.length} records, ${p1.length} top priority`, sub: p1.length ? 'None of them are due today.' : 'Nothing here is flagged urgent.' }
+    readings.push({ label: 'Total', value: String(rows.length), delta: '', dir: '', severity: 'good' })
+    if (p1.length) readings.push({ label: 'Top priority', value: `${p1.length} (${pctOf(p1.length, rows.length)}%)`, delta: '', dir: '', severity: 'warn' })
+    if (today.length) readings.push({ label: 'Due today', value: String(today.length), delta: '', dir: '', severity: 'bad' })
+    if (stIdx >= 0) {
+      const byStatus = {}
+      rows.forEach((r) => { const s = r[stIdx] || '—'; byStatus[s] = (byStatus[s] || 0) + 1 })
+      const ranked = Object.entries(byStatus).sort((a, b) => b[1] - a[1])
+      if (ranked.length) drivers.push({ title: `Most of this list sits in ${ranked[0][0]}`, body: `${ranked[0][1]} of ${rows.length} records. ${ranked.map(([k, v]) => `${k} ${v}`).join(' · ')}.` })
+    }
+    if (both.length) drivers.push({ title: 'Priority and deadline overlap', body: `${both.length} record${both.length > 1 ? 's carry' : ' carries'} both, which is what makes this list urgent rather than just long.` })
+    meaning = both.length
+      ? `The length of this list is not the problem — the overlap is. Clearing the ${both.length} that are both P1 and due today removes the breach risk without touching the other ${rows.length - both.length}.`
+      : 'Nothing in this list is close to breaching, so it can be worked in priority order rather than by deadline.'
+  } else {
+    const sh = chartShape(t)
+
+    if (sh.gauge) {
+      const g = gaugeRead(sh.gauge)
+      verdict = { tone: g.tone, headline: `${g.value}${g.unit} — ${g.tone === 'good' ? 'in the healthy band' : g.tone === 'warn' ? 'in the warning band' : 'in the critical band'}`, sub: g.nextEdge != null ? `${Math.round((g.nextEdge - g.value) * 10) / 10}${g.unit} from the next threshold.` : 'No threshold above the current reading.' }
+      readings.push({ label: 'Value', value: `${g.value}${g.unit}`, delta: '', dir: '', severity: g.tone })
+      readings.push({ label: 'Scale', value: `0–${g.max}${g.unit}`, delta: '', dir: '', severity: 'good' })
+      drivers.push({ title: 'The bands are a choice, not a measurement', body: `This meter reads ${g.tone === 'good' ? 'healthy' : g.tone === 'warn' ? 'warning' : 'critical'} because of where the thresholds were set${g.nextEdge != null ? `, and the next one is at ${g.nextEdge}${g.unit}` : ''}. Moving the threshold moves the verdict without anything changing underneath it.` })
+      meaning = g.nextEdge != null
+        ? 'The gap to the next threshold is the only actionable number on a meter — it says how much movement actually changes the reading.'
+        : 'There is no headroom left to gain here; the useful work is holding it.'
+    } else if (sh.heat) {
+      const h = sh.heat
+      const cells = (h.data || []).map(([x, y, v]) => ({ col: h.cols?.[x], row: h.rows?.[y], v: v || 0 }))
+      const total = cells.reduce((a, c) => a + c.v, 0)
+      const hot = [...cells].sort((a, b) => b.v - a.v)[0]
+      const empty = cells.filter((c) => !c.v).length
+      verdict = hot && total
+        ? { tone: pctOf(hot.v, total) >= 25 ? 'warn' : 'good', headline: `${hot.row} × ${hot.col} is the hottest cell at ${hot.v}${h.unit || ''}`, sub: `Across ${cells.length} cells${empty ? `, ${empty} of which are empty` : ''}.` }
+        : { tone: 'good', headline: 'The grid is empty', sub: 'No cell has a value in the current range.' }
+      ;[...cells].sort((a, b) => b.v - a.v).slice(0, 4).forEach((c) => readings.push({ label: `${c.row} × ${c.col}`, value: `${c.v}${h.unit || ''}`, delta: '', dir: '', severity: c === hot ? 'warn' : 'good' }))
+      if (hot && total) drivers.push({ title: `${hot.row} carries the peak`, body: `${hot.v}${h.unit || ''} at ${hot.col}, against an even ${Math.round((total / cells.length) * 10) / 10} per cell. A grid is worth reading for its hot cell, not its total.` })
+      if (empty) drivers.push({ title: `${empty} cell${empty > 1 ? 's are' : ' is'} empty`, body: 'An empty cell is either a real gap in the data or a combination that cannot occur. The two look identical here, and only one of them is worth reporting.' })
+      meaning = 'A heatmap earns its space by showing where two dimensions intersect badly. If the peak is not meaningfully above the rest, the same data is easier to read as a bar chart.'
+    } else if (sh.map) {
+      const pts = [...(sh.map.points || [])].sort((a, b) => b.value - a.value)
+      const total = pts.reduce((a, p) => a + p.value, 0)
+      const top = pts[0]
+      verdict = top
+        ? { tone: pctOf(top.value, total) >= 40 ? 'warn' : 'good', headline: `${top.name} leads at ${top.value}${sh.map.unit || ''}`, sub: `${pts.length} site${pts.length > 1 ? 's' : ''} with records in range.` }
+        : { tone: 'good', headline: 'No sites in range', sub: 'Nothing matched the current conditions.' }
+      pts.slice(0, 4).forEach((p) => readings.push({ label: p.name, value: `${p.value}${sh.map.unit || ''}`, delta: total ? `${pctOf(p.value, total)}%` : '', dir: '', severity: p === top ? 'warn' : 'good' }))
+      if (top) drivers.push({ title: 'Geography is the split here', body: `${sh.map.caption || 'Value'} ranges from ${pts[pts.length - 1].value}${sh.map.unit || ''} at ${pts[pts.length - 1].name} to ${top.value}${sh.map.unit || ''} at ${top.name}. A spread that wide across sites is usually staffing or routing, not demand.` })
+      meaning = 'A map is only worth reading when the spread is uneven. If every bubble were the same size, the same numbers belong in a table.'
+    } else if ((sh.series || []).length === 1 && (sh.labels || []).length) {
+      const vals = sh.series[0].values || []
+      const total = vals.reduce((a, b) => a + (b || 0), 0)
+      const pairs = sh.labels.map((l, i) => ({ l, v: vals[i] || 0 })).sort((a, b) => b.v - a.v)
+      const share = pctOf(pairs[0].v, total)
+      const even = 100 / pairs.length
+      const ratio = Math.round((share / even) * 10) / 10
+      const heavy = share >= even * 1.5
+      verdict = heavy
+        ? { tone: 'warn', headline: `${pairs[0].l} carries ${share}% of the total`, sub: `${ratio}× an even split across ${pairs.length} categories.` }
+        : { tone: 'good', headline: 'No category dominates', sub: `The largest, ${pairs[0].l}, is at ${share}% against an even ${Math.round(even)}%.` }
+      pairs.slice(0, 4).forEach((p) => readings.push({ label: p.l, value: String(p.v), delta: `${pctOf(p.v, total)}%`, dir: '', severity: p.v === pairs[0].v && heavy ? 'warn' : 'good' }))
+      const topThree = pairs.slice(0, 3).reduce((a, b) => a + b.v, 0)
+      if (pairs.length > 3) drivers.push({ title: `The top 3 hold ${pctOf(topThree, total)}% of everything`, body: `${pairs.slice(0, 3).map((p) => `${p.l} ${p.v}`).join(', ')} — against ${total - topThree} spread across the remaining ${pairs.length - 3}.` })
+      const empty = pairs.filter((p) => p.v === 0)
+      if (empty.length) drivers.push({ title: `${empty.map((p) => p.l).join(', ')} ${empty.length > 1 ? 'are' : 'is'} empty`, body: 'No records at all. Worth confirming that is real and not a filter or a data gap.' })
+      meaning = heavy
+        ? `Anything that improves this widget has to come out of ${pairs[0].l}. Work spread across the smaller categories will not move the total enough to see.`
+        : 'There is no single lever here — the spread is close to even, so improvement means moving several categories at once or accepting the shape.'
+    } else if ((sh.series || []).length > 1) {
+      const totals = sh.series.map((s) => ({ name: s.name, total: (s.values || []).reduce((a, b) => a + (b || 0), 0) })).sort((a, b) => b.total - a.total)
+      const sum = totals.reduce((a, b) => a + b.total, 0)
+      const share = pctOf(totals[0].total, sum)
+      const even = 100 / totals.length
+      const heavy = share >= even * 1.5
+      verdict = heavy
+        ? { tone: 'warn', headline: `${totals[0].name} carries ${share}% of the total`, sub: `${Math.round((share / even) * 10) / 10}× an even split across ${totals.length} series.` }
+        : { tone: 'good', headline: 'The series are fairly balanced', sub: `Largest is ${totals[0].name} at ${share}%, against an even ${Math.round(even)}%.` }
+      totals.slice(0, 4).forEach((x) => readings.push({ label: x.name, value: String(x.total), delta: `${pctOf(x.total, sum)}%`, dir: '', severity: 'good' }))
+      const lo = totals[totals.length - 1]
+      drivers.push({ title: `${totals[0].name} against ${lo.name}`, body: `${totals[0].total} versus ${lo.total} — a ${lo.total ? Math.round((totals[0].total / lo.total) * 10) / 10 : totals[0].total}× gap. That gap is the story here, not the shape of any single line.` })
+      meaning = 'Comparing the series is only meaningful if they share a denominator — check that before reading the gap as performance.'
+    }
+  }
+
+  if (!drivers.length) drivers.push({ title: 'Nothing stands out in this widget', body: widgetBrief(t).summary })
+  return { verdict, readings, drivers, meaning }
+}
+
+// ---- What needs attention --------------------------------------------------
+// Every item carries WHY IT MATTERS and the STEPS to take. A signal with no step is
+// not an item — it goes in `notes`, so nobody works on something already fixing
+// itself. This is the whole difference between an insight and a restated threshold.
+
+export function focusBoard(board, role = 'technician') {
+  const tiles = board?.tiles || []
+  const fs = facts(board, role)
+  const kpis = tiles.filter((t) => t.type === 'kpi')
+  const items = []
+  const notes = []                       // everything deliberately NOT on the action list
+
+  // the biggest wrong-way mover, so ONE item can say so rather than all of them claiming it
+  const movers = kpis.filter((t) => t.delta && !isImprovement(t.title, t.delta.dir))
+  const biggestId = movers.length ? [...movers].sort((a, b) => b.delta.pct - a.delta.pct)[0].id : null
+
+  fs.forEach((f) => {
+    const tile = tiles.find((x) => x.id === f.tileId)
+
+    if (f.kind === 'breach') {
+      const n = parseInt(f.text, 10) || 0
+      items.push({
+        id: f.id, severity: 'bad', tileId: f.tileId, title: f.text, deadline: true,
+        why: 'These breach today, not this week. Every hour they sit is SLA window spent, and a breached P1 is reportable whether or not it is resolved afterwards.',
+        next: `Reassign ${n === 1 ? 'it' : `all ${n}`} to the on-call technician now and tell the affected stakeholders before they ask — a breach that was flagged early reads very differently in a review than one found afterwards. Do this before anything else on this list; everything below it will still be there in an hour, and ${n === 1 ? 'this one' : 'these'} will not.`,
+      })
+      return
+    }
+
+    if (f.kind === 'anomaly') {
+      const a = tile ? anomalyFor(tile) : null
+      items.push({
+        id: f.id, severity: f.severity, tileId: f.tileId, title: f.text, deadline: false,
+        why: `${a ? `At ${Math.abs(a.z)}× its normal swing this` : 'This'} is a change in behaviour, not a busy week — whatever caused it is still in place, so the number keeps climbing until it is found. That makes it worth a cause hunt rather than more hands.`,
+        next: 'Open a problem record and look for what changed around the point it broke pattern — a release, a routing rule, a member of staff out. Throwing capacity at it clears today’s queue and leaves the cause running, so the same spike returns next week with a week of backlog behind it.',
+      })
+      return
+    }
+
+    // a delta. Two judgements before it earns a place: is it moving the right way,
+    // and is it big enough to act on at all.
+    const dir = tile?.delta?.dir
+    const pctMove = tile?.delta?.pct ?? 0
+    if (tile && dir && isImprovement(tile.title, dir)) {
+      notes.push({ tone: 'good', text: `${tile.title} ${dir} ${pctMove}% — moving the right way` })
+      return
+    }
+    if (f.severity !== 'bad' && pctMove < ACT_PCT) {
+      notes.push({ tone: 'muted', text: `${tile?.title || f.chip} ${dir === 'up' ? 'up' : 'down'} ${pctMove}% — below the ${ACT_PCT}% move I’d act on` })
+      return
+    }
+    const cls = classOf(tile?.title || f.chip)
+    const adv = adviceFor(cls, { n: `${tile?.value ?? '—'}${tile?.unit || ''}`, pctMove, biggest: tile?.id === biggestId })
+    items.push({
+      id: f.id, severity: f.severity, tileId: f.tileId, title: f.text, deadline: cls === 'due' || cls === 'overdue',
+      why: adv.why, next: adv.next,
+    })
+  })
+
+  /* Rank by what has a DEADLINE first, then by severity. The panel says it ranked that
+   * way and the lead sentence counts on it — leaving the order to `facts()` scoring put
+   * a dated item third under a lead claiming the top two were the dated ones. */
+  const SEV_ORDER = { bad: 0, warn: 1, good: 2 }
+  items.sort((a, b) => (b.deadline ? 1 : 0) - (a.deadline ? 1 : 0) || SEV_ORDER[a.severity] - SEV_ORDER[b.severity])
+  items.forEach((it, i) => { it.rank = i + 1 })
+
+  const dated = items.filter((i) => i.deadline).length
+  const lead = !items.length
+    ? 'Nothing on this board needs action right now.'
+    : dated
+      ? `${dated === 1 ? 'One of these has' : `The first ${dated} have`} a deadline attached — start there. The rest are trends, and they will keep until the stand-up.`
+      : 'None of these has a deadline attached, so they are ranked by how far outside normal they are. Work them in order rather than at once.'
+  return { lead, items: items.slice(0, 5), notes }
+}
+
+export function focusTile(tile) {
+  const t = tile || {}
+  if (t.type === 'text') return { lead: 'A Free Text tile has no data behind it, so there is nothing to act on.', items: [], notes: [] }
+  const items = []
+  const notes = []
+  const keep = (text) => notes.push({ tone: 'good', text })
+  const add = (severity, title, why, next) => items.push({ id: `${t.id}-${items.length}`, rank: items.length + 1, severity, tileId: t.id, title, why, next })
+
+  if (t.type === 'shortcut') {
+    const rows = t.rows || [], cols = t.columns || []
+    const prIdx = cols.indexOf('Priority'), stIdx = cols.indexOf('Status'), dueIdx = cols.indexOf('Due')
+    const isP1 = (r) => prIdx >= 0 && /p1|urgent/i.test(r[prIdx] || '')
+    const dueToday = (r) => dueIdx >= 0 && /today/i.test(r[dueIdx] || '')
+    const open = (r) => stIdx >= 0 && /open|new|assigned/i.test(r[stIdx] || '')
+    const both = rows.filter((r) => isP1(r) && dueToday(r))
+    const p1Open = rows.filter((r) => isP1(r) && open(r) && !dueToday(r))
+    if (both.length) add('bad', `${both.length} record${both.length > 1 ? 's are' : ' is'} P1 and due today`,
+      `Highest priority and closest deadline in one set — ${both.length} of ${rows.length}. These breach before anything else in the list, and clearing them removes the risk without touching the other ${rows.length - both.length}.`,
+      `Put ${both.length === 1 ? 'it' : `all ${both.length}`} with the on-call technician before picking anything else out of this list. The other ${rows.length - both.length} records have no deadline today, so time spent on them is time the breach window keeps running.`)
+    if (p1Open.length) add('warn', `${p1Open.length} further P1${p1Open.length > 1 ? 's are' : ' is'} unactioned`,
+      'Top priority but no deadline pressure yet. Left alone through the week they become tomorrow’s due-today set, which is how this list grows.',
+      'Schedule them into today’s queue rather than leaving them to be picked up. They are the cheapest work here — no escalation, no deadline pressure — and clearing them now is what stops this list growing a due-today set by tomorrow.')
+    if (!items.length) keep(`Nothing in this list is urgent — all ${rows.length} records are lower priority or already in hand`)
+  } else if (t.type === 'kpi') {
+    const a = anomalyFor(t)
+    if (a) add(a.severity, `${t.title} is ${a.pctVsMean > 0 ? 'well above' : 'well below'} its normal range`,
+      `${t.value}${t.unit || ''} against a ~${a.mean}${t.unit || ''} average — ${Math.abs(a.z)}× the normal week-to-week swing. A break this size does not correct on its own.`,
+      'Look for what changed around the point it broke pattern rather than adding capacity — a break this size has a cause that is still running, and clearing the queue without finding it just buys a week.')
+    else if (t.delta && isImprovement(t.title, t.delta.dir)) keep(`${t.title} ${t.delta.dir} ${t.delta.pct}% — moving the right way`)
+    else if (t.status === 'bad' || t.status === 'warn') add(t.status, `${t.title} is flagged ${t.status === 'bad' ? 'for action' : 'to watch'}`,
+      `${t.value}${t.unit || ''}${t.delta ? `, ${t.delta.dir} ${t.delta.pct}% week over week` : ''}. It has not broken its range, so this is a capacity question rather than an incident.`,
+      'Watch it one more cycle before spending anyone’s time on it. If it moves the same way again that is a trend worth staffing; a single week outside comfortable is usually just the week.')
+    else keep(`${t.title} is inside its normal range`)
+  } else {
+    const sh = chartShape(t)
+
+    if (sh.gauge) {
+      const g = gaugeRead(sh.gauge)
+      if (g.tone === 'good') keep(`${t.title} is at ${g.value}${g.unit} — inside the healthy band`)
+      else add(g.tone, `${t.title} is in the ${g.tone === 'warn' ? 'warning' : 'critical'} band`,
+        `At ${g.value}${g.unit} on a 0–${g.max}${g.unit} scale${g.prevEdge != null ? `, ${Math.round((g.value - g.prevEdge) * 10) / 10}${g.unit} past the threshold that changed the reading` : ''}. The gap to the nearest threshold is the only number here that changes the verdict — anything smaller is invisible on the meter.`,
+        'Decide whether the band is right before working the number. Thresholds on a meter are a choice someone made, and if this one has been amber for weeks without consequence, the honest fix is the threshold rather than the queue behind it.')
+    } else if (sh.heat) {
+      const h = sh.heat
+      const cells = (h.data || []).map(([x, y, v]) => ({ col: h.cols?.[x], row: h.rows?.[y], v: v || 0 }))
+      const total = cells.reduce((a, c) => a + c.v, 0)
+      const hot = [...cells].sort((a, b) => b.v - a.v)[0]
+      const empty = cells.filter((c) => !c.v)
+      if (hot && total && pctOf(hot.v, total) >= 25) add('warn', `${hot.row} × ${hot.col} holds ${pctOf(hot.v, total)}% of this grid`,
+        `${hot.v}${h.unit || ''} in one cell of ${cells.length}, against an even ${Math.round((total / cells.length) * 10) / 10}. A grid this concentrated is really a single finding wearing a matrix.`,
+        `Work the ${hot.row} / ${hot.col} intersection specifically rather than the whole row or column. Treating the row as the problem spreads effort across cells that are already fine, and the total will barely move.`)
+      else if (hot) keep(`No cell dominates — the hottest, ${hot.row} × ${hot.col}, is at ${hot.v}${h.unit || ''}`)
+      if (empty.length) add('warn', `${empty.length} cell${empty.length > 1 ? 's have' : ' has'} no records`,
+        'An empty cell is either a real gap or a combination that cannot occur, and the two look identical on a heatmap. Reading a gap as a finding when it is a data artefact is the usual way a matrix misleads.',
+        'Check the widget’s conditions before reading anything into the gaps. If the combination genuinely cannot occur, the honest fix is a different pair of dimensions rather than an explanation for the hole.')
+    } else if (sh.map) {
+      const pts = [...(sh.map.points || [])].sort((a, b) => b.value - a.value)
+      const total = pts.reduce((a, p) => a + p.value, 0)
+      const top = pts[0]
+      if (top && total && pctOf(top.value, total) >= 40) add('warn', `${top.name} carries ${pctOf(top.value, total)}% of the total`,
+        `${top.value}${sh.map.unit || ''} at ${top.name} against ${pts[pts.length - 1].value}${sh.map.unit || ''} at ${pts[pts.length - 1].name}. A spread this wide across sites is usually routing or staffing rather than demand.`,
+        `Compare ${top.name}’s staffing against its share before treating this as a demand problem. If the site is carrying the load with the same headcount as the others, the fix is routing; if it genuinely has more work arriving, it is a staffing conversation.`)
+      else if (top) keep(`No site dominates — the largest, ${top.name}, is at ${pctOf(top.value, total)}%`)
+    } else if ((sh.series || []).length === 1 && (sh.labels || []).length) {
+      const vals = sh.series[0].values || []
+      const total = vals.reduce((a, b) => a + (b || 0), 0)
+      const pairs = sh.labels.map((l, i) => ({ l, v: vals[i] || 0 })).sort((a, b) => b.v - a.v)
+      const share = pctOf(pairs[0].v, total)
+      const even = 100 / pairs.length
+      if (share >= even * 1.5) add('warn', `${pairs[0].l} carries ${share}% of ${t.title}`,
+        `${pairs[0].v} of ${total} records, ${Math.round((share / even) * 10) / 10}× an even split across ${pairs.length} categories. Work spread across the smaller categories will not move the total enough to see — this is the only lever with leverage.`,
+        `Put the effort into ${pairs[0].l} and leave the rest alone. Moving a small category by half still will not show on this chart, while a few percent off ${pairs[0].l} is visible immediately — that is the whole argument for starting there.`)
+      else keep(`No category dominates — the largest, ${pairs[0].l}, is at ${share}% against an even ${Math.round(even)}%`)
+      const empty = pairs.filter((p) => p.v === 0)
+      if (empty.length) add('warn', `${empty.map((p) => p.l).join(', ')} ${empty.length > 1 ? 'have' : 'has'} no records at all`,
+        'An empty category is either real or a broken filter, and the two look identical on the chart. It is worth ruling out the second before reading anything into the first.',
+        'Check the widget’s conditions before reading anything into it. A genuinely empty category and a filter that excludes everything look identical on a chart, and only one of them is worth reporting.')
+    } else if ((sh.series || []).length > 1) {
+      const totals = sh.series.map((s) => ({ name: s.name, total: (s.values || []).reduce((a, b) => a + (b || 0), 0) })).sort((a, b) => b.total - a.total)
+      const sum = totals.reduce((a, b) => a + b.total, 0)
+      const share = pctOf(totals[0].total, sum)
+      const even = 100 / totals.length
+      if (share >= even * 1.5) add('warn', `${totals[0].name} carries ${share}% of ${t.title}`,
+        `${totals[0].total} of ${sum} across the series, against ${totals[totals.length - 1].total} in ${totals[totals.length - 1].name}. The imbalance is the finding — a single series this dominant usually means the split is not the one worth plotting.`,
+        'Check whether this split is the one worth plotting. When a single series is this dominant the chart mostly shows that one series’ shape, and a different grouping usually says more about what is actually happening.')
+      else keep(`The series are fairly balanced — largest is ${totals[0].name} at ${share}%`)
+    }
+  }
+
+  items.forEach((it, i) => { it.rank = i + 1 })
+  const lead = items.length
+    ? (items[0].severity === 'bad' ? 'One thing here is already at its deadline — start there.' : 'Nothing here is urgent; this is where the leverage is.')
+    : 'Nothing in this widget needs action right now.'
+  return { lead, items, notes }
+}

@@ -68,6 +68,19 @@ export function tileFromText(board, text) {
     || board.tiles.find((x) => x.type === 'kpi')
 }
 
+/* Scope for the two universal CTAs (Deep dive · What needs attention).
+ *
+ * Deliberately NOT tileFromText: that one falls back to a best-guess tile, which would
+ * silently scope a BOARD-level deep dive to whichever widget happened to match a word in
+ * the sentence. Here an explicit title match is the only thing that counts — no title in
+ * the text means the question is about the board. Longest match wins, so "Open Requests
+ * By Priority" beats "Open Requests". */
+export function tileFromTitle(board, text) {
+  const t = (text || '').toLowerCase()
+  const hits = (board?.tiles || []).filter((x) => x.title && t.includes(x.title.toLowerCase()))
+  return hits.length ? hits.sort((a, b) => b.title.length - a.title.length)[0] : null
+}
+
 export function factFromText(board, text) {
   const t = (text || '').toLowerCase()
   if (/overdue|anomal|spike|spiked|surge/.test(t)) {

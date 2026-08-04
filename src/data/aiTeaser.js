@@ -26,10 +26,18 @@ export function useAiTeaser(getBoard) {
   return { board, attention, count, summary }
 }
 
-// two CTAs, in the order every placement shows them. Each opens the real assistant with
-// its own intent: Deep dive = full-dashboard analysis (`analyzing`); What needs attention
-// = the attention facts triage (`summary`).
+/* TWO CTAs, and the same two on a widget (see WidgetCard) — one pair to learn, not a
+ * different set per surface.
+ *
+ * They answer different questions and return different SHAPES. Deep dive returns a
+ * verdict with the readings, the drivers and the consequence; What-needs-attention
+ * returns a ranked list where every item carries why it matters and what to do. Anything
+ * that merely summarises was dropped: the hover card already says what a widget shows, so
+ * a third CTA repeating it spends a slot on something the user gets for free.
+ *
+ * Neither label carries a "with AI" suffix — they sit under the sparkle, which says it
+ * once for the whole group. */
 export const AI_TEASER_CTAS = [
-  { label: 'Deep dive', intent: 'analyzing', icon: 'auto-graph', primary: true },
-  { label: 'What needs attention', intent: 'summary', icon: 'sparkles' },
+  { label: 'Deep dive', intent: 'deepdive', icon: 'insights', primary: true },
+  { label: 'What needs attention', intent: 'focus', icon: 'auto-graph' },
 ]

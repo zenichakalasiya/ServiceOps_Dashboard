@@ -32,9 +32,26 @@ function openAiHover() {
 function closeAiHoverSoon() { clearTimeout(aiTimer); aiTimer = setTimeout(() => { aiHover.value = false }, 160) }
 function keepAiHover() { clearTimeout(aiTimer) }
 function runWidgetAction(a) { store.ui.aiAsk = { intent: a.intent, text: a.text }; aiHover.value = false }
-// When the tile is too small to show the header AI sparkle, its AI action rides inside the
-// ⋯ menu with the rest — clicking it opens the ServiceOps AI panel with this widget's context.
-function askWidgetAi() { menu.value = false; const a = brief.value.actions[0]; if (a) store.ui.aiAsk = { intent: a.intent, text: a.text } }
+/* THE TWO CTAs — identical to the board's pair (data/aiTeaser.js), scoped to this tile.
+ * The title is carried in the text because the panel resolves scope from an explicit
+ * title match (tileFromTitle); without it a widget deep dive would answer for the board.
+ *
+ * The hover card above them already says WHAT the widget shows, so neither CTA repeats
+ * it: deep dive says what is happening and why, focus says what to do first.
+ *
+ * A Free Text tile has no data behind it, so it gets neither — an action with no answer
+ * behind it is worse than no action. */
+const WIDGET_CTAS = computed(() => {
+  if (props.tile?.type === 'text') return []
+  const title = props.tile?.title || 'this widget'
+  return [
+    { label: 'Deep dive', intent: 'deepdive', text: `Deep dive into ${title}` },
+    { label: 'What needs attention', intent: 'focus', text: `What needs attention in ${title}` },
+  ]
+})
+// When the tile is too small to show the header AI sparkle, the same two ride inside the
+// ⋯ menu with the rest — opening the ServiceOps AI panel with this widget's context.
+function askWidgetAi(cta) { menu.value = false; store.ui.aiAsk = { intent: cta.intent, text: cta.text } }
 const emit = defineEmits(['remove', 'edit', 'duplicate', 'armdrag', 'pin'])
 
 // classify a table cell into a soft status/priority pill
@@ -334,8 +351,11 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <!-- no widget name here: you're hovering that widget, so repeating it is noise -->
           <div class="wai-h"><span class="wai-spark"><Icon name="sparkles" :size="14" /></span> AI summary</div>
           <p class="wai-sum">{{ brief.summary }}</p>
-          <div class="wai-acts">
-            <button v-for="a in brief.actions" :key="a.label" class="wai-a" @click="runWidgetAction(a)">{{ a.label }}</button>
+          <div v-if="WIDGET_CTAS.length" class="wai-acts">
+            <button
+              v-for="a in WIDGET_CTAS" :key="a.label" class="wai-a"
+              :class="{ primary: a.intent === 'deepdive' }" @click="runWidgetAction(a)"
+            >{{ a.label }}</button>
           </div>
         </div>
       </transition>
@@ -360,7 +380,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <!-- On a tiny tile the two upfront controls (AI + Refresh) collapse in here too,
                separated from the widget actions by a rule. -->
           <template v-if="tiny">
-            <button class="menu-item ai" @click="askWidgetAi"><Icon name="sparkles" :size="15" /> Ask AI about this widget</button>
+            <button v-for="c in WIDGET_CTAS" :key="c.label" class="menu-item ai" @click="askWidgetAi(c)"><Icon name="sparkles" :size="15" /> {{ c.label }}</button>
             <button class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
             <div class="menu-sep" />
           </template>
@@ -611,6 +631,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 /* same rounded-pill treatment as the AI Summary card's CTAs */
 .wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--ai-border); border-radius: var(--r-pill); background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 12px; text-align: center; }
 .wai-a:hover { border-color: var(--ai); background: var(--ai-soft); }
+/* Deep dive leads — it is the one that opens the conversation; the other is a shortcut
+   to the ranked list, which the thread can also reach on its own. */
+.wai-a.primary { border: 1.5px solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box; }
+.wai-a.primary:hover { background: linear-gradient(var(--ai-soft), var(--ai-soft)) padding-box, var(--ai-grad-line) border-box; }
 .wai-enter-active, .wai-leave-active { transition: opacity .14s ease; }
 .wai-enter-from, .wai-leave-to { opacity: 0; }
 .spin { animation: sp 0.75s linear infinite; } @keyframes sp { to { transform: rotate(360deg); } }
