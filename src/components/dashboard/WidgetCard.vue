@@ -198,6 +198,8 @@ function toggleMenu() {
   nextTick(placeMenu)       // then correct it against the rendered size
 }
 const exportOpen = ref(false)
+// the ⋯ menu's "AI Insights" flyout — holds the same summary card as the header sparkle
+const aiSubOpen = ref(false)
 /* Legend visibility is a property of the WIDGET now, set in its configuration —
  * not a transient view toggle in the ⋯ menu. Undefined means on, so existing
  * tiles keep their legend without a migration. */
@@ -441,8 +443,28 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <!-- AI first, ruled off from the rest: it is the only item that answers a
                question rather than acting on the widget. Present at every tile size —
                a small tile has no room for the header sparkle, and this is then the
-               ONLY way to reach it. -->
-          <button v-for="c in WIDGET_CTAS" :key="c.label" class="menu-item ai" @click="askWidgetAi(c)"><Icon name="sparkles" :size="15" /> {{ c.label }}</button>
+               ONLY way to reach it.
+
+               One item, not two. Hovering it flies out the SAME summary card the header
+               sparkle shows — read the widget first, then choose. Listing the two CTAs
+               flat in the menu made you pick an answer before seeing the question. -->
+          <div
+            v-if="WIDGET_CTAS.length" class="menu-item sub ai"
+            @mouseenter="aiSubOpen = true; typeOpen = false; exportOpen = false" @mouseleave="aiSubOpen = false"
+          >
+            <span class="mi-l"><Icon name="sparkles" :size="15" /> AI Insights</span><Icon name="chevron-right" :size="14" class="mi-c" />
+            <transition name="pop"><div v-if="aiSubOpen" class="submenu ai-sub">
+              <!-- no widget name: you opened this from that widget's own menu -->
+              <div class="wai-h"><span class="wai-spark"><Icon name="sparkles" :size="14" /></span> AI summary</div>
+              <p class="wai-sum">{{ brief.summary }}</p>
+              <div class="wai-acts">
+                <button
+                  v-for="a in WIDGET_CTAS" :key="a.label" class="wai-a"
+                  :class="{ primary: a.intent === 'deepdive' }" @click="askWidgetAi(a)"
+                >{{ a.label }}</button>
+              </div>
+            </div></transition>
+          </div>
           <div v-if="WIDGET_CTAS.length" class="menu-sep" />
           <!-- Widget actions, in the prototype order: Refresh · Edit · Chart Type ·
                Full screen · Duplicate -->
@@ -722,6 +744,15 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .menu-item.ai { color: var(--ai-ink); }
 .menu-item.ai :deep(.ico) { color: var(--ai); }
 .menu-item.ai:hover { background: var(--ai-softer); }
+/* the chevron is chrome, not AI — keep it the same muted grey as the other submenus,
+   or the row reads as two separate accents */
+.menu-item.ai .mi-c :deep(.ico), .menu-item.ai .mi-c { color: var(--muted); }
+/* the AI flyout is a CARD, not a list of rows — it carries the same summary + two CTAs
+   as the header sparkle's hover card, so it borrows that card's internals verbatim */
+.submenu.ai-sub { width: 320px; min-width: 320px; padding: 12px 13px; border-color: var(--ai-border); }
+/* the two CTAs must sit on ONE line each — "What needs attention" wraps at the default
+   14px padding, and a wrapped pill beside an unwrapped one reads as a layout bug */
+.submenu.ai-sub .wai-a { padding: 0 8px; white-space: nowrap; }
 .menu-item.sub { justify-content: space-between; position: relative; }
 .mi-l { display: flex; align-items: center; gap: 10px; }
 .mi-c { color: var(--muted); }
