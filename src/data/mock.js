@@ -68,8 +68,10 @@ function helpdeskTiles() {
   const TECHS = ['yash', 'RW', 'Juli Gopani', 'Sakshi', 'ahmedraza', 'Rosy', 'Keya', 'Jerry', 'Stuti', 'Nikhil', 'Unassigned']
   return [
     { ...kpi('Overdue Requests', 18, '', { dir: 'up', pct: 14 }, 'bad', 'Open requests past their SLA due date.'), w: 2 },
-    // `dateFilter` = this widget overrides the dashboard time filter with its own range.
-    // A few tiles carry one so the date-filter indicator demo has widgets to differentiate.
+    // `dateFilter` = this widget overrides the dashboard time filter with its own range,
+    // and is the ONLY thing that puts a calendar on a tile header. Exactly two tiles carry
+    // one — this KPI and the "Open Requests By Priority" widget — so the indicator reads as
+    // the exception it is. Give a third tile one and the board stops telling you anything.
     { ...kpi('Requests Due In the 24 Hours', 24, '', { dir: 'up', pct: 9 }, 'warn', 'Open requests whose SLA due date falls within the next 24 hours.'), w: 2, dateFilter: 'Today' },
     { ...kpi('Open Requests', 248, '', { dir: 'up', pct: 4 }, 'warn', 'Count of requests in an open state.'), w: 2 },
     { ...kpi('Unassigned Requests', 12, '', { dir: 'down', pct: 6 }, 'warn', 'Open requests with no technician assigned.'), w: 2 },
@@ -94,7 +96,7 @@ function helpdeskTiles() {
       [['Provision laptop for new joiner', 'TASK-3021', 'Open', 'Medium'],
        ['Review firewall change', 'TASK-3018', 'In Progress', 'High'],
        ['Patch database servers', 'TASK-3009', 'Open', 'Urgent']],
-      'Tasks assigned to me that are open.'), w: 4, dateFilter: 'This month' },
+      'Tasks assigned to me that are open.'), w: 4 },
     { ...shortcut('My Pending Approvals', ['Requester Name', 'Created Date', 'Subject', 'Type'],
       [['Priya Nair', '18 Jul 2026', 'New software purchase — Figma', 'Service Request'],
        ['Vikram Deshpande', '17 Jul 2026', 'Access to production DB', 'Change']],

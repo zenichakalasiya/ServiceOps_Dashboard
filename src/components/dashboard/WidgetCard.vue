@@ -349,9 +349,12 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
       <!-- Right side (per the header component): a PERSISTENT time-range control that
            shows even at rest, then the rest of the actions revealed on hover. -->
       <div class="ractions">
-        <!-- always-visible per-widget time range (the date icon from the design) -->
+        <!-- The date icon is an INDICATOR, not a control every tile carries. It appears
+             only on a tile that actually overrides the dashboard's time filter, so the
+             board can be read at a glance: a calendar means "this one is on its own
+             clock". Rendering it everywhere made the exception invisible. -->
         <button
-          v-if="tile.type !== 'text'" ref="dfChipEl" class="ti df-btn" :class="{ on: hasDateFilter || dfOpen }"
+          v-if="hasDateFilter" ref="dfChipEl" class="ti df-btn" :class="{ on: hasDateFilter || dfOpen }"
           @click.stop="toggleDf" @mouseenter="dfHover = true" @mouseleave="dfHover = false"
           :title="dfTitle"
         >
