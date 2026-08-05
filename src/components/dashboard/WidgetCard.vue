@@ -346,9 +346,16 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <Icon name="info" :size="14" />
         </span>
       </div>
-      <!-- Right side (per the header component): a PERSISTENT time-range control that
-           shows even at rest, then the rest of the actions revealed on hover. -->
+      <!-- Right side: the calendar is the ONLY thing at rest, at the far right. On hover
+           the cluster grows around it on BOTH sides — AI to its left, the rest to its
+           right — which is what makes the calendar appear to slide left. -->
       <div class="ractions">
+        <!-- AI opens to the LEFT of the calendar -->
+        <div class="lrev">
+          <div class="r-in">
+            <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
+          </div>
+        </div>
         <!-- The date icon is an INDICATOR, not a control every tile carries. It appears
              only on a tile that actually overrides the dashboard's time filter, so the
              board can be read at a glance: a calendar means "this one is on its own
@@ -362,11 +369,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <!-- the relative phrase rides in on hover; the tooltip carries the timestamps -->
           <span v-if="hasDateFilter" class="dfb-lbl" :class="{ show: dfHover || dfOpen }">{{ dfRelative(tile.dateFilter) }}</span>
         </button>
-        <!-- revealed on hover, to the RIGHT of the calendar: AI sparkle, the records
-             filter, Refresh, then ⋯ furthest right -->
+        <!-- and the records filter, Refresh and ⋯ open to its RIGHT -->
         <div class="right">
           <div class="r-in">
-            <button v-if="!tiny" ref="aiBtn" class="ti ai" :class="{ on: aiHover }" @mouseenter="openAiHover" @mouseleave="closeAiHoverSoon" @click.stop="openAiHover" title="AI summary of this widget"><Icon name="sparkles" :size="15" /></button>
             <!-- one control: the filter icon reveals search + column filters; closing clears them -->
             <button v-if="tile.type === 'shortcut'" class="ti" :class="{ on: searchOpen || hasTableFilters }" @click="toggleFilter" title="Filter records"><Icon name="filter" :size="15" /></button>
             <button v-if="!tiny" class="ti" @click="refresh" title="Refresh"><Icon name="refresh" :size="15" :class="{ spin: loading }" /></button>
@@ -628,10 +633,14 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 /* the title + action row sits in its own slight-neutral band, with room to breathe */
 .thead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 8px 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
 .left { display: flex; align-items: center; gap: 6px; min-width: 0; }
-/* 6-dot drag handle — appears on hover, before the title */
-.draghandle { display: inline-grid; place-items: center; color: var(--muted-2); cursor: grab; opacity: 0; transition: opacity .14s; flex: none; margin-left: -4px; }
+/* 6-dot drag handle — takes NO width at rest, so the title sits flush left exactly as
+   it does in the design's resting state; on hover it opens and the title slides right.
+   (The design mock draws the grip ON TOP of the title, which eats its first letter —
+   that is a layer overlap in Figma, not something to reproduce.) The negative margin
+   cancels .left's gap while collapsed, or the reserved 6px would still show. */
+.draghandle { display: inline-grid; place-items: center; color: var(--muted-2); cursor: grab; flex: none; overflow: hidden; width: 0; margin-left: -6px; opacity: 0; transition: width .2s cubic-bezier(.2,.7,.3,1), margin-left .2s cubic-bezier(.2,.7,.3,1), opacity .14s ease; }
 .draghandle:active { cursor: grabbing; }
-.tile:hover .draghandle { opacity: 1; }
+.tile:hover .draghandle, .tile.acting .draghandle { width: 16px; margin-left: -4px; opacity: 1; }
 .pinbadge { display: inline-grid; place-items: center; color: var(--primary); flex: none; transform: rotate(35deg); }
 .title { font-weight: 600; font-size: var(--tile-title, 13.5px); }
 
@@ -682,7 +691,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .tt-tag.predefined { background: rgba(139,92,246,.3); border-color: rgba(139,92,246,.55); color: #ded3ff; }
 .tt-tag.shared { background: rgba(76,177,254,.26); border-color: rgba(76,177,254,.5); color: #cfe8ff; }
 .info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; opacity: 0; transition: opacity .14s; }
-.tile:hover .info { opacity: 1; }
+.tile:hover .info, .tile.acting .info { opacity: 1; }
 .info:hover { color: var(--primary); }
 .info-tt { position: fixed; z-index: 200; width: 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 /* the right cluster: a persistent date control, then the hover-revealed actions.
@@ -693,9 +702,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ractions { display: flex; align-items: center; gap: 2px; flex: none; }
 /* grid 0fr→1fr is what makes an AUTO width animatable at all: max-width would have to
    ease toward a guessed number and would land with a snap once it passed the real one. */
-.right { display: grid; grid-template-columns: 0fr; opacity: 0; transition: grid-template-columns .24s cubic-bezier(.2,.7,.3,1), opacity .16s ease; }
+.right, .lrev { display: grid; grid-template-columns: 0fr; opacity: 0; transition: grid-template-columns .24s cubic-bezier(.2,.7,.3,1), opacity .16s ease; }
 .r-in { display: flex; align-items: center; gap: 1px; min-width: 0; overflow: hidden; }
-.tile:hover .right, .tile.searching .right, .tile.acting .right { grid-template-columns: 1fr; opacity: 1; }
+.tile:hover .right, .tile.searching .right, .tile.acting .right,
+.tile:hover .lrev, .tile.searching .lrev, .tile.acting .lrev { grid-template-columns: 1fr; opacity: 1; }
 /* the persistent per-widget time range — auto-width so the hover label fits.
    `.ti` further down sets a fixed 28px `display: grid` box, so this has to beat it on
    SPECIFICITY (.ti.df-btn), not source order: as a plain `.df-btn` the icon and label
@@ -717,7 +727,10 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 /* hover uses the card surface (white) so it reads against the neutral header band */
 .ti:hover { background: var(--surface); color: var(--ink); }
 .ti.on { background: var(--primary-soft); color: var(--primary-700); }
-.ti.ai { color: var(--ai); }
+/* the AI sparkle carries its soft wash the whole time it is on screen — in the design it
+   is the one filled control in the cluster, which is how it reads as the different kind
+   of action (it answers, the others act) rather than one more icon in a row */
+.ti.ai { color: var(--ai); background: var(--ai-softer); }
 .ti.ai:hover, .ti.ai.on { background: var(--ai-soft); color: var(--ai-ink); }
 /* per-widget hover mini-summary card */
 .wai-card { position: fixed; z-index: 260; width: 320px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
