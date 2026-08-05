@@ -434,7 +434,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
                sparkle shows — read the widget first, then choose. Listing the two CTAs
                flat in the menu made you pick an answer before seeing the question. -->
           <div
-            v-if="WIDGET_CTAS.length" class="menu-item sub ai"
+            v-if="WIDGET_CTAS.length && tiny" class="menu-item sub ai"
             @mouseenter="aiSubOpen = true; typeOpen = false; exportOpen = false" @mouseleave="aiSubOpen = false"
           >
             <span class="mi-l"><Icon name="sparkles" :size="15" /> AI Insights</span><Icon name="chevron-right" :size="14" class="mi-c" />
@@ -450,10 +450,15 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
               </div>
             </div></transition>
           </div>
-          <div v-if="WIDGET_CTAS.length" class="menu-sep" />
+          <div v-if="WIDGET_CTAS.length && tiny" class="menu-sep" />
           <!-- Widget actions, in the prototype order: Refresh · Edit · Chart Type ·
-               Full screen · Duplicate -->
-          <button class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
+               Full screen · Duplicate.
+
+               AI Insights and Refresh appear here ONLY on a tile too narrow to show them
+               in its header. Listing an action in both places asks the user to notice
+               that the two are the same thing; the menu is the overflow for what did not
+               fit, not a second copy of what did. -->
+          <button v-if="tiny" class="menu-item" @click="menu = false; refresh()"><Icon name="refresh" :size="15" /> Refresh</button>
           <button v-if="canEdit" class="menu-item" @click="menu = false; emit('edit', tile)"><Icon name="edit" :size="15" /> Edit</button>
           <!-- Chart type → submenu. Only Column / Bar / Line can be swapped for one
                another; a predefined pie is frozen, so the item is disabled with the

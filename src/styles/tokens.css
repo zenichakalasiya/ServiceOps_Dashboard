@@ -67,6 +67,9 @@
   --ink: #364658;              /* Page Text Color */
   --ink-2: #516381;            /* Figma Text/Subdued */
   --muted: #7b8fa5;            /* Gray Label / Neutral Regular */
+  /* placeholder text sits one step lighter than a field's own title (--ink-2 #516381) —
+     enough to read as "not filled in yet" without dropping below legibility */
+  --placeholder: #6a7fa0;
   --muted-2: #a5bad0;          /* Light Gray Text / Neutral Light */
 
   /* Radius */
@@ -133,6 +136,7 @@
   --ink-2: #c4c5d4;
   --muted: #8e90a6;
   --muted-2: #6a6c80;
+  --placeholder: #8a8ca2;
 
   --sh-sm: 0 1px 2px rgba(0,0,0,.4);
   --sh: 0 4px 14px rgba(0,0,0,.45);

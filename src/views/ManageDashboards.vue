@@ -163,34 +163,29 @@ function onDrop(target) {
       <button class="btn btn-primary" @click="store.ui.cloneTarget = null; store.ui.editTarget = null; store.ui.createOpen = true"><Icon name="plus" :size="16" /> New dashboard</button>
     </div>
 
+    <!-- Search + filter sits ABOVE the tabs, full width, exactly as the Shortcut tables
+         have it: it searches across every tab, so putting it beside them read as
+         "search within this tab". The Columns picker is gone — the default set is the
+         one the reference ships, and a per-user column choice on a shared listing was a
+         preference with nowhere to live. -->
+    <div class="searchbar">
+      <div class="srch wide">
+        <Icon name="search" :size="14" class="muted" />
+        <span v-for="c in filterChips" :key="c.key + c.value" class="mchip">
+          <b>{{ c.label }}</b><em>is</em><b>{{ c.value }}</b>
+          <button :title="`Remove ${c.label} is ${c.value}`" @click.stop="removeChip(c)"><Icon name="x" :size="10" /></button>
+        </span>
+        <input v-model="q" placeholder="Search a keyword or enter a keyword to search…" />
+        <FilterMenu v-model="filters" :fields="filterFields" label="Filter" class="in-srch" />
+      </div>
+    </div>
+
     <div class="toolbar">
       <div class="tabs">
         <button class="t" :class="{ on: tab === 'all' }" @click="tab = 'all'; sel = new Set()">All <span class="c">{{ manageable.length }}</span></button>
         <button class="t" :class="{ on: tab === 'mine' }" @click="tab = 'mine'; sel = new Set()">Created by me</button>
         <button class="t" :class="{ on: tab === 'shared' }" @click="tab = 'shared'; sel = new Set()">Shared with me</button>
         <button class="t" :class="{ on: tab === 'archive' }" @click="tab = 'archive'; sel = new Set()">Archive <span class="c">{{ archived.length }}</span></button>
-      </div>
-      <div class="tr">
-        <!-- one field: magnifier, the active filters as chips, then the query, with the
-             field picker inside at the right — the same bar the Shortcut tables use, and
-             the shape the prototype gives this screen. -->
-        <div class="srch wide">
-          <Icon name="search" :size="14" class="muted" />
-          <span v-for="c in filterChips" :key="c.key + c.value" class="mchip">
-            <b>{{ c.label }}</b><em>is</em><b>{{ c.value }}</b>
-            <button :title="`Remove ${c.label} is ${c.value}`" @click.stop="removeChip(c)"><Icon name="x" :size="10" /></button>
-          </span>
-          <input v-model="q" placeholder="Search a keyword or enter a keyword to search…" />
-          <FilterMenu v-model="filters" :fields="filterFields" label="Filter" class="in-srch" />
-        </div>
-        <div class="cols-wrap">
-          <button class="fsel colbtn" @click="openCols"><Icon name="rows" :size="14" /> Columns</button>
-          <div v-if="colsOpen" class="cols-back" @click="colsOpen = false" />
-          <div v-if="colsOpen" class="cols-pop">
-            <label v-for="c in COLUMNS" :key="c.key" class="col-opt"><input type="checkbox" :checked="draftCols.has(c.key)" @change="toggleDraft(c.key)" /> {{ c.label }}</label>
-            <div class="col-foot"><button class="btn btn-sm btn-primary" @click="applyCols">Apply</button></div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -312,6 +307,7 @@ function onDrop(target) {
 .page { padding: 16px 20px 40px; height: 100%; display: flex; flex-direction: column; background: var(--surface); }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .page-head h1 { margin: 0; font-size: 20px; }
+.searchbar { margin-bottom: 12px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 /* one segmented control, not four loose buttons: a soft track with the active segment
    filled solid, exactly as the reference has it */
