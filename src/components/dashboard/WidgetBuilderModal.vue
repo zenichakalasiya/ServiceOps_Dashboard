@@ -154,7 +154,9 @@ function initCfg() {
     assetType: '', dateFilter: 'Created date', description: ex?.info || '',
     // an existing tile already carrying its own `dateFilter` range IS a sticky widget —
     // read the switch back off the tile so editing one doesn't silently un-stick it
-    stickyDate: !!ex?.dateFilter, dateRange: ex?.dateFilter || 'Last 7 days',
+    // empty by default so the field shows its prompt � the range is required (*) and
+    // there is no sensible range to guess on the user's behalf
+    stickyDate: !!ex?.dateFilter, dateRange: ex?.dateFilter || '',
     // Output shaping is a rank WINDOW, not a sort direction: "Top 10" / "Bottom 10".
     // (None/Ascending/Descending said how to order the rows but never how many to
     // keep, which is the question a long-tailed chart actually asks.)
@@ -631,7 +633,7 @@ function save(place) {
                   <label class="tgl-row" style="margin-top:12px">
                     <span class="tgl-txt"><b>Higher is better</b><em>Flip the bands so the top of the range is green, not red.</em></span>
                     <button class="tgl" :class="{ on: cfg.gaugeHigherBetter }" role="switch" :aria-checked="cfg.gaugeHigherBetter"
-                      @click.prevent="cfg.gaugeHigherBetter = !cfg.gaugeHigherBetter"><i /></button>
+                      @click.prevent="cfg.gaugeHigherBetter = !cfg.gaugeHigherBetter"><i /><b>{{ cfg.gaugeHigherBetter ? 'ON' : 'OFF' }}</b></button>
                   </label>
                   <div class="grid2">
                     <div class="fld"><label>Amber from</label><input class="input" type="number" v-model.number="cfg.gaugeWarnAt" /></div>
@@ -662,7 +664,7 @@ function save(place) {
                     <em>Keep this widget on its own dates. Changing the dashboard’s time filter won’t affect it.</em>
                   </span>
                   <button class="tgl" :class="{ on: cfg.stickyDate }" role="switch" :aria-checked="cfg.stickyDate"
-                    @click.prevent="cfg.stickyDate = !cfg.stickyDate"><i /></button>
+                    @click.prevent="cfg.stickyDate = !cfg.stickyDate"><i /><b>{{ cfg.stickyDate ? 'ON' : 'OFF' }}</b></button>
                 </label>
                 <!-- a calendar field, not a dropdown: a range can be a named preset OR an
                      absolute From→To, and a <select> can only ever offer the first -->
@@ -713,7 +715,7 @@ function save(place) {
                     <em>The key that names each series or slice.</em>
                   </span>
                   <button class="tgl" :class="{ on: cfg.legend }" role="switch" :aria-checked="cfg.legend"
-                    @click.prevent="cfg.legend = !cfg.legend"><i /></button>
+                    @click.prevent="cfg.legend = !cfg.legend"><i /><b>{{ cfg.legend ? 'ON' : 'OFF' }}</b></button>
                 </label>
 
                 <label v-if="isPie" class="tgl-row">
@@ -722,7 +724,7 @@ function save(place) {
                     <em>Render as a ring with the record total in the centre.</em>
                   </span>
                   <button class="tgl" :class="{ on: cfg.donut }" role="switch" :aria-checked="cfg.donut"
-                    @click.prevent="cfg.donut = !cfg.donut"><i /></button>
+                    @click.prevent="cfg.donut = !cfg.donut"><i /><b>{{ cfg.donut ? 'ON' : 'OFF' }}</b></button>
                 </label>
 
                 <label v-if="isPie" class="tgl-row">
@@ -731,7 +733,7 @@ function save(place) {
                     <em>Print each slice’s value on the chart itself.</em>
                   </span>
                   <button class="tgl" :class="{ on: cfg.dataLabels }" role="switch" :aria-checked="cfg.dataLabels"
-                    @click.prevent="cfg.dataLabels = !cfg.dataLabels"><i /></button>
+                    @click.prevent="cfg.dataLabels = !cfg.dataLabels"><i /><b>{{ cfg.dataLabels ? 'ON' : 'OFF' }}</b></button>
                 </label>
 
                 <label v-if="manualMode && !predefinedEdit" class="toggle"><span>Exclude Zero Count Values</span><button class="sw" :class="{ on: cfg.excludeZero }" @click="cfg.excludeZero=!cfg.excludeZero"><i /></button></label>
@@ -787,10 +789,15 @@ function save(place) {
    --surface, and that edge read as a 1px divider running the full height. The preview
    card keeps its own border and shadow, so it still reads as a card on white. */
 .preview { flex: 1.5; display: flex; flex-direction: column; min-width: 0; padding: 18px 22px 22px; background: var(--surface); }
-.pv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-.pv-tab { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 13px; }
-.pv-tab:hover { background: var(--surface-2); }
-.pv-tab.on { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--sh-sm); }
+/* One segmented control on a soft track with the active family filled near-black � the
+   same control the reference uses for every either/or in this panel (family, access,
+   Manual/Query, Top/Bottom/All). Four loose outlined buttons with a blue fill read as
+   four separate things you could each turn on. */
+.pv-tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 4px; background: var(--surface-2); border-radius: 10px; margin-bottom: 14px; }
+.pv-tab { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 13px; border: none; background: transparent; color: var(--ink-2); border-radius: 7px; font-weight: 500; font-size: 13px; }
+.pv-tab:hover { color: var(--ink); }
+.pv-tab.on { background: var(--ink); color: #fff; font-weight: 600; box-shadow: var(--sh-sm); }
+.pv-tab.on :deep(.ico) { color: #fff; }
 .pv-tab:disabled { opacity: .45; cursor: not-allowed; }
 .pv-tab.on:disabled { opacity: 1; }
 .pv-tab .rot90 { transform: rotate(90deg); }
@@ -833,10 +840,14 @@ function save(place) {
 .tgl-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tgl-txt b { font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
 .tgl-txt em { font-style: normal; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
-.tgl { flex: none; width: 38px; height: 22px; padding: 0; border: none; border-radius: 999px; background: var(--border-strong); position: relative; transition: background .15s; }
-.tgl i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: var(--sh-sm); transition: transform .15s; }
-.tgl.on { background: var(--primary); }
-.tgl.on i { transform: translateX(16px); }
+/* the ON/OFF pill, same as the dashboard panel's � a bare track says there are two states
+   but not which one you are looking at */
+.tgl { flex: none; width: 58px; height: 24px; padding: 0; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-2); position: relative; transition: background .15s, border-color .15s; }
+.tgl i { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted-2); box-shadow: var(--sh-sm); transition: left .15s, background .15s; }
+.tgl b { position: absolute; top: 0; right: 8px; line-height: 22px; font-size: 9.5px; font-weight: 700; letter-spacing: .4px; color: var(--muted); transition: color .15s; }
+.tgl.on { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.tgl.on i { left: 38px; background: var(--green); }
+.tgl.on b { right: auto; left: 9px; color: var(--green); }
 
 .pe-note { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--primary-700); background: var(--primary-softer); border: 1px solid var(--primary-soft); border-radius: 9px; padding: 10px 12px; }
 .pe-note :deep(.ico) { flex: none; margin-top: 1px; }
@@ -861,18 +872,21 @@ function save(place) {
 .selw { position: relative; }
 .selw select { appearance: none; padding-right: 30px; cursor: pointer; }
 .chev { position: absolute; right: 11px; top: 12px; color: var(--muted); pointer-events: none; }
-.seg { display: inline-flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 9px; border: 1px solid var(--border); margin-bottom: 8px; }
-.seg-b { border: none; background: transparent; padding: 6px 14px; border-radius: 7px; font-weight: 500; font-size: 12.5px; color: var(--muted); }
-.seg-b.on { background: var(--surface); color: var(--primary-700); box-shadow: var(--sh-sm); }
+/* Manual / Query Based, and Display's Top / Bottom / All */
+.seg { display: inline-flex; gap: 2px; background: var(--surface-2); padding: 4px; border-radius: 10px; border: none; margin-bottom: 8px; }
+.seg-b { border: none; background: transparent; padding: 0 14px; height: 30px; border-radius: 7px; font-weight: 500; font-size: 12.5px; color: var(--ink-2); }
+.seg-b:hover { color: var(--ink); }
+.seg-b.on { background: var(--ink); color: #fff; font-weight: 600; box-shadow: var(--sh-sm); }
 .hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 10px; }
 /* Visibility & Sharing — the same three-way control the dashboard panel uses, sized for
    the narrower config column (the board's 38px pills would crowd it). */
 .acc-lbl { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
 .acc-lbl i { color: var(--red); font-style: normal; }
-.acc-seg { display: flex; gap: 6px; }
-.acc-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 12.5px; }
-.acc-btn:hover { background: var(--surface-2); }
-.acc-btn.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-700); }
+.acc-seg { display: flex; gap: 2px; padding: 4px; background: var(--surface-2); border-radius: 10px; }
+.acc-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 10px; border: none; background: transparent; color: var(--ink-2); border-radius: 7px; font-weight: 500; font-size: 12.5px; }
+.acc-btn:hover { color: var(--ink); }
+.acc-btn.on { background: var(--ink); color: #fff; font-weight: 600; box-shadow: var(--sh-sm); }
+.acc-btn.on :deep(.ico) { color: #fff; }
 .acc-note { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; }
 .open-dd { display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--primary-soft); border-radius: 9px; padding: 5px; background: var(--primary-softer); }
 .dd-opt { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border: none; background: transparent; border-radius: 6px; font-size: 13px; text-align: left; }
@@ -889,7 +903,10 @@ function save(place) {
 .pv-kpi .u { font-size: 28px; font-weight: 600; color: var(--muted); margin-left: 4px; }
 .spin { animation: bsp .7s linear infinite; } @keyframes bsp { to { transform: rotate(360deg); } }
 .qrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; }
-.cfg-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--surface-2); flex: none; }
+.cfg-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--surface); flex: none; }
+/* near-black primaries, matching the reference and the Create Dashboard panel */
+.cfg-foot .btn-primary { background: var(--ink); border-color: var(--ink); }
+.cfg-foot .btn-primary:hover:not(:disabled) { background: #26313f; border-color: #26313f; }
 @media (max-width: 900px) {
   .bbody { flex-direction: column; }
   .preview { flex: none; height: 240px; border-right: none; }

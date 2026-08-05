@@ -722,8 +722,13 @@ onBeforeUnmount(() => {
    the legend size to its content makes the pair a real group that justify-content can
    centre. Scoped to .has-side so bar and line charts still fill the tile. */
 .chart-row.has-side { justify-content: center; }
-.chart-row.has-side .ec { flex: 0 1 400px; }
-.chart-row.has-side .legend-side { width: auto; min-width: 128px; max-width: 190px; }
+/* A donut is CIRCULAR, so its natural box is a square the height of the row. Sizing the
+   canvas to that — rather than letting it flex to fill — means the canvas contains the
+   drawing and nothing else, so donut + legend is a real group with no invisible padding
+   on either side for justify-content to centre around. Sizing it any other way just moves
+   the empty space from one side to the other. */
+.chart-row.has-side .ec { flex: 0 1 auto; height: 100%; aspect-ratio: 1 / 1; min-width: 0; }
+.chart-row.has-side .legend-side { width: auto; min-width: 118px; max-width: 190px; }
 
 /* Side legend — part-of-whole charts. The list is the only part that flexes, so
    the pager stays pinned at the bottom and the rank pill at the top. */
