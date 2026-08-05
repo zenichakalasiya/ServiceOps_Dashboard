@@ -980,9 +980,13 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .group .cell > .tile { border-color: var(--border-strong); box-shadow: 0 1px 4px rgba(27,28,46,.10), 0 1px 2px rgba(27,28,46,.05); }
 .group.drop-into, .grid.drop-into { border: 1px solid var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); border-radius: var(--r-lg); }
 .grid.drop-into { padding: 4px; }
-.grp-head { display: flex; align-items: center; gap: 8px; padding: 6px 2px 12px; }
-.grp-toggle { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; }
-.grp-toggle:hover { background: var(--surface); }
+.grp-head { display: flex; align-items: center; gap: 8px; padding: 6px 0 12px; }
+/* No hover fill and no 26px box. The rounded background needed padding around the glyph
+   to look right, and that padding is what pushed the chevron in from the container's left
+   edge — so the heading never lined up with the widgets below it. The icon is the target
+   now; it sits flush and only changes colour. */
+.grp-toggle { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; width: 16px; height: 26px; padding: 0; border-radius: 0; }
+.grp-toggle:hover { background: transparent; color: var(--ink); }
 .grp-name { font-weight: 600; font-size: 14px; cursor: text; }
 .grp-name-input { font-weight: 600; font-size: 14px; border: 1px solid var(--primary); border-radius: 6px; padding: 2px 8px; outline: none; box-shadow: 0 0 0 3px var(--primary-soft); }
 .grp-count { font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }

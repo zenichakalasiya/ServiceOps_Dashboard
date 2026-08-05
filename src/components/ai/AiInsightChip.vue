@@ -49,9 +49,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 <style scoped>
 .chip-wrap { position: relative; }
 /* AI-accented pill: gradient-border over white, gradient glyph, count badge */
+/* Sized and cornered like every other action in the board header (.btn — 36px tall,
+   --r radius). It was a 30px pill, which made the one AI control in the row both shorter
+   than its neighbours and a different shape; the gradient border is enough to mark it out
+   without also breaking the row's geometry. */
 .ai-chip {
-  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
-  border: 1.5px solid transparent; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px;
+  border: 1.5px solid transparent; border-radius: var(--r);
   background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--ai-grad-line) border-box;
 }
 .ai-chip :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }

@@ -566,7 +566,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="chart" :style="{ height: height + 'px' }">
-      <div class="chart-row">
+      <div class="chart-row" :class="{ 'has-side': sideLegend }">
         <VChart
           ref="chartRef" class="ec" :option="option"
           :init-options="{ renderer: 'canvas' }" :update-options="{ replaceMerge: ['series'] }" autoresize
@@ -713,6 +713,17 @@ onBeforeUnmount(() => {
 .chart { display: flex; flex-direction: column; min-width: 0; position: relative; }
 .chart-row { flex: 1; display: flex; min-height: 0; gap: 10px; }
 .ec { flex: 1; min-height: 0; min-width: 0; }
+
+/* Part-of-whole charts only: centre the DONUT + LEGEND as one group.
+   With the canvas at flex:1 and the legend pinned at a fixed 168px, the donut was
+   centred inside whatever was left over while the legend's own text — always narrower
+   than 168 — left dead space against the right edge. So the pair read as sitting left of
+   centre even though each half was doing what it was told. Capping the canvas and letting
+   the legend size to its content makes the pair a real group that justify-content can
+   centre. Scoped to .has-side so bar and line charts still fill the tile. */
+.chart-row.has-side { justify-content: center; }
+.chart-row.has-side .ec { flex: 0 1 400px; }
+.chart-row.has-side .legend-side { width: auto; min-width: 128px; max-width: 190px; }
 
 /* Side legend — part-of-whole charts. The list is the only part that flexes, so
    the pager stays pinned at the bottom and the rank pill at the top. */
