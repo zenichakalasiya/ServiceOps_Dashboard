@@ -2175,61 +2175,93 @@ watch(() => props.role, () => {
 /* ---- Deep dive -------------------------------------------------------------
    Four zones, in the order a reader needs them: the verdict (a position, not a
    description), the readings (receipts), the drivers (the insight), and the
-   consequence. Prose belongs only in the last two, and only a sentence at a time. */
-.vd { border-radius: 12px; padding: 11px 13px; margin-bottom: 10px; border: 1px solid var(--border); background: var(--surface-2); }
-.vd.bad { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); background: color-mix(in srgb, var(--red) 6%, var(--surface)); }
-.vd.warn { border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); background: color-mix(in srgb, var(--amber) 7%, var(--surface)); }
-.vd.good { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); background: color-mix(in srgb, var(--green) 6%, var(--surface)); }
-.vd-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; margin-bottom: 4px; color: var(--muted-2); }
-.vd.bad .vd-tag { color: var(--red); } .vd.warn .vd-tag { color: var(--amber); } .vd.good .vd-tag { color: var(--green); }
-.vd-h { font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--ink); letter-spacing: -.2px; }
-.vd-s { font-size: 12px; color: var(--ink-2); line-height: 1.5; margin-top: 4px; }
+   consequence. Prose belongs only in the last two, and only a sentence at a time.
 
-/* readings — chips, so four numbers take one glance instead of a sentence each */
-.rd { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
-.rd-c { border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; background: var(--surface); }
-.rd-c.bad { border-color: color-mix(in srgb, var(--red) 35%, var(--border)); }
-.rd-c.warn { border-color: color-mix(in srgb, var(--amber) 40%, var(--border)); }
-.rd-l { font-size: 10.5px; color: var(--muted); line-height: 1.3; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rd-v { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 5px; }
-.rd-d { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+   The visual system for BOTH CTA answers, and the reason it is this quiet:
+
+   These two answers are the longest things the panel ever prints, and the earlier
+   treatment gave every part its own container — a tinted verdict box, bordered
+   reading chips, a ruled driver list, bordered cards with a 3px severity bar, a
+   dashed divider inside each one. Five container styles stacked in one scroll read
+   as noise, and noise is exactly what an answer must not be.
+
+   So: ONE card style (hairline border, 14px radius, 16px padding), severity carried
+   by a small mark rather than a full-card wash, and SPACE doing the separating that
+   rules used to do. The spacing scale is 8 / 12 / 16 / 24 and nothing else. */
+
+/* the verdict — the position, stated. A white card: tinting the whole panel red
+   makes every deep dive read as an emergency, so the tone rides in the tag alone. */
+.vd { border-radius: 14px; padding: 16px; margin-bottom: 16px; border: 1px solid var(--border); background: var(--surface); }
+.vd.bad { border-color: color-mix(in srgb, var(--red) 26%, var(--border)); }
+.vd.warn { border-color: color-mix(in srgb, var(--amber) 30%, var(--border)); }
+.vd.good { border-color: color-mix(in srgb, var(--green) 28%, var(--border)); }
+/* the tag is the only saturated thing in the card, so it is where the eye lands */
+.vd-tag { display: inline-block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; margin-bottom: 10px; padding: 3px 8px; border-radius: var(--r-pill); color: var(--muted-2); background: var(--surface-2); }
+.vd.bad .vd-tag { color: var(--red); background: color-mix(in srgb, var(--red) 10%, var(--surface)); }
+.vd.warn .vd-tag { color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, var(--surface)); }
+.vd.good .vd-tag { color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--surface)); }
+.vd-h { font-size: 15.5px; font-weight: 700; line-height: 1.4; color: var(--ink); letter-spacing: -.2px; text-wrap: balance; }
+.vd-s { font-size: 12.5px; color: var(--ink-2); line-height: 1.65; margin-top: 8px; }
+
+/* readings — receipts. Borderless: a 2×2 grid of bordered chips inside a bordered
+   answer is three frames deep. The wash alone separates them from the page. */
+.rd { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 24px; }
+.rd-c { border: 0; border-radius: 12px; padding: 11px 12px; background: var(--surface-2); }
+/* only the genuinely bad one is washed. Washing 'warn' too turned all four cards amber
+   at once — a uniform colour field carries no signal, and the delta below each value is
+   already red or green, so the wash was saying it a second time in a weaker voice. */
+.rd-c.bad { background: color-mix(in srgb, var(--red) 8%, var(--surface)); }
+.rd-l { font-size: 10.5px; color: var(--muted); line-height: 1.3; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-v { font-size: 17px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 6px; letter-spacing: -.3px; }
+.rd-d { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .rd-d.up { color: var(--red); } .rd-d.down { color: var(--green); }
 
-.sec-l { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted-2); font-weight: 700; margin: 0 0 6px; }
-.dv { border-left: 2px solid var(--ai); padding: 2px 0 2px 10px; margin-bottom: 9px; }
-.dv-t { font-size: 12.5px; font-weight: 650; color: var(--ink); line-height: 1.4; }
-.dv-ls { margin: 5px 0 6px; display: flex; flex-direction: column; gap: 3px; }
-.dv-li { font-size: 11.5px; color: var(--ink); line-height: 1.45; padding-left: 11px; position: relative; }
-.dv-li::before { content: '•'; position: absolute; left: 0; color: var(--ai); }
+/* section label — the only thing marking a new zone now that the rules are gone,
+   so it needs the space above it to actually do that job */
+.sec-l { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted-2); font-weight: 700; margin: 0 0 12px; }
+/* a driver is prose, not a card. No left rule — with real space between them the
+   rule was drawing a box around something that was already separate. */
+.dv { padding: 0; margin-bottom: 20px; }
+.dv:last-child { margin-bottom: 0; }
+.dv-t { font-size: 13px; font-weight: 650; color: var(--ink); line-height: 1.45; }
+.dv-ls { margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.dv-li { font-size: 12px; color: var(--ink); line-height: 1.5; padding-left: 14px; position: relative; }
+.dv-li::before { content: ''; position: absolute; left: 2px; top: 7px; width: 4px; height: 4px; border-radius: 50%; background: var(--ai); }
 .dv-li.muted { color: var(--muted); }
-.dv-b { font-size: 11.5px; color: var(--ink-2); line-height: 1.55; margin-top: 2px; }
+.dv-li.muted::before { background: var(--muted-2); }
+.dv-b { font-size: 12px; color: var(--ink-2); line-height: 1.65; margin-top: 8px; }
 
 /* the consequence — the one thing on screen that isn't visible on the tiles */
-.mn { margin-top: 12px; border-radius: 10px; padding: 10px 12px; background: var(--ai-grad-soft); border: 1px solid var(--ai-border); }
-.mn-h { display: flex; align-items: center; gap: 5px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; font-weight: 700; color: var(--ai-ink); margin-bottom: 4px; }
-.mn-b { font-size: 12px; line-height: 1.6; color: var(--ink); }
+.mn { margin-top: 24px; border-radius: 14px; padding: 16px; background: var(--ai-grad-soft); border: 1px solid var(--ai-border); }
+.mn-h { display: flex; align-items: center; gap: 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; font-weight: 700; color: var(--ai-ink); margin-bottom: 8px; }
+.mn-b { font-size: 12.5px; line-height: 1.7; color: var(--ink); }
 
 /* ---- What needs attention --------------------------------------------------
    A recommendation card, not a row in a list: what, why it matters, and the steps.
    A bare severity list is something a threshold rule could print without any AI. */
-.foc-lead { font-size: 12px; color: var(--ink-2); line-height: 1.55; margin: 0 0 10px; }
-.foc { display: flex; flex-direction: column; gap: 9px; }
-.foc-i { border: 1px solid var(--border); border-left-width: 3px; border-radius: 10px; padding: 10px 12px; background: var(--surface); }
-.foc-i.bad { border-left-color: var(--red); } .foc-i.warn { border-left-color: var(--amber); } .foc-i.good { border-left-color: var(--green); }
-.foc-hd { display: flex; align-items: flex-start; gap: 8px; }
-.foc-n { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10.5px; font-weight: 700; color: #fff; margin-top: 1px; }
+.foc-lead { font-size: 12.5px; color: var(--ink-2); line-height: 1.65; margin: 0 0 16px; }
+.foc { display: flex; flex-direction: column; gap: 12px; }
+/* the numbered badge already carries severity in full colour — a 3px bar on the
+   same card said it a second time and made every card look like a warning banner */
+.foc-i { border: 1px solid var(--border); border-radius: 14px; padding: 16px; background: var(--surface); }
+.foc-hd { display: flex; align-items: flex-start; gap: 10px; }
+.foc-n { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; margin-top: 1px; }
 .foc-n.bad { background: var(--red); } .foc-n.warn { background: var(--amber); } .foc-n.info { background: var(--blue); }
-.foc-t { flex: 1; min-width: 0; font-size: 13px; font-weight: 650; line-height: 1.4; color: var(--ink); }
-.foc-why { font-size: 11.5px; color: var(--ink-2); line-height: 1.6; margin: 6px 0 9px; }
-.foc-why b, .foc-next b { font-weight: 700; }
-.foc-why b { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted-2); margin-bottom: 2px; }
-.foc-next { font-size: 11.5px; color: var(--ink); line-height: 1.6; border-top: 1px dashed var(--border); padding-top: 8px; }
-.foc-next b { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--ai-ink); margin-bottom: 2px; }
+.foc-t { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 650; line-height: 1.45; color: var(--ink); text-wrap: balance; }
+/* the two halves are separated by space, not a dashed rule — inside a card that is
+   already bordered, an internal divider is a frame within a frame */
+.foc-why { font-size: 12px; color: var(--ink-2); line-height: 1.7; margin: 14px 0 0; }
+.foc-next { font-size: 12px; color: var(--ink); line-height: 1.7; margin-top: 16px; }
+.foc-why b, .foc-next b { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .8px; font-weight: 700; margin-bottom: 5px; }
+.foc-why b { color: var(--muted-2); }
+.foc-next b { color: var(--ai-ink); }
 
-/* what is already fixing itself — reported, never ranked as work */
-.imp { margin-top: 4px; border-radius: 10px; padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--border); }
-.imp-h { display: flex; align-items: center; gap: 5px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; color: var(--muted-2); margin-bottom: 4px; }
-.imp-r { font-size: 11.5px; color: var(--ink-2); line-height: 1.6; padding-left: 12px; position: relative; }
+/* what is already fixing itself — reported, never ranked as work. Borderless: it is
+   deliberately the quietest thing in the answer. */
+.imp { margin-top: 4px; border-radius: 14px; padding: 14px 16px; background: var(--surface-2); border: 0; }
+.imp-h { display: flex; align-items: center; gap: 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; font-weight: 700; color: var(--muted-2); margin-bottom: 8px; }
+.imp-r { font-size: 12px; color: var(--ink-2); line-height: 1.7; padding-left: 14px; position: relative; }
+.imp-r + .imp-r { margin-top: 4px; }
 .imp-r::before { content: '–'; position: absolute; left: 0; color: var(--muted-2); }
 .imp-r.good::before { content: '✓'; color: var(--green); font-size: 10px; }
 /* what changed since last visit */

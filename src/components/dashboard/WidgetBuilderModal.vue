@@ -750,9 +750,11 @@ function save(place) {
 .ic { width: 34px; height: 34px; border: none; background: transparent; color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
 .bbody { flex: 1; display: flex; min-height: 0; }
-/* No rule between the preview and the config panel: the background change from --bg to
-   --surface already separates them, and a border on top of that reads as a seam. */
-.preview { flex: 1.5; display: flex; flex-direction: column; min-width: 0; padding: 18px 22px 22px; background: var(--bg); }
+/* Nothing divides the preview from the config panel — no rule AND no colour change.
+   There was never a border here, but the preview sat on --bg while the panel sits on
+   --surface, and that edge read as a 1px divider running the full height. The preview
+   card keeps its own border and shadow, so it still reads as a card on white. */
+.preview { flex: 1.5; display: flex; flex-direction: column; min-width: 0; padding: 18px 22px 22px; background: var(--surface); }
 .pv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .pv-tab { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 9px; font-weight: 500; font-size: 13px; }
 .pv-tab:hover { background: var(--surface-2); }
