@@ -233,15 +233,21 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .fsearch input { border: none; outline: none; background: transparent; width: 100%; font-size: 13px; }
 .glist { flex: 1; overflow: auto; padding: 4px 8px 14px; }
 .grp { margin-bottom: 2px; }
-.grp-head { display: flex; align-items: center; gap: 7px; width: 100%; border: none; background: transparent; padding: 7px 6px; border-radius: 8px; color: var(--ink-2); font-weight: 600; font-size: 12.5px; text-align: left; }
+/* the chevron sits hard against the panel's left edge — it was indented 6px, which put
+   every group heading out of line with the "Dashboards" title and the search box above */
+.grp-head { display: flex; align-items: center; gap: 7px; width: 100%; border: none; background: transparent; padding: 7px 6px 7px 0; border-radius: 8px; color: var(--ink-2); font-weight: 600; font-size: 12.5px; text-align: left; }
 .grp-head:hover { background: var(--surface-2); }
 .gname { flex: 1; }
 .gcount { font-size: 11px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; font-weight: 600; }
 .items { display: flex; flex-direction: column; gap: 1px; padding: 1px 0 4px; }
 .item { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 20px; border-radius: 8px; cursor: pointer; }
 .item:hover { background: var(--surface-2); }
-.item.active { background: var(--primary-softer); }
-.item.active .iname { color: var(--primary-700); font-weight: 400; }
+/* No filled "selected" row inside the groups. The default board is already marked by the
+   home icon beside its name AND pinned on its own row above, so a third signal on the
+   same board — in two groups at once, since it is both a favourite and recent — was
+   painting the sidebar blue to say something already said twice. The name alone carries
+   the current board. */
+.item.active .iname { color: var(--primary-700); font-weight: 600; }
 /* every dashboard's icon sits in the same soft rounded box — the box is the constant,
    the glyph inside it is what says predefined vs mine vs shared */
 .ibox { flex: none; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink-2); }

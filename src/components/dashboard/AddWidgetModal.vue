@@ -416,7 +416,11 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .aw-head h3 { margin: 0; font-size: 17px; }
 .ic { width: 34px; height: 34px; border: none; background: transparent; color: var(--muted); border-radius: 9px; display: grid; place-items: center; }
 .ic:hover { background: var(--surface-2); color: var(--ink); }
-.aw-tabs { display: flex; gap: 4px; padding: 0 22px; border-bottom: 1px solid var(--border); }
+/* five labels are wider than the drawer, so the strip scrolls sideways rather than
+   clipping the last tab — same treatment as the dashboard listing's tabs */
+.aw-tabs { display: flex; gap: 4px; padding: 0 22px; border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -ms-overflow-style: none; }
+.aw-tabs::-webkit-scrollbar { display: none; }
+.awt { flex: none; }
 .awt { display: inline-flex; align-items: center; gap: 5px; border: none; background: transparent; padding: 10px 4px; margin-right: 14px; font-weight: 500; font-size: 13.5px; color: var(--muted); border-bottom: 2px solid transparent; }
 .awt:hover { color: var(--ink); }
 .awt.on { color: var(--primary-700); border-bottom-color: var(--primary); }
@@ -428,9 +432,11 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .type-chips { display: flex; gap: 7px; padding: 10px 22px 2px; }
 .tchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 999px; font-size: 12.5px; font-weight: 500; }
 .tchip:hover { background: var(--surface-2); }
-.tchip.on { background: var(--primary-soft); border-color: transparent; color: var(--primary-700); }
+/* the selected type filter is filled solid, matching the segmented control the reference
+   uses — a soft tint read as "hovered", not "this is the filter in force" */
+.tchip.on { background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600; }
 .tc-count { font-size: 10.5px; font-weight: 600; background: var(--surface-2); border-radius: 999px; padding: 0 6px; color: var(--muted); }
-.tchip.on .tc-count { background: #fff; color: var(--primary-700); }
+.tchip.on .tc-count { background: rgba(255,255,255,.22); color: #fff; }
 .aw-body { flex: 1; overflow: auto; padding: 14px 22px 22px; }
 .cat { margin-bottom: 18px; }
 .cat-h { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted-2); font-weight: 600; margin: 6px 0 10px; }
@@ -477,14 +483,17 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .tt-tag.shared { background: rgba(76,177,254,.26); border-color: rgba(76,177,254,.5); color: #cfe8ff; }
 .tt-tag.user { background: rgba(31,157,99,.3); border-color: rgba(31,157,99,.55); color: #b9edd3; }
 .lib-tip-arrow { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 6px solid transparent; border-left-color: #20223a; }
-/* hover actions (Duplicate / Edit / Delete) — revealed on row hover */
-.lt-acts { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
+/* Hover actions (Duplicate / Edit / Delete) — each in its own outlined box rather than a
+   bare glyph, so on a tinted hovered row they still read as three separate buttons. Delete
+   is red at rest, not only on its own hover: it is the one action here you cannot undo. */
+.lt-acts { display: flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .12s; }
 .lrow:hover .lt-acts { opacity: 1; }
 .lt-acts.always { opacity: 1; }
 .trash-ic { width: 16px; display: inline-grid; place-items: center; color: var(--muted-2); flex: none; }
-.la { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
-.la:hover { background: var(--surface); color: var(--ink); }
-.la.del:hover { color: var(--red); background: var(--red-soft); }
+.la { width: 28px; height: 28px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 7px; display: grid; place-items: center; }
+.la:hover { border-color: var(--primary); color: var(--primary-700); background: var(--primary-softer); }
+.la.del { color: var(--red); }
+.la.del:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
 /* delete confirmation modal */
 .cf-overlay { position: fixed; inset: 0; background: rgba(20,21,38,.5); backdrop-filter: blur(2px); z-index: 130; display: grid; place-items: center; padding: 24px; }
 .cf { width: min(400px, 92vw); background: var(--surface); border-radius: var(--r-xl); box-shadow: var(--sh-lg); padding: 24px; text-align: center; }

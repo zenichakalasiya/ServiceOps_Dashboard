@@ -688,9 +688,11 @@ onBeforeUnmount(() => {
                 </select>
               </div>
             </div>
-            <p v-if="rankMode === 'all' && entities.length > 10" class="rp-warn">
-              <Icon name="alert" :size="13" /> Colour stops carrying meaning past about 10.
-            </p>
+            <!-- The "colour stops carrying meaning past about 10" warning used to sit
+                 here. It fired on every wide chart, said the same thing every time, and
+                 warned about a state the user had just deliberately chosen (All) — so it
+                 read as the tool arguing with the request rather than helping. The rank
+                 window itself is the answer; it does not need a caption. -->
           </template>
 
           <!-- the series that slice actually plots — click one to drop it from the chart.
@@ -767,7 +769,10 @@ onBeforeUnmount(() => {
 .more-pop > .sm { flex: 1; min-height: 0; }
 .mp-arrow { position: absolute; bottom: -6px; width: 10px; height: 10px; flex: none; background: var(--surface); border: 1px solid var(--border); border-top: none; border-left: none; transform: translateX(-50%) rotate(45deg); }
 .more-pop.below .mp-arrow { top: -6px; bottom: auto; border: 1px solid var(--border); border-bottom: none; border-right: none; }
-.mp-h { display: flex; align-items: center; justify-content: space-between; flex: none; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+/* the popover's title reads as a title: sentence case at panel-heading size, and ruled
+   off from the controls under it. At 10.5px uppercase muted it looked like a field label
+   for the Sort Order row rather than the name of the panel. */
+.mp-h { display: flex; align-items: center; justify-content: space-between; flex: none; font-size: 13px; font-weight: 600; letter-spacing: -.1px; color: var(--ink); padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
 .mp-x { border: none; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 2px; border-radius: 5px; }
 .mp-x:hover { background: var(--surface-2); color: var(--ink); }
 
@@ -797,6 +802,5 @@ onBeforeUnmount(() => {
 .rp-n { width: 56px; height: 26px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; text-align: center; }
 .rp-n:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .rp-d { color: var(--muted); font-size: 12px; }
-.rp-warn { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); font-size: 11.5px; line-height: 1.4; }
 
 </style>

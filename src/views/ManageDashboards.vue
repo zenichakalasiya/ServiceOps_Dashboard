@@ -305,16 +305,22 @@ function onDrop(target) {
 </template>
 
 <style scoped>
-.page { padding: 16px 20px 40px; height: 100%; display: flex; flex-direction: column; }
+/* The listing is a PAGE, not a card on a page. It used to be a bordered, rounded panel
+   floating on the tinted canvas — a container around content that already fills the
+   screen adds a frame and takes width without earning either. White ground, rows ruled
+   by hairlines, nothing boxed. */
+.page { padding: 16px 20px 40px; height: 100%; display: flex; flex-direction: column; background: var(--surface); }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .page-head h1 { margin: 0; font-size: 20px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-.tabs { display: flex; gap: 2px; }
-.t { border: none; background: transparent; padding: 7px 11px; border-radius: 8px; font-weight: 500; font-size: 13px; color: var(--muted); }
-.t:hover { background: var(--surface-2); color: var(--ink); }
-.t.on { background: var(--primary-softer); color: var(--primary-700); }
-.t .c { font-size: 11px; background: var(--surface-2); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
-.t.on .c { background: #fff; }
+/* one segmented control, not four loose buttons: a soft track with the active segment
+   filled solid, exactly as the reference has it */
+.tabs { display: inline-flex; gap: 2px; padding: 4px; background: var(--surface-2); border-radius: 10px; }
+.t { border: none; background: transparent; padding: 7px 14px; border-radius: 7px; font-weight: 500; font-size: 13px; color: var(--ink-2); }
+.t:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--ink); }
+.t.on { background: var(--ink); color: #fff; font-weight: 600; box-shadow: var(--sh-sm); }
+.t .c { font-size: 11px; background: var(--surface); border-radius: 999px; padding: 0 6px; margin-left: 5px; color: var(--ink-2); }
+.t.on .c { background: rgba(255,255,255,.22); color: #fff; }
 .tr { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .srch { display: flex; align-items: center; gap: 7px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 10px; height: 34px; width: 200px; }
 .srch input { border: none; outline: none; background: transparent; width: 100%; font-size: 13px; }
@@ -346,9 +352,11 @@ function onDrop(target) {
 .btn.danger { color: var(--red); border-color: var(--red-soft); }
 .btn.danger:hover { background: var(--red-soft); }
 /* table */
-.tbl-wrap { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
+.tbl-wrap { flex: 1; overflow: auto; border: 0; border-radius: 0; background: transparent; }
 .mtbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-.mtbl thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted-2); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+/* header row on the page's own white, in sentence case — the grey band was the only thing
+   left implying a card once the container went */
+.mtbl thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); text-align: left; font-size: 12.5px; color: var(--ink); font-weight: 600; padding: 12px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .mtbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 /* sortable headers */
 .mtbl thead th.srt { cursor: pointer; user-select: none; }
