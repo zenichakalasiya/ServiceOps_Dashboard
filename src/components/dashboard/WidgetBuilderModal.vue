@@ -816,7 +816,12 @@ function save(place) {
 .pv-foot { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); margin-top: 12px; }
 .config { width: 480px; flex: none; display: flex; flex-direction: column; min-height: 0; }
 .cfg-scroll { flex: 1; overflow: auto; padding: 18px 20px; }
-.sec { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+/* No rules between sections — the config sidebar had one under every section, so a Gauge
+   scrolled past six or seven of them. Each heading is already a bold line with space above
+   it; the rule was drawing a border around something the type had already separated.
+   Applies to all four families (Widget · KPI · Shortcut · Free Text) since they share
+   this one .sec class. */
+.sec { padding-bottom: 22px; margin-bottom: 0; border-bottom: none; }
 /* Display → rank window (Top N / Bottom N + a free number field) */
 .rank-row { display: flex; align-items: center; gap: 8px; }
 .rank-row .seg { flex: 1; }
@@ -846,7 +851,7 @@ function save(place) {
 .dup-warn .ico { flex: none; margin-top: 1px; }   /* optical-align with the first text line */
 .dup-warn b { font-weight: 600; color: var(--amber); }
 .input.bad { border-color: var(--amber); }
-.sec:last-child { border-bottom: none; margin-bottom: 0; }
+.sec:last-child { padding-bottom: 0; }
 .sec-h { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fld { display: flex; flex-direction: column; margin-bottom: 12px; }
