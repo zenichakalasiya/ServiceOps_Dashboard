@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from '../components/ui/Icon.vue'
 import ScheduleDialog from '../components/dashboard/ScheduleDialog.vue'
 import HistoryDialog from '../components/dashboard/HistoryDialog.vue'
-import FilterMenu from '../components/ui/FilterMenu.vue'
+import TableFilterBar from '../components/dashboard/TableFilterBar.vue'
+import { matchesConds } from '../data/filters.js'
 import { store, manageable, archived, archiveDashboard, restoreDashboard, deleteForever, recordView,
   togglePublished, setPublished, moveDashboardsToCategory, archiveMany, markDefault, toggleFavorite } from '../store/index.js'
 import { ACCESS } from '../data/mock.js'
@@ -15,11 +16,11 @@ const tab = ref('all')                 // all | mine | shared | archive
 const q = ref('')
 const isArchive = computed(() => tab.value === 'archive')
 
-/* One filter icon, two levels — the same FilterMenu the Shortcut tables use.
- * The three separate dropdowns are gone: each could hold only ONE value, so
- * "Service Desk or NOC" was not expressible at all. Values within a field are OR,
- * fields are AND. */
-const filters = ref({})
+/* The same bar the Shortcut tables use — literally the same component now, not a lookalike.
+ * One field does two jobs: type to search, or click to pick a field and build a
+ * `Field Operator Value` condition. The separate filter icon is gone; it was a second way
+ * in to the thing the field itself already offers. Conditions are ANDed. */
+const conds = ref([])
 const CAT = (d) => d.category || 'Uncategorized'
 const FIELD_OF = {
   category: CAT,
@@ -35,25 +36,13 @@ const base = computed(() => {
 })
 // options come from what's actually in the tab — never offer a filter that matches nothing
 const opts = (fn) => [...new Set(base.value.map(fn))].filter(Boolean).sort()
-/* Active filters render as chips, one per (field, value), so a single value can be
- * dropped without a round trip through the menu — the same rule as the Shortcut bar. */
-const filterChips = computed(() =>
-  Object.entries(filters.value).flatMap(([key, values]) => {
-    const field = filterFields.value.find((x) => x.key === key)
-    return (values || []).map((value) => ({ key, value, label: field?.label || key }))
-  }))
-function removeChip(chip) {
-  const next = { ...filters.value }
-  const rest = (next[chip.key] || []).filter((v) => v !== chip.value)
-  if (rest.length) next[chip.key] = rest
-  else delete next[chip.key]        // an empty array is not a filter
-  filters.value = next
-}
+/* `type: 'enum'` gives each field a checkbox list of the values actually present in the
+ * current tab — never offer a filter that matches nothing. */
 const filterFields = computed(() => [
-  { key: 'category', label: 'Category', options: opts(CAT) },
-  { key: 'access', label: 'Visibility', options: opts(FIELD_OF.access) },
-  { key: 'status', label: 'Status', options: opts(FIELD_OF.status) },
-  { key: 'owner', label: 'Owner', options: opts(FIELD_OF.owner) },
+  { key: 'category', label: 'Category', type: 'enum', options: opts(CAT) },
+  { key: 'access', label: 'Visibility', type: 'enum', options: opts(FIELD_OF.access) },
+  { key: 'status', label: 'Status', type: 'enum', options: opts(FIELD_OF.status) },
+  { key: 'owner', label: 'Owner', type: 'enum', options: opts(FIELD_OF.owner) },
 ])
 
 // ---- column sorting ----
@@ -80,12 +69,9 @@ function sortBy(k) {
 const sortIcon = (k) => (sortKey.value !== k ? 'sort-asc' : sortDir.value === 'asc' ? 'sort-asc' : 'sort-desc')
 
 const rows = computed(() => {
-  let arr = base.value
-  for (const [key, picked] of Object.entries(filters.value)) {
-    if (!picked?.length) continue
-    const fn = FIELD_OF[key]
-    if (fn) arr = arr.filter((d) => picked.includes(fn(d)))
-  }
+  // one matcher, shared with the Shortcut tables — FIELD_OF resolves a condition's key to
+  // the derived value for that dashboard (Visibility is ACCESS[access].label, not `access`)
+  let arr = base.value.filter((d) => matchesConds((key) => FIELD_OF[key]?.(d), conds.value, filterFields.value))
   const s = q.value.trim().toLowerCase()
   if (s) arr = arr.filter((d) => d.name.toLowerCase().includes(s) || (d.owner || '').toLowerCase().includes(s))
   if (sortKey.value) {
@@ -169,15 +155,7 @@ function onDrop(target) {
          one the reference ships, and a per-user column choice on a shared listing was a
          preference with nowhere to live. -->
     <div class="searchbar">
-      <div class="srch wide">
-        <Icon name="search" :size="14" class="muted" />
-        <span v-for="c in filterChips" :key="c.key + c.value" class="mchip">
-          <b>{{ c.label }}</b><em>is</em><b>{{ c.value }}</b>
-          <button :title="`Remove ${c.label} is ${c.value}`" @click.stop="removeChip(c)"><Icon name="x" :size="10" /></button>
-        </span>
-        <input v-model="q" placeholder="Search a keyword or enter a keyword to search…" />
-        <FilterMenu v-model="filters" :fields="filterFields" label="Filter" class="in-srch" />
-      </div>
+      <TableFilterBar v-model="conds" v-model:search="q" :fields="filterFields" :closable="false" />
     </div>
 
     <div class="toolbar">
@@ -275,9 +253,11 @@ function onDrop(target) {
                   <button class="ia" title="History" @click="historyTarget = d"><Icon name="history" :size="15" /></button>
                 </template>
                 <div class="del-wrap">
-                  <!-- predefined boards can't be deleted; disabled rather than hidden
-                       here, so the actions column doesn't reflow row by row -->
-                  <button v-if="d.predefined && !isArchive" class="ia del" disabled title="Predefined dashboard — can't be deleted"><Icon name="lock" :size="15" /></button>
+                  <!-- A predefined board can't be deleted. The slot used to hold a disabled
+                       padlock so the column wouldn't reflow; it read as a fifth action and
+                       invited a click that does nothing. An empty slot of the same width
+                       keeps the column aligned and says nothing at all. -->
+                  <span v-if="d.predefined && !isArchive" class="ia-blank" title="Predefined dashboard — can’t be deleted" />
                   <button v-else class="ia del" :title="isArchive ? 'Delete forever' : 'Archive'" @click.stop="confirmId = confirmId === d.id ? null : d.id"><Icon name="trash" :size="15" /></button>
                   <div v-if="confirmId === d.id" class="cfm-back" @click="confirmId = null" />
                   <div v-if="confirmId === d.id" class="cfm">
@@ -400,6 +380,8 @@ function onDrop(target) {
 .ia:disabled:hover { background: transparent; }
 .ia:hover { background: var(--surface); color: var(--ink); }
 .ia.del:hover { color: var(--red); background: var(--red-soft); }
+/* holds the delete slot's width open on a row that has no delete action */
+.ia-blank { display: block; width: 30px; height: 30px; }
 .del-wrap { position: relative; }
 .cfm-back { position: fixed; inset: 0; z-index: 45; }
 .cfm { position: absolute; top: 50%; right: calc(100% + 6px); transform: translateY(-50%); z-index: 46; display: flex; align-items: center; gap: 6px; white-space: nowrap; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--sh-pop); padding: 7px 10px; font-size: 12.5px; color: var(--ink-2); }

@@ -24,10 +24,18 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   modelValue: { type: Array, default: () => [] },   // conditions
   search: { type: String, default: '' },
+  /* A caller that already knows its filterable fields passes them straight in — the
+   * Manage grid's columns are computed properties of a dashboard (Visibility, Owner,
+   * Status), not raw cells, so there is nothing for conditionFields to infer them from. */
+  fields: { type: Array, default: null },
+  /* the Shortcut tile's bar is opened from a filter icon and has to close again; a
+   * screen whose bar is permanent has nothing to close, so it hides the ✕ */
+  closable: { type: Boolean, default: true },
+  placeholder: { type: String, default: 'Select field or enter a keyword to search…' },
 })
 const emit = defineEmits(['update:modelValue', 'update:search', 'close'])
 
-const fields = computed(() => conditionFields(props.columns, props.rows))
+const fields = computed(() => props.fields || conditionFields(props.columns, props.rows))
 const fieldOf = (c) => fields.value.find((f) => f.key === c.key)
 const conds = computed(() => props.modelValue || [])
 const setConds = (next) => emit('update:modelValue', next)
@@ -113,11 +121,11 @@ onBeforeUnmount(() => removeEventListener('keydown', onEsc))
 
       <input
         ref="inputEl" v-model="q" class="tfb-in"
-        placeholder="Select field or enter a keyword to search…"
+        :placeholder="placeholder"
         @focus="openFields" @click.stop="openFields"
       />
     </div>
-    <button class="tfb-x" title="Close" @click="emit('close')"><Icon name="x" :size="16" /></button>
+    <button v-if="closable" class="tfb-x" title="Close" @click="emit('close')"><Icon name="x" :size="16" /></button>
 
     <teleport to="body">
       <!-- fields -->
