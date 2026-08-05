@@ -57,6 +57,8 @@
   --bg: #f6f9fc;               /* Light BG / Card Foreground — Figma Neutral/10 */
   --surface: #ffffff;          /* White / Widget BG / Nav BG */
   --surface-2: #eff2f6;        /* Action Box / Switch / Nav Hover BG — Figma light_bg */
+  --group-bg: #fafbfd;         /* widget-group container — a hair off the canvas, so a
+                                  group reads as a region without becoming a second card */
   /* Sidebar tint — the two left sidebars use this to read as a distinct region against
      the near-white main canvas (ClickUp-style). */
   --sidebar: #eef1f6; --sidebar-hover: #e3e8f1; --sidebar-border: #dce2ec;
@@ -124,6 +126,7 @@
   --surface: #1d1d27;
   --sidebar: #0f111a; --sidebar-hover: #1b1f2b; --sidebar-border: #282c3a;
   --surface-2: #25252f;
+  --group-bg: #1a1a24;         /* same job as the light #fafbfd: just off the canvas */
   --border: #2f2f3b;
   --border-strong: #3a3a48;
   --ink: #ececf3;

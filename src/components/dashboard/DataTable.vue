@@ -69,7 +69,9 @@ const filtered = computed(() => props.filtered)
           @click="sortable && header.column.toggleSorting()"
         >
           <span class="th-in">
-            {{ header.column.columnDef.header }}
+            <!-- the label needs its own box to truncate inside: the th's ellipsis can't
+                 reach into an inline-flex child, and the sort caret must stay visible -->
+            <span class="th-lbl">{{ header.column.columnDef.header }}</span>
             <Icon
               v-if="sortable"
               class="sc"
@@ -104,15 +106,25 @@ const filtered = computed(() => props.filtered)
 <style scoped>
 /* Table chrome lives here, not in the parent: scoped CSS in WidgetCard can
    reach this component's root <table> but not the th/td inside it. */
-table { width: 100%; border-collapse: collapse; font-size: inherit; }
+/* `table-layout: fixed` is what makes truncation possible at all: with the default auto
+   layout the browser widens a column to fit its longest cell, so `text-overflow` never
+   has anything to overflow and every long value wraps to two or three lines instead.
+   Fixed shares the width evenly, then each cell truncates on its own. */
+table { width: 100%; border-collapse: collapse; font-size: inherit; table-layout: fixed; }
+/* one line everywhere — headers and values alike. A wrapped cell changes its row's height
+   and knocks the row rule out of line with its neighbours. */
+th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 1; }
 td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+/* the sort header is an inline-flex row, so it needs its own clamp — the th's ellipsis
+   cannot reach inside it */
+.th-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nodata { text-align: center; color: var(--muted-2); padding: 18px; }
 
 /* Header doubles as a sort control. The caret stays invisible until hover or
    active sort, so an unsorted table looks exactly like the old static one. */
 th.srt { cursor: pointer; user-select: none; }
-.th-in { display: inline-flex; align-items: center; gap: 3px; }
+.th-in { display: flex; align-items: center; gap: 3px; max-width: 100%; }
 .sc { opacity: 0; color: var(--muted-2); transition: opacity .12s; flex: none; }
 th.srt:hover .sc { opacity: .6; }
 .sc.vis { opacity: 1; color: var(--primary); }

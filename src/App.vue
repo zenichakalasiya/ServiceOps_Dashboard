@@ -46,13 +46,15 @@ watch(() => store.ui.listingOpen, (v) => { if (v) store.ui.railExpanded = false 
 
 <style scoped>
 .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-/* the region behind the sidebars carries the tint, so the main canvas reads as a
-   white(ish) panel curving away from the tinted sidebars at the top-left */
-.below { flex: 1; display: flex; min-height: 0; background: var(--sidebar); }
+/* No curve at the canvas's top-left. The rounded corner let the sidebar tint show
+   through as a notch above the board header, and it broke the listing's right-hand
+   border: the vertical rule stopped short and restarted after the arc. Square corner,
+   one continuous line. */
+.below { flex: 1; display: flex; min-height: 0; background: var(--bg); }
 /* ModuleRail owns its own width now (56px ↔ 208px expanded) */
 .below > .rail { flex: none; }
 .below > .flyout, .below > .mlist { flex: none; }
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: auto; background: var(--bg); border-top-left-radius: 16px; }
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: auto; background: var(--bg); }
 .slide-enter-active, .slide-leave-active { transition: width .18s ease, opacity .18s ease; overflow: hidden; }
 .slide-enter-from, .slide-leave-to { width: 0 !important; opacity: 0; }
 </style>

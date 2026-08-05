@@ -629,22 +629,22 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 /* Fill the grid cell (which sizes the footprint via min-height) so the body — and a
    fill-height chart inside it — get a real height to distribute. Without this the tile
    collapses to its header once the chart stops carrying a fixed pixel height. */
-.tile { display: flex; flex-direction: column; overflow: hidden; min-height: 130px; flex: 1; }
+/* 8px, not the --r-lg 14 the generic .card ships — a 14px arc on a tile this small eats
+   into the header band and reads as a bubble rather than a panel */
+.tile { display: flex; flex-direction: column; overflow: hidden; min-height: 130px; flex: 1; border-radius: 8px; }
 /* the title + action row sits in its own slight-neutral band, with room to breathe */
-/* Shorter and much lighter than the old --surface-2 band: at 46px tall in a solid grey the
-   header competed with the chart under it. Mixed down to ~25% of --surface-2 it still
-   separates from the white body, and the hairline rule does the rest. color-mix keeps it
-   correct in dark mode, where a literal near-white would be a hole in the card. */
-.thead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px 4px 12px; background: color-mix(in srgb, var(--surface-2) 25%, var(--surface)); border-bottom: 1px solid var(--border); }
-.left { display: flex; align-items: center; gap: 6px; min-width: 0; }
-/* 6-dot drag handle — takes NO width at rest, so the title sits flush left exactly as
-   it does in the design's resting state; on hover it opens and the title slides right.
-   (The design mock draws the grip ON TOP of the title, which eats its first letter —
-   that is a layer overlap in Figma, not something to reproduce.) The negative margin
-   cancels .left's gap while collapsed, or the reserved 6px would still show. */
-.draghandle { display: inline-grid; place-items: center; color: var(--muted-2); cursor: grab; flex: none; overflow: hidden; width: 0; margin-left: -6px; opacity: 0; transition: width .2s cubic-bezier(.2,.7,.3,1), margin-left .2s cubic-bezier(.2,.7,.3,1), opacity .14s ease; }
+/* --bg (#F6F9FC) at 37px tall — shorter than the old 46px, and lighter than the solid
+   --surface-2 band that competed with the chart under it. */
+.thead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px 4px 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.left { position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* 6-dot drag handle — OUT OF FLOW, drawn on top of the title's first characters, so the
+   title never moves between rest and hover. The title is masked from under the grip
+   instead of being clipped by it: a hard cut swallows the first letter whole, the
+   gradient reads as the text passing behind the handle. */
+.draghandle { position: absolute; left: -3px; top: 50%; transform: translateY(-50%); z-index: 2; display: inline-grid; place-items: center; color: var(--muted-2); cursor: grab; opacity: 0; transition: opacity .16s ease; }
 .draghandle:active { cursor: grabbing; }
-.tile:hover .draghandle, .tile.acting .draghandle { width: 16px; margin-left: -4px; opacity: 1; }
+.tile:hover .draghandle, .tile.acting .draghandle { opacity: 1; }
+.tile:hover .title, .tile.acting .title { -webkit-mask-image: linear-gradient(90deg, transparent 0, transparent 4px, #000 22px); mask-image: linear-gradient(90deg, transparent 0, transparent 4px, #000 22px); }
 .pinbadge { display: inline-grid; place-items: center; color: var(--primary); flex: none; transform: rotate(35deg); }
 .title { font-weight: 600; font-size: var(--tile-title, 13.5px); }
 

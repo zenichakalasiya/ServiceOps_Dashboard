@@ -773,7 +773,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
             </div>
             <div v-if="!tilesIn(g.id).length" class="grp-empty">
               <p>No widgets yet — drag one here, or</p>
-              <button class="btn btn-sm btn-primary" @click="addWidgetToGroup(g.id)"><Icon name="plus" :size="14" /> Add widget</button>
+              <button class="eg-btn" @click="addWidgetToGroup(g.id)">Add Widget</button>
             </div>
           </div>
         </section>
@@ -781,8 +781,12 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
         <div v-if="gShowInserters && (d.groups || []).length" class="grp-insert" @click.stop="insertEmptyGroup((d.groups || []).length)"><span class="gi-line" /><span class="gi-btn"><Icon name="new-group" :size="13" /> New group here</span><span class="gi-line" /></div>
         <!-- F: a slim full-width "+ New section" bar (sections are typed headings) -->
         <button v-if="gSections" class="new-section-bar" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> New section</button>
-        <!-- 3 · always-available: add a new group at the end of the board -->
-        <button v-if="!loadingBoard && (d.tiles.length || (d.groups && d.groups.length))" class="new-group-bar" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> New group</button>
+        <!-- 3 · always-available: add a new group at the end of the board. Styled as the
+             same panel a group uses, so what you are about to create is what you see. -->
+        <div v-if="!loadingBoard && (d.tiles.length || (d.groups && d.groups.length))" class="new-group-bar">
+          <button class="ng-btn" @click="addEmptyGroup"><Icon name="new-group" :size="15" /> New Group</button>
+          <p class="ng-note">Group widgets into collapsible sections to focus on what matters right now.</p>
+        </div>
         </template>
       </div>
     </div>
@@ -966,7 +970,7 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 @keyframes cellReveal { from { opacity: 0; transform: translateY(10px) scale(.99); } to { opacity: 1; transform: none; } }
 /* widget groups (collapsible rows) */
 .board-groups { display: flex; flex-direction: column; gap: 16px; }
-.group { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); padding: 6px 12px 14px; transition: box-shadow .15s, border-color .15s; }
+.group { border: 1px solid var(--border); border-radius: 10px; background: var(--group-bg); padding: 6px 12px 14px; transition: box-shadow .15s, border-color .15s; }
 .group.drop-into, .grid.drop-into { border: 1px solid var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); border-radius: var(--r-lg); }
 .grid.drop-into { padding: 4px; }
 .grp-head { display: flex; align-items: center; gap: 8px; padding: 6px 2px 12px; }
@@ -980,8 +984,13 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .grp-act[title="Ungroup"]:hover { background: var(--red-soft); color: var(--red); }
 .grp-add { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--primary-700); border-radius: 7px; font-weight: 500; font-size: 12px; }
 .grp-add:hover { background: var(--primary-soft); border-color: transparent; }
-.grp-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
+/* an empty group's drop target: a dashed well on the group's own ground, with a plain
+   bordered button. The button used to be btn-primary — a solid blue CTA inside an empty
+   placeholder pulled more attention than the widgets the group is meant to hold. */
+.grp-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 26px 24px; color: var(--muted-2); font-size: 12.5px; border: 1px dashed var(--border-strong); border-radius: 10px; }
 .grp-empty p { margin: 0; }
+.grp-empty .eg-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 8px; font-size: 12.5px; font-weight: 600; }
+.grp-empty .eg-btn:hover { border-color: var(--primary); color: var(--primary-700); background: var(--primary-softer); }
 /* grouping-style demo switcher */
 .gstyle-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 14px; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 10px; }
 .legend-bar .gsb-label em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 11px; margin-left: 4px; }
@@ -1039,8 +1048,12 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 .new-section-bar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; padding: 9px; border: 1px dashed var(--border-strong); background: transparent; border-radius: 9px; color: var(--primary-700); font-weight: 600; font-size: 12.5px; }
 .new-section-bar:hover { background: var(--primary-softer); border-color: var(--primary); }
 /* persistent "New group" bar at the board's end (grouping method 3) */
-.new-group-bar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 14px; padding: 10px; border: 1px dashed var(--border-strong); background: transparent; border-radius: 10px; color: var(--primary-700); font-weight: 600; font-size: 12.5px; }
-.new-group-bar:hover { background: var(--primary-softer); border-color: var(--primary); }
+/* the New Group panel wears the group's own skin — same ground, same border, same radius
+   — so it previews the container it creates instead of announcing itself as a CTA bar */
+.new-group-bar { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; margin-top: 14px; padding: 16px 12px; border: 1px solid var(--border); background: var(--group-bg); border-radius: 10px; }
+.ng-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 15px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 8px; font-weight: 600; font-size: 12.5px; }
+.ng-btn:hover { border-color: var(--primary); color: var(--primary-700); background: var(--primary-softer); }
+.ng-note { margin: 0; font-size: 12px; color: var(--muted-2); text-align: center; }
 /* ⑦ per-widget group chip (hover-reveal, bottom-left, out of the header actions' way) */
 .cell-grp-chip { position: absolute; left: 10px; bottom: 8px; z-index: 7; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border: 1px solid var(--primary-soft); background: var(--surface); color: var(--primary-700); border-radius: 999px; font-size: 11.5px; font-weight: 600; box-shadow: var(--sh-sm); opacity: 0; transition: opacity .14s; }
 .cell:hover .cell-grp-chip { opacity: 1; }
