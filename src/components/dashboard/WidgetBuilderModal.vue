@@ -2,6 +2,7 @@
 import { reactive, computed, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
+import DateRangePicker from '../ui/DateRangePicker.vue'
 import ChartTile from './ChartTile.vue'
 import MeasureConditions from './MeasureConditions.vue'
 import FreeTextTile from './FreeTextTile.vue'
@@ -9,7 +10,6 @@ import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut, text as mkText, ACCESS } from '../../data/mock.js'
 import { CONDITION_FIELD_LABELS, NUMERIC_FIELD_LABELS, AGG_FNS, MAP_FNS } from '../../data/records.js'
 import { NEW_KINDS } from '../../data/chartOptions.js'
-import { QUICK } from '../../data/timeRanges.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
 const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary', 'duplicated'])
 
@@ -139,11 +139,10 @@ const XAXIS_OPTS = ['Priority', 'Status', 'Team', 'Created date']
 const YFUNC_OPTS = ['Count Of', 'Sum Of', 'Average Of', 'Distinct Count']
 const YCOL_OPTS = ['Requests', 'Effort hours', 'Resolution time']
 const DATEF_OPTS = ['Created date', 'Updated date', 'Resolved date', 'Due date']
-/* Date Filter picks WHICH date column to filter on; Date Range picks the WINDOW. They
- * sound alike and sit next to each other, so the range list is the same one the topbar
- * and the tile calendar offer — a range that exists in one picker and not another is how
- * you end up with a widget nobody can reproduce. */
-const DATE_RANGE_OPTS = QUICK.map((q) => q.label)
+/* Date Filter picks WHICH date column to filter on; Date Range picks the WINDOW. The
+ * range field is a DateRangePicker, which reads the same QUICK list the topbar and the
+ * tile calendar do — a range that exists in one picker and not another is how you end up
+ * with a widget nobody can reproduce. */
 
 // ServiceOps "Create Widget" fields. Prefilled from the existing tile when editing.
 function initCfg() {
@@ -659,13 +658,15 @@ function save(place) {
                      invites you to fill in something that will be ignored. -->
                 <label class="tgl-row" style="margin-top:14px">
                   <span class="tgl-txt">
-                    <b>Use custom sticky date filter</b>
+                    <b>Use custom sticky date</b>
                     <em>Keep this widget on its own dates. Changing the dashboard’s time filter won’t affect it.</em>
                   </span>
                   <button class="tgl" :class="{ on: cfg.stickyDate }" role="switch" :aria-checked="cfg.stickyDate"
                     @click.prevent="cfg.stickyDate = !cfg.stickyDate"><i /></button>
                 </label>
-                <div v-if="cfg.stickyDate" class="fld"><label>Date Range <i>*</i></label><Dropdown v-model="cfg.dateRange" :options="DATE_RANGE_OPTS" /></div>
+                <!-- a calendar field, not a dropdown: a range can be a named preset OR an
+                     absolute From→To, and a <select> can only ever offer the first -->
+                <div v-if="cfg.stickyDate" class="fld"><label>Date Range <i>*</i></label><DateRangePicker v-model="cfg.dateRange" /></div>
                 <div class="fld"><label>Description</label><textarea class="input" rows="3" v-model="cfg.description" placeholder="Description" /></div>
               </div>
 
