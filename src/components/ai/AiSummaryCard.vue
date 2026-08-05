@@ -74,9 +74,12 @@ function toggle() { open.value = !open.value }
 /* expanded: the small summary, then the CTAs beneath it at the bottom-left */
 .ac-body { padding: 10px 0 2px 45px; }
 .ac-summary { margin: 0 0 12px; font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 80ch; }
-.ac-ctas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* the two CTAs sit side by side on one row and each stays on one line — this card is
+   full-width, so there is no width at which wrapping "What needs attention" is the right
+   answer; it just makes one pill twice the height of its neighbour */
+.ac-ctas { display: flex; align-items: center; gap: 8px; }
 .ac-cta {
-  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; white-space: nowrap;
   border: 1px solid var(--ai-border); border-radius: var(--r-pill);
   background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 12.5px;
 }

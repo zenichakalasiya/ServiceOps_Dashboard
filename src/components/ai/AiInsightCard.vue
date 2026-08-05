@@ -45,9 +45,10 @@ const CTAS = AI_TEASER_CTAS
 .acb-spark :deep(.ico) { background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .acb-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--ai-grad); color: #fff; font-size: 11px; font-weight: 700; }
 .acb-sum { flex: 1; margin: 8px 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.acb-acts { display: flex; gap: 7px; flex-wrap: wrap; }
+/* both CTAs on one row, each on one line — see AiSummaryCard for why wrapping loses */
+.acb-acts { display: flex; gap: 7px; }
 .acb-cta {
-  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px;
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; white-space: nowrap;
   border: 1px solid var(--ai-border); border-radius: var(--r-pill);
   background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 11.5px;
 }

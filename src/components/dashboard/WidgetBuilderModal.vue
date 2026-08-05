@@ -9,6 +9,7 @@ import { store } from '../../store/index.js'
 import { chart as mkChart, kpi as mkKpi, shortcut as mkShortcut, text as mkText, ACCESS } from '../../data/mock.js'
 import { CONDITION_FIELD_LABELS, NUMERIC_FIELD_LABELS, AGG_FNS, MAP_FNS } from '../../data/records.js'
 import { NEW_KINDS } from '../../data/chartOptions.js'
+import { QUICK } from '../../data/timeRanges.js'
 const props = defineProps({ d: Object, type: Object, existing: { type: Object, default: null }, libItem: { type: Object, default: null }, duplicate: { type: Boolean, default: false } }) // type: { id,label,type,kind }
 const emit = defineEmits(['close', 'created', 'saved', 'librarySaved', 'savedToLibrary', 'duplicated'])
 
@@ -138,6 +139,11 @@ const XAXIS_OPTS = ['Priority', 'Status', 'Team', 'Created date']
 const YFUNC_OPTS = ['Count Of', 'Sum Of', 'Average Of', 'Distinct Count']
 const YCOL_OPTS = ['Requests', 'Effort hours', 'Resolution time']
 const DATEF_OPTS = ['Created date', 'Updated date', 'Resolved date', 'Due date']
+/* Date Filter picks WHICH date column to filter on; Date Range picks the WINDOW. They
+ * sound alike and sit next to each other, so the range list is the same one the topbar
+ * and the tile calendar offer — a range that exists in one picker and not another is how
+ * you end up with a widget nobody can reproduce. */
+const DATE_RANGE_OPTS = QUICK.map((q) => q.label)
 
 // ServiceOps "Create Widget" fields. Prefilled from the existing tile when editing.
 function initCfg() {
@@ -147,6 +153,9 @@ function initCfg() {
     mode: ex?.sql ? 'query' : 'manual',   // Manual | Query Based
     xAxis: 'Priority', yFunc: 'Count Of', yColumn: 'Requests',
     assetType: '', dateFilter: 'Created date', description: ex?.info || '',
+    // an existing tile already carrying its own `dateFilter` range IS a sticky widget —
+    // read the switch back off the tile so editing one doesn't silently un-stick it
+    stickyDate: !!ex?.dateFilter, dateRange: ex?.dateFilter || 'Last 7 days',
     // Output shaping is a rank WINDOW, not a sort direction: "Top 10" / "Bottom 10".
     // (None/Ascending/Descending said how to order the rows but never how many to
     // keep, which is the question a long-tailed chart actually asks.)
@@ -298,6 +307,12 @@ const previewTile = computed(() => {
 
 // place = true  → "{prefix} & Add Widget" (put it on the canvas, redirect)
 // place = false → "{prefix} Widget"        (save the definition, don't place)
+/* The sticky switch and `tile.dateFilter` are the same fact: a tile carrying a range is
+ * one that ignores the dashboard filter, and that range is exactly what the calendar on
+ * its header reads. Switching sticky off clears it, so the tile falls back to the board's
+ * filter and its calendar disappears — the same state as every widget that never had one. */
+function applySticky(t) { t.dateFilter = cfg.stickyDate ? cfg.dateRange : null }
+
 function save(place) {
   const pv = previewTile.value
   // --- duplicate a board tile: build a NEW copy from the (re)configured data ---
@@ -306,6 +321,7 @@ function save(place) {
     if (ex.group != null) pv.group = ex.group
     if (queryMode.value) pv.sql = cfg.sqlQuery
     pv.access = cfg.access
+    applySticky(pv)
     emit('duplicated', { tile: pv, afterId: ex.id })
     return
   }
@@ -330,6 +346,7 @@ function save(place) {
     else if (isText.value) { t.content = cfg.content; t.chart = undefined; t.columns = undefined; t.rows = undefined; t.value = undefined }
     if (!isShortcut.value && !isText.value) t.sql = cfg.mode === 'query' ? cfg.sqlQuery : undefined
     t.access = cfg.access
+    applySticky(t)
     props.d.updated = new Date().toISOString()
     emit('saved', { id: t.id, place })
     return
@@ -340,6 +357,7 @@ function save(place) {
     else { pv.w = isChart.value ? 6 : isShortcut.value ? 6 : 3; pv.h = isKpi.value ? 1 : 2 }
     if (queryMode.value) pv.sql = cfg.sqlQuery
     pv.access = cfg.access
+    applySticky(pv)
     props.d.tiles.push(pv)
     props.d.updated = new Date().toISOString()
     emit('created', pv.id)
@@ -635,6 +653,19 @@ function save(place) {
               <div v-if="manualMode && !isText" class="sec">
                 <div class="sec-h">Data Configuration</div>
                 <div class="fld"><label>Date Filter <i>*</i></label><Dropdown v-model="cfg.dateFilter" :options="DATEF_OPTS" /></div>
+                <!-- Opt out of the dashboard's shared time filter for this one widget.
+                     The Date Range field is hidden until the switch is on, because until
+                     then the widget has no range of its own — showing an inert field
+                     invites you to fill in something that will be ignored. -->
+                <label class="tgl-row" style="margin-top:14px">
+                  <span class="tgl-txt">
+                    <b>Use custom sticky date filter</b>
+                    <em>Keep this widget on its own dates. Changing the dashboard’s time filter won’t affect it.</em>
+                  </span>
+                  <button class="tgl" :class="{ on: cfg.stickyDate }" role="switch" :aria-checked="cfg.stickyDate"
+                    @click.prevent="cfg.stickyDate = !cfg.stickyDate"><i /></button>
+                </label>
+                <div v-if="cfg.stickyDate" class="fld"><label>Date Range <i>*</i></label><Dropdown v-model="cfg.dateRange" :options="DATE_RANGE_OPTS" /></div>
                 <div class="fld"><label>Description</label><textarea class="input" rows="3" v-model="cfg.description" placeholder="Description" /></div>
               </div>
 

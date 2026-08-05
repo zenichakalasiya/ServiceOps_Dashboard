@@ -9,6 +9,7 @@ import TableFilterBar from './TableFilterBar.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { typesFor, isFrozen, frozenReason, whyDisabled } from '../../data/chartTypes.js'
 import { conditionFields, matchesConds } from '../../data/filters.js'
+import { QUICK, windowFor, relativeFor, stampFor } from '../../data/timeRanges.js'
 import { widgetBrief } from '../../data/aiEngine.js'
 import { store, toast } from '../../store/index.js'
 const props = defineProps({ tile: Object, edit: Boolean })
@@ -18,7 +19,9 @@ const props = defineProps({ tile: Object, edit: Boolean })
 const aiBtn = ref(null)
 const aiHover = ref(false)
 const aiPos = ref({ top: 0, left: 0, flip: false })
-const CARD_W = 288
+// wide enough that "What needs attention" sits on ONE line beside "Deep dive" — at the
+// old 320 it wrapped to two, and a wrapped pill next to an unwrapped one reads as broken
+const CARD_W = 384
 const brief = computed(() => widgetBrief(props.tile))
 let aiTimer = null
 function openAiHover() {
@@ -74,69 +77,37 @@ const hasDateFilter = computed(() => !!props.tile.dateFilter)
 const dfChipEl = ref(null)
 const dfOpen = ref(false)
 const dfPos = ref({ top: 0, left: 0 })
-// the quick ranges, mirrored from the topbar TimeFilter — the "small" version is this
-// single column, no absolute-range pane.
-const DF_RANGES = ['Today', 'Yesterday', 'Last 7 days', 'Last 30 days', 'This week', 'This month', 'This quarter', 'Year to date']
 const dfHover = ref(false)
+// the SAME popover the topbar's global Time Filter uses — absolute From/To on the left,
+// searchable quick ranges on the right. Both read `QUICK` and `windowFor` from
+// data/timeRanges.js, so the two pickers can never offer different ranges or resolve the
+// same range to different windows.
+const dfSearch = ref('')
+const dfQuick = computed(() => {
+  const q = dfSearch.value.trim().toLowerCase()
+  return q ? QUICK.filter((x) => x.label.toLowerCase().includes(q)) : QUICK
+})
 
-/* The calendar states HOW FAR BACK this widget looks — 'today', '7 days ago',
+/* The calendar states HOW FAR BACK this widget looks — 'today', '3 hours ago',
  * '2 months ago' — rather than repeating the range's proper name. "Last 30 days" is a
  * label; "30 days ago" is the answer to the question the icon actually raises. The
- * tooltip then resolves it to real timestamps, which is the part a name can never carry.
- *
- * Every range is resolved to a real window first, so a custom range and a named one go
- * through exactly the same path — otherwise the two drift and only one of them is right. */
-function dfWindow(range) {
-  const start = new Date(); start.setHours(0, 0, 0, 0)
-  const end = new Date(); end.setHours(23, 59, 0, 0)
-  // a custom range is stored as "DD/MM/YY – DD/MM/YY" (see applyCustom)
-  const m = /^(\d{2})\/(\d{2})\/(\d{2})\s*[–-]\s*(\d{2})\/(\d{2})\/(\d{2})$/.exec(range || '')
-  if (m) {
-    const s = new Date(2000 + +m[3], +m[2] - 1, +m[1]); s.setHours(0, 0, 0, 0)
-    const e = new Date(2000 + +m[6], +m[5] - 1, +m[4]); e.setHours(23, 59, 0, 0)
-    return { start: s, end: e }
-  }
-  const back = (d) => start.setDate(start.getDate() - d)
-  switch (range) {
-    case 'Yesterday': back(1); end.setDate(end.getDate() - 1); break
-    case 'Last 7 days': back(7); break
-    case 'Last 30 days': back(30); break
-    // ISO weeks start Monday; getDay() is 0 for Sunday, which would jump a whole week
-    case 'This week': back(start.getDay() === 0 ? 6 : start.getDay() - 1); break
-    case 'This month': start.setDate(1); break
-    case 'This quarter': start.setMonth(Math.floor(start.getMonth() / 3) * 3, 1); break
-    case 'Year to date': start.setMonth(0, 1); break
-    default: break                                   // 'Today' — the window is today
-  }
-  return { start, end }
-}
-const DAY = 86400000
-function dfRelative(range) {
-  const midnight = new Date(); midnight.setHours(0, 0, 0, 0)
-  const days = Math.max(0, Math.round((midnight - dfWindow(range).start) / DAY))
-  if (!days) return 'today'
-  if (days === 1) return '1 day ago'
-  // past ~6 weeks a day count stops being readable — "2 months ago" lands immediately
-  if (days < 45) return `${days} days ago`
-  const mo = Math.round(days / 30)
-  return `${mo} month${mo > 1 ? 's' : ''} ago`
-}
-const dfStamp = (d) => d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ',')
+ * tooltip then resolves it to real timestamps, which is the part a name can never carry. */
+const dfRelative = (range) => relativeFor(range)
 const dfTitle = computed(() => {
   if (!hasDateFilter.value) return 'Set a time range for this widget'
-  const { start, end } = dfWindow(props.tile.dateFilter)
-  return `${dfStamp(start)} → ${dfStamp(end)}\nClick to change this widget’s range`
+  const { start, end } = windowFor(props.tile.dateFilter)
+  return `${stampFor(start)} → ${stampFor(end)}\nClick to change this widget’s range`
 })
-// custom absolute range — the second pane of the popover (mirrors the topbar TimeFilter)
-const dfCustom = ref(false)
+// custom absolute range — the left pane of the popover
 const dfFrom = ref('')
 const dfTo = ref('')
 function toggleDf() {
   if (dfOpen.value) { dfOpen.value = false; return }
   const r = dfChipEl.value?.getBoundingClientRect(); if (!r) return
-  const W = 210
+  // the two-pane popover is 496px; clamp so it never runs off the right edge
+  const W = 496
   dfPos.value = { top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) }
-  dfCustom.value = false
+  dfSearch.value = ''
   dfOpen.value = true
 }
 function pickDf(range) { props.tile.dateFilter = range; dfOpen.value = false; toast(`“${props.tile.title}” → ${range}`) }
@@ -147,7 +118,7 @@ function applyDfCustom() {
   if (!dfFrom.value || !dfTo.value) { toast('Pick both a From and a To date', 'warn'); return }
   const fmt = (s) => { const [Y, M, D] = s.split('T')[0].split('-'); return `${D}/${M}/${Y.slice(2)}` }
   props.tile.dateFilter = `${fmt(dfFrom.value)} – ${fmt(dfTo.value)}`
-  dfOpen.value = false; dfCustom.value = false
+  dfOpen.value = false
   toast(`“${props.tile.title}” → custom range`)
 }
 function openDfPicker(el) { try { el?.showPicker?.() } catch (e) { el?.focus() } }
@@ -387,26 +358,32 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
     <teleport to="body">
       <div v-if="dfOpen" class="backdrop" @click="dfOpen = false" />
       <transition name="pop">
+        <!-- the topbar Time Filter's popover, verbatim: absolute range on the left,
+             searchable quick ranges on the right. One extra row this one needs and the
+             topbar does not — "Follow dashboard filter", the way back out of an override. -->
         <div v-if="dfOpen" class="df-pop" :style="{ top: dfPos.top + 'px', left: dfPos.left + 'px' }" @click.stop>
-          <!-- quick ranges -->
-          <template v-if="!dfCustom">
-            <div class="df-pop-h"><Icon name="clock" :size="13" /> This widget’s time range</div>
-            <button v-for="r in DF_RANGES" :key="r" class="df-opt" :class="{ on: tile.dateFilter === r }" @click="pickDf(r)">
-              {{ r }} <Icon v-if="tile.dateFilter === r" name="check" :size="13" />
-            </button>
-            <div class="df-sep" />
-            <button class="df-opt" @click="dfCustom = true"><Icon name="calendar" :size="12" /> Custom range… <Icon name="chevron-right" :size="13" class="df-chev" /></button>
-            <button class="df-opt clear" @click="clearDf"><Icon name="x" :size="12" /> Follow dashboard filter</button>
-          </template>
-          <!-- custom absolute range -->
-          <template v-else>
-            <button class="df-pop-h back" @click="dfCustom = false"><Icon name="chevron-left" :size="14" /> Custom range</button>
-            <label class="df-lbl">From</label>
-            <div class="df-dt"><input ref="dfFromEl" class="df-input" type="datetime-local" v-model="dfFrom" /><button class="df-cal" @click="openDfPicker(dfFromEl)" title="Pick date"><Icon name="calendar" :size="14" /></button></div>
-            <label class="df-lbl">To</label>
-            <div class="df-dt"><input ref="dfToEl" class="df-input" type="datetime-local" v-model="dfTo" /><button class="df-cal" @click="openDfPicker(dfToEl)" title="Pick date"><Icon name="calendar" :size="14" /></button></div>
-            <button class="df-apply" @click="applyDfCustom"><Icon name="check" :size="14" /> Apply range</button>
-          </template>
+          <div class="df-abs">
+            <div class="df-h">Absolute time range</div>
+            <div class="df-fb">
+              <label>From</label>
+              <div class="df-dt"><input ref="dfFromEl" class="input" type="datetime-local" v-model="dfFrom" /><button class="df-cal" @click="openDfPicker(dfFromEl)" title="Pick date"><Icon name="calendar" :size="15" /></button></div>
+            </div>
+            <div class="df-fb">
+              <label>To</label>
+              <div class="df-dt"><input ref="dfToEl" class="input" type="datetime-local" v-model="dfTo" /><button class="df-cal" @click="openDfPicker(dfToEl)" title="Pick date"><Icon name="calendar" :size="15" /></button></div>
+            </div>
+            <button class="btn btn-primary df-apply" @click="applyDfCustom"><Icon name="check" :size="15" /> Apply time range</button>
+            <button class="df-follow" @click="clearDf"><Icon name="x" :size="13" /> Follow dashboard filter</button>
+          </div>
+          <div class="df-quick">
+            <div class="df-qs"><Icon name="search" :size="14" class="muted" /><input v-model="dfSearch" placeholder="Search quick ranges" /></div>
+            <div class="df-ql">
+              <button v-for="q in dfQuick" :key="q.k" class="df-qi" :class="{ on: tile.dateFilter === q.label }" @click="pickDf(q.label)">
+                {{ q.label }} <Icon v-if="tile.dateFilter === q.label" name="check" :size="14" />
+              </button>
+              <div v-if="!dfQuick.length" class="df-qn">No matching ranges</div>
+            </div>
+          </div>
         </div>
       </transition>
     </teleport>
@@ -660,35 +637,34 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .df-chip :deep(.ico) { color: var(--df); }
 .df-chip:hover, .df-chip.on { background: var(--df); border-color: var(--df); color: #fff; }
 .df-chip:hover :deep(.ico), .df-chip.on :deep(.ico) { color: #fff; }
-/* small time-filter popover (teleported) */
+/* the topbar Time Filter's two-pane popover, teleported so the card can't clip it.
+   Kept in step with components/dashboard/TimeFilter.vue — same 264/232 split. */
 .df-pop {
-  position: fixed; z-index: 160; width: 210px; padding: 6px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--sh-pop);
-  display: flex; flex-direction: column; gap: 1px;
+  position: fixed; z-index: 160; display: grid; grid-template-columns: 264px 232px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--sh-pop); overflow: hidden;
 }
-.df-pop-h { display: flex; align-items: center; gap: 6px; padding: 5px 8px 7px; font-size: 11px; font-weight: 600; color: var(--muted); }
-.df-pop-h :deep(.ico) { color: var(--df); }
-.df-opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border: none; background: transparent; border-radius: 7px; font-size: 12.5px; color: var(--ink-2); text-align: left; cursor: pointer; }
-.df-opt:hover { background: var(--surface-2); }
-.df-opt.on { background: var(--df-soft); color: var(--df-ink); font-weight: 600; }
-.df-opt.on :deep(.ico) { color: var(--df); }
-.df-opt.clear { color: var(--muted); gap: 7px; justify-content: flex-start; }
-.df-opt.clear:hover { color: var(--ink); }
-.df-opt .df-chev { margin-left: auto; color: var(--muted-2); }
-.df-sep { height: 1px; background: var(--border); margin: 4px 6px; }
-/* custom-range pane */
-.df-pop-h.back { width: 100%; border: none; background: transparent; cursor: pointer; align-items: center; }
-.df-pop-h.back:hover { color: var(--ink); }
-.df-lbl { font-size: 11px; font-weight: 500; color: var(--ink-2); padding: 4px 8px 3px; }
-.df-dt { position: relative; padding: 0 6px 6px; }
-.df-input { width: 100%; height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 32px 0 9px; font-size: 12px; color: var(--ink); background: var(--surface); outline: none; }
-.df-input:focus { border-color: var(--df); }
-.df-input::-webkit-calendar-picker-indicator { opacity: 0; }
-.df-cal { position: absolute; right: 10px; top: 2px; width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 6px; display: grid; place-items: center; }
+.df-abs { padding: 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.df-h { font-weight: 600; font-size: 13px; margin-bottom: 12px; }
+.df-fb { display: flex; flex-direction: column; margin-bottom: 12px; }
+.df-fb label { font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 5px; }
+.df-apply { width: 100%; margin-top: 4px; }
+/* the one row the topbar has no need for: the way back to the dashboard's own filter */
+.df-follow { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; padding: 7px; border: none; background: transparent; color: var(--muted); border-radius: 8px; font-size: 12px; }
+.df-follow:hover { background: var(--surface-2); color: var(--ink); }
+.df-quick { padding: 12px 10px; display: flex; flex-direction: column; min-height: 0; }
+.df-qs { display: flex; align-items: center; gap: 7px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 9px; height: 34px; margin-bottom: 8px; }
+.df-qs input { border: none; outline: none; background: transparent; width: 100%; font-size: 12.5px; }
+.df-ql { display: flex; flex-direction: column; gap: 1px; overflow: auto; max-height: 300px; }
+.df-qi { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: none; background: transparent; border-radius: 7px; font-size: 13px; color: var(--ink-2); text-align: left; }
+.df-qi:hover { background: var(--surface-2); }
+.df-qi.on { background: var(--primary-soft); color: var(--primary-700); font-weight: 600; }
+.df-qn { padding: 14px 10px; color: var(--muted-2); font-size: 12px; }
+/* absolute From/To inputs — same treatment as the topbar's */
+.df-dt { position: relative; }
+.df-dt .input { height: 36px; font-size: 12.5px; padding-right: 36px; width: 100%; }
+.df-dt .input::-webkit-calendar-picker-indicator { opacity: 0; }
+.df-cal { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 7px; display: grid; place-items: center; }
 .df-cal:hover { background: var(--surface-2); color: var(--ink); }
-.df-apply { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 4px 6px 2px; height: 34px; border: none; border-radius: 8px; background: var(--df); color: #fff; font-weight: 600; font-size: 12.5px; cursor: pointer; }
-.df-apply:hover { background: var(--df-ink); }
-.df-apply :deep(.ico) { color: #fff; }
 /* info-icon tooltip: the DESCRIPTION leads, provenance sits under it as a left-aligned pill */
 .tt-desc { font-weight: 400; color: rgba(255,255,255,.88); line-height: 1.45; }
 .tt-tag { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .2px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); color: #fff; }
@@ -737,7 +713,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .ti.ai { color: var(--ai); background: var(--ai-softer); }
 .ti.ai:hover, .ti.ai.on { background: var(--ai-soft); color: var(--ai-ink); }
 /* per-widget hover mini-summary card */
-.wai-card { position: fixed; z-index: 260; width: 320px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
+.wai-card { position: fixed; z-index: 260; width: 384px; max-width: 92vw; padding: 12px 13px; border: 1px solid var(--ai-border); border-radius: var(--r); background: var(--surface); box-shadow: var(--sh-lg); }
 .wai-card.up { transform: translateY(-100%); }
 .wai-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .wai-h .ellip { color: var(--ai-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -747,7 +723,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 /* two actions, side by side */
 .wai-acts { display: flex; flex-direction: row; gap: 6px; }
 /* same rounded-pill treatment as the AI Summary card's CTAs */
-.wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--ai-border); border-radius: var(--r-pill); background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 12px; text-align: center; }
+.wai-a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--ai-border); border-radius: var(--r-pill); background: var(--ai-grad-soft); color: var(--ai-ink); font-weight: 600; font-size: 12px; text-align: center; white-space: nowrap; }
 .wai-a:hover { border-color: var(--ai); background: var(--ai-soft); }
 /* Deep dive leads — it is the one that opens the conversation; the other is a shortcut
    to the ranked list, which the thread can also reach on its own. */
@@ -769,10 +745,7 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .menu-item.ai .mi-c :deep(.ico), .menu-item.ai .mi-c { color: var(--muted); }
 /* the AI flyout is a CARD, not a list of rows — it carries the same summary + two CTAs
    as the header sparkle's hover card, so it borrows that card's internals verbatim */
-.submenu.ai-sub { width: 320px; min-width: 320px; padding: 12px 13px; border-color: var(--ai-border); }
-/* the two CTAs must sit on ONE line each — "What needs attention" wraps at the default
-   14px padding, and a wrapped pill beside an unwrapped one reads as a layout bug */
-.submenu.ai-sub .wai-a { padding: 0 8px; white-space: nowrap; }
+.submenu.ai-sub { width: 384px; min-width: 384px; padding: 12px 13px; border-color: var(--ai-border); }
 .menu-item.sub { justify-content: space-between; position: relative; }
 .mi-l { display: flex; align-items: center; gap: 10px; }
 .mi-c { color: var(--muted); }

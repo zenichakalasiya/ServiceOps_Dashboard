@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import Icon from '../ui/Icon.vue'
 import { store, toast } from '../../store/index.js'
+import { QUICK } from '../../data/timeRanges.js'
 const open = ref(false)
 const from = ref(''); const to = ref('')
 const fromEl = ref(null); const toEl = ref(null)
@@ -17,16 +18,8 @@ function fmtRange(s) {
   return `${(Y || '').slice(2)}-${M}-${D} ${hms}`
 }
 
-// Quick ranges — ordered like the reference (Last N …), plus ITSM presets.
-const QUICK = [
-  { k: 'last5m', label: 'Last 5 minutes' }, { k: 'last15m', label: 'Last 15 minutes' }, { k: 'last30m', label: 'Last 30 minutes' },
-  { k: 'last1h', label: 'Last 1 hour' }, { k: 'last3h', label: 'Last 3 hours' }, { k: 'last6h', label: 'Last 6 hours' },
-  { k: 'last12h', label: 'Last 12 hours' }, { k: 'last24h', label: 'Last 24 hours' }, { k: 'last2d', label: 'Last 2 days' },
-  { k: 'last7', label: 'Last 7 days' }, { k: 'last30', label: 'Last 30 days' },
-  { k: 'today', label: 'Today' }, { k: 'yesterday', label: 'Yesterday' },
-  { k: 'week', label: 'This week' }, { k: 'month', label: 'This month' },
-  { k: 'qtr', label: 'This quarter' }, { k: 'ytd', label: 'Year to date' },
-]
+// Quick ranges live in data/timeRanges.js — a widget's own date override reads the same
+// list, so the global picker and a per-widget one can never offer different ranges.
 function pick(q) { store.timeFilter = { preset: q.k, label: q.label, from: null, to: null }; open.value = false }
 function applyAbs() {
   if (!from.value || !to.value) { toast('Pick both From and To'); return }
