@@ -135,6 +135,7 @@ positioned in viewport coordinates — follow that pattern for any new floating 
 | `views/ManageDashboards.vue` | The "All Dashboards" data grid — sort, filter, bulk actions. |
 | `components/dashboard/ChartTile.vue` | ECharts wrapper — kinds, semantic colors, legend + rank-window, per-type entrance animation. |
 | `components/dashboard/DataTable.vue` | TanStack table for Shortcut tiles — sort, search, per-column filters. |
+| `components/dashboard/TableFilterBar.vue` | The Requests-style filter bar: pick a field in the search box → `Field Operator Value` chip → operator popover. Chips AND across fields. |
 | `components/dashboard/WidgetBuilderModal.vue` | Create/edit a tile. |
 | `components/dashboard/AddWidgetModal.vue` | The tile library — tabs, module/type filters, usage badge. |
 | `components/ui/FilterMenu.vue` | Shared two-level filter: OR within a field, AND across fields. |
@@ -198,6 +199,14 @@ honestly — "no widgets yet" — rather than borrowing another board's story.
 overdue / SLA-breaching / unassigned / urgent / open / resolved their own plausible range, delta
 direction and status, seeded from the text. Without this, four counters built in one batch all
 read the same number.
+
+**Two CTAs, board level and tile level.** Both the dashboard AI Insight card and every widget AI
+insight card expose exactly **Deep dive** and **What needs attention** — nothing else.
+`deepDiveBoard` / `deepDiveTile` / `focusBoard` / `focusTile` in `data/aiEngine.js` produce them, and
+`chartShape()` normalises all 12 chart kinds into the shape those functions read (a spec-driven tile
+has no `chart.series` to hand over). **Gauge tone comes from the band's colour, not its index** —
+our bands are fractions with `higherIsBetter` already applied, so index-0-is-healthy would invert
+every higher-is-better meter.
 
 **Numbered next steps** appear only after a task that leaves a real decision (dashboard created,
 widget added). Contextual **follow-ups** appear only on answers that invite a next question
