@@ -321,13 +321,14 @@ function submit(openAdd = false) {
 </template>
 
 <style scoped>
-/* A CENTERED modal, not a right-edge drawer. Creating a dashboard is the task, not a
-   side-note to whatever is behind it — and the layout sliders + live preview need to be
-   read against nothing in particular, which a drawer pinned beside the live board cannot
-   give them. */
-.drawer-overlay { position: fixed; inset: 0; background: rgba(20,21,38,.42); backdrop-filter: blur(2px); z-index: 100; display: grid; place-items: center; padding: 24px; }
-.drawer { width: 620px; max-width: 94vw; max-height: 92vh; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--sh-lg); display: flex; flex-direction: column; overflow: hidden; animation: slideIn .22s cubic-bezier(.2,.8,.2,1); }
-@keyframes slideIn { from { transform: translateY(10px) scale(.99); opacity: .4; } to { transform: none; opacity: 1; } }
+/* A right-edge drawer, matching Add New Widget and every other side panel in the module.
+   This was briefly a centered modal and it made Create Dashboard the only overlay in the
+   product that arrived from somewhere else — a panel whose position tells you which panel
+   it is, is a panel you have to re-learn. The redesigned contents are unchanged; only the
+   placement went back. */
+.drawer-overlay { position: fixed; inset: 0; background: rgba(20,21,38,.42); backdrop-filter: blur(2px); z-index: 100; display: flex; justify-content: flex-end; }
+.drawer { width: 620px; max-width: 96vw; height: 100%; background: var(--surface); box-shadow: var(--sh-lg); display: flex; flex-direction: column; overflow: hidden; animation: slideIn .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes slideIn { from { transform: translateX(30px); opacity: .4; } to { transform: none; opacity: 1; } }
 .head { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 22px 12px; }
 .head h3 { margin: 0; font-size: 18px; }
 .head p { margin: 3px 0 0; font-size: 12.5px; }
