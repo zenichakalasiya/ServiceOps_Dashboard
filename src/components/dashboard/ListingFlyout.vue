@@ -105,14 +105,18 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
       <button class="new-ic" title="New dashboard" @click="newDashboard"><Icon name="plus" :size="17" /></button>
     </div>
 
+    <!-- Order is Title → Search → Tabs → default → categories. Search sits ABOVE the
+         tabs because it searches across all of them; below them it read as "search
+         within this tab", which is not what it does. -->
+    <div class="fsearch"><Icon name="search" :size="15" class="muted" /><input v-model="store.ui.listingQuery" placeholder="Search dashboards…" /></div>
+
+    <!-- scrolls sideways: four tab labels do not fit 300px and "Predefined" was clipped -->
     <div class="tabs2">
       <button class="t2" :class="{ on: tab === 'all' }" @click="tab = 'all'">All</button>
       <button class="t2" :class="{ on: tab === 'mine' }" @click="tab = 'mine'">Created by me</button>
       <button class="t2" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
       <button class="t2" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Predefined</button>
     </div>
-
-    <div class="fsearch"><Icon name="search" :size="15" class="muted" /><input v-model="store.ui.listingQuery" placeholder="Search dashboards…" /></div>
 
     <!-- default dashboard: pinned above the groups, home icon leading the name, ⋯ on hover -->
     <div v-if="defaultDash" class="def-row">
@@ -136,7 +140,10 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
           </button>
           <div v-if="open.has(grp.name)" class="items">
             <div v-for="d in grp.items" :key="grp.name + d.id" class="item" :class="{ active: route.params.id === d.id, 'menu-open': menuId === d.id }" @click="openBoard(d)">
-              <Icon :name="dashIcon(d)" :size="13" class="lk" :class="'ic-' + dashKind(d)" :title="dashKind(d)" />
+              <!-- the kind is carried by the GLYPH (monitor / person / share), so the box
+                   and its colour stay uniform — three different icon colours down a list
+                   turned a quiet sidebar into a legend nobody asked for -->
+              <span class="ibox" :title="dashKind(d)"><Icon :name="dashIcon(d)" :size="14" /></span>
               <span class="iname ellip">{{ d.name }}</span>
               <!-- the default landing board carries a static home icon beside its name here too -->
               <Icon v-if="d.default" name="default-home" :size="13" class="def-mark" title="Default dashboard — the one you land on" />
@@ -194,8 +201,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 </template>
 
 <style scoped>
-/* retint: remap the neutral tokens on the root so every child follows the sidebar tint */
-.flyout { --surface: var(--sidebar); --surface-2: var(--sidebar-hover); --border: var(--sidebar-border); width: 300px; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); display: flex; flex-direction: column; height: 100%; }
+/* The listing sits on the plain surface, not the sidebar tint. It used to remap --surface
+   /--surface-2/--border to the sidebar palette for every child, which is what made the
+   panel read as a tinted rail; on --surface it reads as part of the page. Using the token
+   rather than a literal #fff keeps dark mode working. */
+.flyout { width: 300px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; }
 .fhead { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; }
 .ftitle { font-weight: 600; font-size: 15px; }
 .ic { width: 30px; height: 30px; border: none; background: transparent; color: var(--muted); border-radius: 8px; display: grid; place-items: center; }
@@ -210,8 +220,11 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .manage-link { width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: none; background: transparent; color: var(--ink-2); font-weight: 600; font-size: 13px; border-radius: 8px; }
 .manage-link:hover { background: var(--surface-2); color: var(--ink); }
 .manage-link .ml-arrow { margin-left: auto; color: var(--muted); }
-/* inline underline tabs (matches the Add-Widget side popup) */
-.tabs2 { display: flex; gap: 0; padding: 0 12px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+/* inline underline tabs (matches the Add-Widget side popup). Four labels are wider than
+   300px, so the strip scrolls sideways instead of clipping "Predefined". The scrollbar is
+   hidden — a visible one under a 1px rule reads as a broken border. */
+.tabs2 { display: flex; gap: 0; padding: 0 12px; border-bottom: 1px solid var(--border); margin-bottom: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -ms-overflow-style: none; }
+.tabs2::-webkit-scrollbar { display: none; }
 .t2 { border: none; background: transparent; padding: 9px 2px; margin-right: 14px; color: var(--muted); font-weight: 500; font-size: 12.5px; border-bottom: 2px solid transparent; white-space: nowrap; flex: none; }
 .t2:last-child { margin-right: 0; }
 .t2:hover { color: var(--ink); }
@@ -225,14 +238,16 @@ function doClone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; stor
 .gname { flex: 1; }
 .gcount { font-size: 11px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; font-weight: 600; }
 .items { display: flex; flex-direction: column; gap: 1px; padding: 1px 0 4px; }
-.item { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 22px; border-radius: 8px; cursor: pointer; }
+.item { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 20px; border-radius: 8px; cursor: pointer; }
 .item:hover { background: var(--surface-2); }
 .item.active { background: var(--primary-softer); }
 .item.active .iname { color: var(--primary-700); font-weight: 400; }
+/* every dashboard's icon sits in the same soft rounded box — the box is the constant,
+   the glyph inside it is what says predefined vs mine vs shared */
+.ibox { flex: none; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink-2); }
+.item:hover .ibox { background: var(--surface); }
+.item.active .ibox { background: var(--primary-soft); color: var(--primary-700); }
 .lk { color: var(--muted-2); flex: none; }
-.lk.ic-pre { color: var(--primary); }
-.lk.ic-shared { color: var(--blue); }
-.lk.ic-mine { color: var(--green); }
 .iname { flex: 0 1 auto; min-width: 0; font-size: 13px; }
 .tag-pre { font-size: 9.5px; font-weight: 500; color: var(--primary-700); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; flex: none; }
 /* pinned default row — sits above the groups, so no chevron indent; home icon + ⋯ only */

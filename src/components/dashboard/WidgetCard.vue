@@ -631,7 +631,11 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
    collapses to its header once the chart stops carrying a fixed pixel height. */
 .tile { display: flex; flex-direction: column; overflow: hidden; min-height: 130px; flex: 1; }
 /* the title + action row sits in its own slight-neutral band, with room to breathe */
-.thead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 8px 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+/* Shorter and much lighter than the old --surface-2 band: at 46px tall in a solid grey the
+   header competed with the chart under it. Mixed down to ~25% of --surface-2 it still
+   separates from the white body, and the hairline rule does the rest. color-mix keeps it
+   correct in dark mode, where a literal near-white would be a hole in the card. */
+.thead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px 4px 12px; background: color-mix(in srgb, var(--surface-2) 25%, var(--surface)); border-bottom: 1px solid var(--border); }
 .left { display: flex; align-items: center; gap: 6px; min-width: 0; }
 /* 6-dot drag handle — takes NO width at rest, so the title sits flush left exactly as
    it does in the design's resting state; on hover it opens and the title slides right.
