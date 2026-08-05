@@ -970,7 +970,11 @@ function discard() { if (dirty.value && !confirm('Discard unsaved changes?')) re
 @keyframes cellReveal { from { opacity: 0; transform: translateY(10px) scale(.99); } to { opacity: 1; transform: none; } }
 /* widget groups (collapsible rows) */
 .board-groups { display: flex; flex-direction: column; gap: 16px; }
-.group { border: 1px solid var(--border); border-radius: 10px; background: var(--group-bg); padding: 6px 12px 14px; transition: box-shadow .15s, border-color .15s; }
+/* No outline. The ground colour already marks the group's extent, and once the tiles
+   inside got their own stronger edge the container's border was a third frame stacked on
+   the same content. It comes back only while something is being dragged into it, where
+   the border IS the message. */
+.group { border: 1px solid transparent; border-radius: 10px; background: var(--group-bg); padding: 6px 12px 14px; transition: box-shadow .15s, border-color .15s; }
 /* A tile inside a group sits on --group-bg (#FAFBFD), which is within four units of the
    tile header's own --bg (#F6F9FC) — close enough that the header strip merges into the
    ground and the tile appears to begin at its white body. The tile's EDGE has to do the

@@ -129,6 +129,14 @@ function doDelete(d) { (isArchive.value ? deleteForever : archiveDashboard)(d); 
 function rel(iso) { const dd = Math.round((Date.now() - new Date(iso)) / 864e5); return dd < 1 ? 'today' : dd < 30 ? `${dd}d ago` : dd < 365 ? `${Math.round(dd / 30)}mo ago` : `${Math.round(dd / 365)}y ago` }
 function open(d) { recordView(d); router.push(`/dashboard/${d.id}`) }
 function edit(d) { store.ui.cloneTarget = null; store.ui.editTarget = d; store.ui.createOpen = true }
+function clone(d) { store.ui.editTarget = null; store.ui.cloneTarget = d; store.ui.createOpen = true }
+/* The row itself opens the board, so the Open action could go. Anything the row already
+ * hands to a control — the checkbox, the status switch, the +N chip, an action button —
+ * keeps its own job; without this guard, archiving a dashboard would also navigate to it. */
+function onRowClick(d, e) {
+  if (e.target.closest('button, input, a, label, .tp, .drag')) return
+  open(d)
+}
 const scheduleTarget = ref(null)
 const historyTarget = ref(null)
 
@@ -211,8 +219,9 @@ function onDrop(target) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="d in rows" :key="d.id" :class="{ dim: d.enabled === false, sel: sel.has(d.id) }"
-            :draggable="!isArchive" @dragstart="onDragStart(d)" @dragover.prevent @drop="onDrop(d)">
+          <tr v-for="d in rows" :key="d.id" class="row-open" :class="{ dim: d.enabled === false, sel: sel.has(d.id) }"
+            :draggable="!isArchive" @click="onRowClick(d, $event)"
+            @dragstart="onDragStart(d)" @dragover.prevent @drop="onDrop(d)">
             <td class="c-chk"><input type="checkbox" :checked="sel.has(d.id)" @change="toggleSel(d)" /></td>
             <td class="nm">
               <!-- inner wrapper carries the flex; a <td> set to display:flex stops
@@ -247,7 +256,9 @@ function onDrop(target) {
               <div class="acts-in">
                 <button v-if="isArchive" class="ia" title="Restore" @click="restoreDashboard(d)"><Icon name="restore" :size="15" /></button>
                 <template v-else>
-                  <button class="ia" title="Open" @click="open(d)"><Icon name="layout" :size="15" /></button>
+                  <!-- No "Open" action: the row is the open target. A button that repeats
+                       what clicking the thing already does is a button you have to explain. -->
+                  <button class="ia" title="Duplicate" @click="clone(d)"><Icon name="copy" :size="15" /></button>
                   <button class="ia" title="Edit" @click="edit(d)"><Icon name="edit" :size="15" /></button>
                   <button class="ia" title="Schedule" @click="scheduleTarget = d"><Icon name="calendar2" :size="15" /></button>
                   <button class="ia" title="History" @click="historyTarget = d"><Icon name="history" :size="15" /></button>
@@ -343,6 +354,8 @@ function onDrop(target) {
 .mtbl thead th.srt:hover .sc { opacity: .6; }
 .sc.vis { opacity: 1; color: var(--primary); }
 
+/* the whole row opens the board, so it says so */
+.mtbl tbody tr.row-open { cursor: pointer; }
 .mtbl tbody tr:hover { background: var(--surface-2); }
 .mtbl tbody tr.sel { background: var(--primary-softer); }
 .mtbl tbody tr.dim { opacity: .55; }
