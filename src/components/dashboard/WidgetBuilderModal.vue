@@ -430,7 +430,6 @@ function save(place) {
                     :class="{ on: curType.id === t.id }" :title="`Show as ${t.label}`" @click="pickKind(t)"
                   >
                     <Icon :name="t.icon" :size="22" :class="{ rot90: t.id === 'bar' }" />
-                    <span class="kind-l">{{ t.label }}</span>
                   </button>
                 </div>
               </div>
@@ -475,18 +474,21 @@ function save(place) {
 
               <!-- Chart Type is its own section AFTER visibility, as the prototype orders
                    it: what the widget is called and who can see it are settled before how
-                   it is drawn. The labels stay under the tiles — twelve icon-only squares
-                   is a memory test, and the prototype only had four. -->
+                   it is drawn.
+
+                   Icon-only squares, as the reference draws them. The label moves into the
+                   tooltip rather than disappearing — several of these kinds are genuinely
+                   hard to tell apart as glyphs (Bar vs Column vs Stacked vs Histogram), so
+                   there has to be somewhere the name still lives. -->
               <div v-if="showFamilies && isChart" class="sec">
                 <div class="sec-h">Chart Type</div>
                 <p class="hint" style="margin:-6px 0 12px">Pick how the data should be visualized.</p>
                 <div class="kinds">
                   <button
                     v-for="k in CHART_KINDS" :key="k.id" class="kind"
-                    :class="{ on: curType.id === k.id }" @click="pickKind(k)"
+                    :class="{ on: curType.id === k.id }" :title="k.label" :aria-label="k.label" @click="pickKind(k)"
                   >
                     <Icon :name="k.icon" :size="22" :class="{ rot90: k.id === 'bar' }" />
-                    <span class="kind-l">{{ k.label }}</span>
                   </button>
                 </div>
                 <template v-if="!isShortcut && !isText">
@@ -803,13 +805,14 @@ function save(place) {
 .pv-tab .rot90 { transform: rotate(90deg); }
 /* chart-kind picker in the config panel — the family row's little sibling, sized for
    a 2-up grid so all four fit the narrow column without wrapping oddly */
-/* all four chart kinds in one row, as square tiles: icon over label */
-.kinds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.kind { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 1 / 1; padding: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 10px; font-weight: 500; font-size: 12.5px; }
+/* Icon-only squares that WRAP, so all twelve kinds show at the reference's size instead
+   of a fixed 4-column grid stretching each cell to the column width. Fixed 48px keeps the
+   padding even on every side — an aspect-ratio cell in a fluid grid does not. */
+.kinds { display: flex; flex-wrap: wrap; gap: 10px; }
+.kind { flex: none; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2); border-radius: 10px; }
 .kind:hover { background: var(--surface-2); border-color: var(--muted-2); }
 /* selected: a light primary wash, not a solid fill */
 .kind.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-700); box-shadow: var(--sh-sm); }
-.kind-l { line-height: 1; }
 .kind .rot90 { transform: rotate(90deg); }
 .pv-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; }
 .pv-canvas { flex: 1; display: grid; place-items: center; padding: 22px; min-height: 0; }
