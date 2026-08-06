@@ -290,7 +290,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
                    Bar / Column / Stacked / Histogram tell themselves apart. No rot90 —
                    Bar has its own horizontal artwork now. -->
               <button v-for="t in g.types" :key="t.id" class="tc" @click="builder = t">
-                <div class="tc-ico"><ChartIcon :name="t.id" :size="40" /></div>
+                <div class="tc-ico"><ChartIcon :name="t.id" :size="64" /></div>
                 <span class="tc-label">{{ t.label }}</span>
               </button>
             </div>
@@ -300,7 +300,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
             <div class="cat-h">Layout</div>
             <div class="cards">
               <button class="tc tc-group" @click="emit('newgroup')">
-                <div class="tc-ico"><ChartIcon name="group" :size="40" /></div>
+                <div class="tc-ico"><ChartIcon name="group" :size="64" /></div>
                 <span class="tc-label">Empty Group</span>
               </button>
             </div>
@@ -446,12 +446,15 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .cat { margin-bottom: 18px; }
 .cat-h { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted-2); font-weight: 600; margin: 6px 0 10px; }
 .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.tc { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 30px 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; color: var(--ink-2); }
+/* padding is 28, not 30, purely so the card's height is unchanged now that the icon box
+   went 60 → 64: the four extra pixels of glyph come out of the padding rather than out of
+   the grid. Card height stays 154. */
+.tc { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; color: var(--ink-2); }
 .tc:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); box-shadow: var(--sh-sm); transform: translateY(-2px); }
 .tc-group { border-style: dashed; border-color: var(--border-strong); }
 /* the icons paint with currentColor, so they inherit the card's ink at rest (--ink-2,
    which IS the sheet's #516381) and pick up the primary on hover along with the label */
-.tc-ico { width: 60px; height: 60px; display: grid; place-items: center; }
+.tc-ico { width: 64px; height: 64px; display: grid; place-items: center; }
 .tc-label { font-size: 13px; font-weight: 500; }
 .lst { display: flex; flex-direction: column; gap: 2px; }
 .lrow { display: flex; align-items: center; gap: 12px; padding: 10px 10px; border-radius: 10px; }
