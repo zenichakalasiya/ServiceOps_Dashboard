@@ -492,7 +492,10 @@ function save(place) {
                   </button>
                 </div>
                 <template v-if="!isShortcut && !isText">
-                  <div class="seg" style="margin-top:14px">
+                  <!-- 26px, not 14: Manual / Query Based is a different question from the
+                       chart type above it — how the data is fetched, not how it is drawn —
+                       and at 14 it read as a fifth row of the Chart Type control. -->
+                  <div class="seg" style="margin-top:26px">
                     <button class="seg-b" :class="{ on: cfg.mode==='manual' }" @click="cfg.mode='manual'">Manual</button>
                     <button class="seg-b" :class="{ on: cfg.mode==='query' }" @click="cfg.mode='query'">Query Based</button>
                   </div>
