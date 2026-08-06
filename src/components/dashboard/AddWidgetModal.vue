@@ -3,6 +3,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
+import ChartIcon from '../ui/ChartIcon.vue'
 import WidgetBuilderModal from './WidgetBuilderModal.vue'
 import { store, addTilesToDashboard, deleteLibTile, restoreLibTile, removeLibTileForever, libUsage, toast } from '../../store/index.js'
 import { uid } from '../../data/mock.js'
@@ -284,8 +285,12 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
           <section v-for="g in filteredGroups" :key="g.cat" class="cat">
             <div class="cat-h">{{ g.cat }}</div>
             <div class="cards">
+              <!-- illustrated icons, not Material glyphs: at 40px a chart type is a
+                   picture of the chart, and the three-step opacity ramp is what makes
+                   Bar / Column / Stacked / Histogram tell themselves apart. No rot90 —
+                   Bar has its own horizontal artwork now. -->
               <button v-for="t in g.types" :key="t.id" class="tc" @click="builder = t">
-                <div class="tc-ico" :class="{ rot90: t.id === 'bar' }"><Icon :name="t.icon" :size="40" /></div>
+                <div class="tc-ico"><ChartIcon :name="t.id" :size="40" /></div>
                 <span class="tc-label">{{ t.label }}</span>
               </button>
             </div>
@@ -295,7 +300,7 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
             <div class="cat-h">Layout</div>
             <div class="cards">
               <button class="tc tc-group" @click="emit('newgroup')">
-                <div class="tc-ico"><Icon name="new-group" :size="40" /></div>
+                <div class="tc-ico"><ChartIcon name="group" :size="40" /></div>
                 <span class="tc-label">Empty Group</span>
               </button>
             </div>
@@ -444,8 +449,9 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
 .tc { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 30px 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; color: var(--ink-2); }
 .tc:hover { border-color: var(--primary); background: var(--primary-softer); color: var(--primary-700); box-shadow: var(--sh-sm); transform: translateY(-2px); }
 .tc-group { border-style: dashed; border-color: var(--border-strong); }
+/* the icons paint with currentColor, so they inherit the card's ink at rest (--ink-2,
+   which IS the sheet's #516381) and pick up the primary on hover along with the label */
 .tc-ico { width: 60px; height: 60px; display: grid; place-items: center; }
-.tc-ico.rot90 { transform: rotate(90deg); }
 .tc-label { font-size: 13px; font-weight: 500; }
 .lst { display: flex; flex-direction: column; gap: 2px; }
 .lrow { display: flex; align-items: center; gap: 12px; padding: 10px 10px; border-radius: 10px; }
