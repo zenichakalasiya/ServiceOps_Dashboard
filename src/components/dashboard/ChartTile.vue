@@ -96,8 +96,14 @@ const themeTick = ref(0)
 watch(() => store.ui.theme, () => { themeTick.value++ })
 const cssVar = (n, f) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f
 /* --chart-1..10 categorical stops + --chart-other (see tokens.css); replaces the old
- * hardcoded PAL array / OTHER_COLOR — read through cssVar so light/dark repaints. */
-const pal = computed(() => { themeTick.value; return Array.from({ length: PAL_STOPS }, (_, i) => cssVar('--chart-' + (i + 1), '#3d8bd0')) })
+ * hardcoded PAL array / OTHER_COLOR — read through cssVar so light/dark repaints.
+ * Per-stop fallbacks (the light values), so a missing token degrades to something
+ * legible rather than ten identical blues. */
+const PAL_FALLBACK = [
+  '#3d8bd0', '#1f9d63', '#b7740a', '#e0483d', '#7c4ddb',
+  '#0e8fa0', '#c93b7d', '#5d7189', '#6b8600', '#b8560f',
+]
+const pal = computed(() => { themeTick.value; return PAL_FALLBACK.map((f, i) => cssVar(`--chart-${i + 1}`, f)) })
 const otherColor = computed(() => { themeTick.value; return cssVar('--chart-other', '#7d8ea3') })
 
 const HIGH_CARD = 12
@@ -225,6 +231,10 @@ const tokens = computed(() => {
     primary: cssVar('--primary', '#3d8bd0'),
   }
 })
+/* `pal` / `otherColor` / `PAL_FALLBACK` are declared ABOVE, next to themeTick — a second
+ * copy here redeclared them (the build failed with "Identifier 'pal' has already been
+ * declared") and, had it parsed, would have reintroduced the very TDZ crash the early
+ * declaration exists to prevent. Keep them up there. */
 /* Token bundle the CHART_OPT builders expect: the theme tokens plus the categorical
  * palette + Other stop, so an additional kind paints from the same --chart-* stops
  * (and repaints on a theme switch via themeTick, which `tokens` already reads). */

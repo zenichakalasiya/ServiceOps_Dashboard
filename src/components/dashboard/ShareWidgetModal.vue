@@ -146,7 +146,11 @@ function share() {
       <header class="sw-h">
         <b class="sw-t">{{ isEmail ? 'Email as PDF' : 'Share widget' }}</b>
         <div class="grow" />
-        <div class="tools" @click.stop>
+        <!-- Markup belongs to Email as PDF only. Sharing in-product hands over the LIVE
+             widget — the recipient opens it, filters it, drills it — so pen strokes drawn
+             here would either be thrown away or freeze a live tile into a picture. The
+             PDF is a snapshot, which is the one case where marking it up means something. -->
+        <div v-if="isEmail" class="tools" @click.stop>
           <button class="tl" :class="{ on: tool === 'pen' }" title="Draw freehand" @click="togglePen">
             <Icon name="pen" :size="17" />
           </button>
@@ -186,7 +190,7 @@ function share() {
 
       <div class="sw-b">
         <!-- the widget, with a markup layer over it -->
-        <div class="snap" :class="{ drawing }">
+        <div class="snap" :class="{ drawing: drawing && isEmail }">
           <!-- no Copy link: a widget has no URL of its own to hand out, so the button
                copied a board link with a fragment nothing reads back -->
           <div class="snap-h">
@@ -198,7 +202,7 @@ function share() {
             <DataTable v-else-if="tile.type === 'shortcut'" :columns="tile.columns || []" :rows="tile.rows || []" :sortable="false" />
           </div>
 
-          <svg class="anno" @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="up">
+          <svg v-if="isEmail" class="anno" @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="up">
             <template v-for="(s, i) in all" :key="i">
               <path v-if="s.type === 'pen'" :d="path(s)" :stroke="s.color" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
               <rect v-else-if="s.type === 'rect'" v-bind="box(s)" :stroke="s.color" fill="none" stroke-width="3" rx="4" />
@@ -210,7 +214,7 @@ function share() {
             </template>
           </svg>
 
-          <span v-if="drawing" class="hint">{{ tool === 'pen' ? 'Draw to highlight' : `Drag to place a ${shapeKind}` }} · Esc to stop</span>
+          <span v-if="drawing && isEmail" class="hint">{{ tool === 'pen' ? 'Draw to highlight' : `Drag to place a ${shapeKind}` }} · Esc to stop</span>
         </div>
 
         <!-- recipients -->

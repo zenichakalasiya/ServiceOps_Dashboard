@@ -137,9 +137,6 @@ function onRowClick(d, e) {
   if (e.target.closest('button, input, a, label, .tp, .drag')) return
   open(d)
 }
-// only ENABLED schedules count as "scheduled" — a disabled one delivers nothing, and a
-// badge that stays lit for something switched off is worse than no badge
-const activeSchedules = (d) => (d.schedules || []).filter((s) => s.enabled)
 const scheduleTarget = ref(null)
 const historyTarget = ref(null)
 
@@ -236,14 +233,6 @@ function onDrop(target) {
                 <!-- favourite + default are independent → shown together when both apply -->
                 <button v-if="!isArchive" class="nm-ic fav" :class="{ on: d.favorite }" :title="d.favorite ? 'Favourite' : 'Add to favourites'" @click.stop="toggleFavorite(d)"><Icon :name="d.favorite ? 'star-fill' : 'star'" :size="14" /></button>
                 <Icon v-if="d.default" name="default-home" :size="15" class="nm-ic def" title="Default dashboard" />
-                <!-- A schedule was invisible everywhere: you could create one and never see
-                     from the outside that this board mails itself to people every Monday.
-                     It sits beside the name because that is where the board's own facts
-                     (favourite, default) already live. Click it to open the schedules. -->
-                <button
-                  v-if="activeSchedules(d).length" class="nm-ic sch" @click.stop="scheduleTarget = d"
-                  :title="`${activeSchedules(d).length} active schedule${activeSchedules(d).length > 1 ? 's' : ''} — ${activeSchedules(d).map(s => s.type).join(', ')}`"
-                ><Icon name="calendar2" :size="14" /></button>
               </div>
             </td>
             <td v-if="col('category')"><span v-if="d.category" class="cat-pill">{{ d.category }}</span><span v-else class="muted">—</span></td>
@@ -386,9 +375,6 @@ function onDrop(target) {
 .nm:hover .nm-ic.fav, .nm-ic.fav.on { opacity: 1; }
 .nm-ic.fav.on { color: #f5a623; }
 .nm-ic.fav:hover { background: var(--surface); }
-/* always visible — unlike the star, a schedule is a fact about the board, not a control */
-.nm-ic.sch { border: none; background: transparent; color: var(--green); border-radius: 5px; padding: 2px; }
-.nm-ic.sch:hover { background: var(--green-soft); }
 .cat-pill { font-size: 12px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; }
 /* minimal technician pills (task 7): 6px radius, subtle color, 1 + N */
 .techcell { position: relative; white-space: nowrap; }
