@@ -482,7 +482,7 @@ function save(place) {
                    there has to be somewhere the name still lives. -->
               <div v-if="showFamilies && isChart" class="sec">
                 <div class="sec-h">Chart Type</div>
-                <p class="hint" style="margin:-6px 0 12px">Pick how the data should be visualized.</p>
+                <p class="hint">Pick how the data should be visualized.</p>
                 <div class="kinds">
                   <button
                     v-for="k in CHART_KINDS" :key="k.id" class="kind"
@@ -870,6 +870,9 @@ function save(place) {
 .input.bad { border-color: var(--amber); }
 .sec:last-child { padding-bottom: 0; }
 .sec-h { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
+/* a heading that OWNS the line under it sits tight to it — 12px of air between a title
+   and its own description reads as two separate things */
+.sec-h:has(+ .hint) { margin-bottom: 5px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fld { display: flex; flex-direction: column; margin-bottom: 12px; }
 .fld:last-child { margin-bottom: 0; }
@@ -879,11 +882,13 @@ function save(place) {
 .selw select { appearance: none; padding-right: 30px; cursor: pointer; }
 .chev { position: absolute; right: 11px; top: 12px; color: var(--muted); pointer-events: none; }
 /* Manual / Query Based, and Display's Top / Bottom / All */
-.seg { display: inline-flex; gap: 2px; background: var(--surface-2); padding: 4px; border-radius: 10px; border: none; margin-bottom: 8px; }
+.seg { display: inline-flex; gap: 2px; background: var(--surface-2); padding: 4px; border-radius: 10px; border: none; margin-bottom: 6px; }
 .seg-b { border: none; background: transparent; padding: 0 14px; height: 30px; border-radius: 7px; font-weight: 500; font-size: 12.5px; color: var(--ink-2); }
 .seg-b:hover { color: var(--ink); }
 .seg-b.on { background: var(--ink); color: #fff; font-weight: 600; box-shadow: var(--sh-sm); }
-.hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 10px; }
+/* No top margin. A hint is the DESCRIPTION of the heading above it, not a paragraph in
+   its own right — it belongs against that heading, with the air below the pair. */
+.hint { font-size: 11.5px; color: var(--muted); margin: 0 0 10px; }
 /* Visibility & Sharing — the same three-way control the dashboard panel uses, sized for
    the narrower config column (the board's 38px pills would crowd it). */
 .acc-lbl { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
