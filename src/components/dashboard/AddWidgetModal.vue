@@ -229,14 +229,14 @@ function showTip(l, e) {
   tip.value = { show: true, text: libDesc(l), prov: l.prov, top: r.top + r.height / 2, right: window.innerWidth - r.left + 12 }
 }
 function hideTip() { tip.value.show = false }
-const TAB_LABEL = { all: 'All', predefined: 'Predefined', user: 'Created by me', shared: 'Shared with me', trash: 'Trash' }
+const TAB_LABEL = { all: 'All', predefined: 'Predefined', user: 'Created by me', shared: 'Shared with me', trash: 'Archive' }
 const emptyMsg = computed(() => {
   const plural = fType.value ? (fType.value === 'kpi' ? 'KPIs' : TYPE_LABEL[fType.value] + 's') : 'items'
-  if (isTrash.value) return `Trash is empty.`
+  if (isTrash.value) return `Archive is empty.`
   return `No ${plural} in ${TAB_LABEL[tab.value] || 'this tab'} yet.`
 })
 const emptyHelp = computed(() => {
-  if (tab.value === 'trash') return 'Deleted widgets, KPIs and Shortcuts land here — restore them, or delete forever.'
+  if (tab.value === 'trash') return 'Archived widgets, KPIs and Shortcuts land here — restore them, or delete forever.'
   if (tab.value === 'shared') return 'Widgets, KPIs and Shortcuts shared with you will appear here.'
   if (tab.value === 'user') return 'Create one from the Create Widget tab, then it appears here.'
   if (tab.value === 'all') return 'Everything in the library — predefined, yours, and shared with you — appears here.'
@@ -263,7 +263,8 @@ function onCreated(id) { tagGroup(id); emit('created', id); emit('close') }
         <button class="awt" :class="{ on: tab === 'predefined' }" @click="tab = 'predefined'">Predefined</button>
         <button class="awt" :class="{ on: tab === 'user' }" @click="tab = 'user'">Created by me</button>
         <button class="awt" :class="{ on: tab === 'shared' }" @click="tab = 'shared'">Shared with me</button>
-        <button class="awt" :class="{ on: tab === 'trash' }" @click="tab = 'trash'"><Icon name="trash" :size="13" /> Trash <span v-if="trashCount" class="awt-count">{{ trashCount }}</span></button>
+        <!-- "Archive" in the UI; the state key stays `trash` so nothing downstream moves -->
+        <button class="awt" :class="{ on: tab === 'trash' }" @click="tab = 'trash'"><Icon name="archive" :size="13" /> Archive <span v-if="trashCount" class="awt-count">{{ trashCount }}</span></button>
       </div>
 
       <!-- module filter + search (reuse tabs only — the Create Widget tab has no search) -->

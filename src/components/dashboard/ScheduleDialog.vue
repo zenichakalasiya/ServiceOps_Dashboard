@@ -4,8 +4,12 @@ import Icon from '../ui/Icon.vue'
 import Dropdown from '../ui/Dropdown.vue'
 import { store, toast } from '../../store/index.js'
 import { uid } from '../../data/mock.js'
+/* `d` is whatever is being scheduled — a dashboard (has `name`) or a single widget (has
+ * `title`). The dialog is identical either way: same recipients, same format, same
+ * recurrence, so it takes both rather than being forked. */
 const props = defineProps({ d: Object })
 const emit = defineEmits(['close'])
+const subject = computed(() => props.d.name || props.d.title || 'this item')
 
 if (!props.d.schedules) props.d.schedules = []
 const view = ref('list')          // list | form
@@ -56,7 +60,7 @@ function delSchedule(s) { props.d.schedules = props.d.schedules.filter((x) => x.
     <div class="sc-panel">
     <!-- ===== LIST ===== -->
     <template v-if="view === 'list'">
-      <div class="head"><h3>Schedule: {{ d.name }}</h3><button class="ic" @click="emit('close')"><Icon name="x" :size="18" /></button></div>
+      <div class="head"><h3>Schedule: {{ subject }}</h3><button class="ic" @click="emit('close')"><Icon name="x" :size="18" /></button></div>
       <div class="lst-top">
         <div class="qbox"><Icon name="search" :size="15" class="muted" /><input v-model="search" placeholder="Search…" /></div>
         <button class="btn btn-primary" @click="openCreate"><Icon name="plus" :size="15" /> Create Schedule</button>

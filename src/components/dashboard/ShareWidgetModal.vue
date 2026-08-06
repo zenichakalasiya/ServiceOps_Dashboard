@@ -14,8 +14,16 @@ import DataTable from './DataTable.vue'
 import { toast } from '../../store/index.js'
 import { TECHNICIANS, TECH_GROUPS } from '../../data/mock.js'
 
-const props = defineProps({ tile: Object })
+/* One component, two jobs — because the annotate-the-widget half is identical and the only
+ * thing that differs is WHO it goes to.
+ *   mode 'share' → pick technicians / groups, sends in-product. No note: the recipients
+ *                  open the widget itself, so a covering message has nowhere to live.
+ *   mode 'email' → type email addresses, attach a PDF of the marked-up widget, and the
+ *                  note IS the email body, so here it earns its place.
+ */
+const props = defineProps({ tile: Object, mode: { type: String, default: 'share' } })
 const emit = defineEmits(['close'])
+const isEmail = computed(() => props.mode === 'email')
 
 /* ---------------- annotation ---------------- */
 const COLORS = ['#e0483d', '#d98a0b', '#1f9d63', '#3d8bd0', '#8b5cf6', '#364658']
@@ -99,7 +107,10 @@ const picked = ref([])
 const note = ref('')
 const focused = ref(false)
 
+// email mode offers no suggestion list — there is no directory of arbitrary addresses to
+// suggest from, and a picker that only ever returns nothing is worse than no picker
 const suggestions = computed(() => {
+  if (isEmail.value) return []
   const q = query.value.trim().toLowerCase()
   const taken = new Set(picked.value.map((p) => p.name))
   const pool = [
@@ -112,6 +123,7 @@ function add(p) { picked.value.push(p); query.value = ''; }
 function addTyped() {
   const q = query.value.trim()
   if (!q) return
+  if (isEmail.value) { if (!picked.value.some((p) => p.name === q)) picked.value.push({ name: q, group: false, email: true }); query.value = ''; return }
   add(suggestions.value[0] ?? { name: q, group: false })   // an email typed in full is valid too
 }
 function remove(i) { picked.value.splice(i, 1) }
@@ -121,12 +133,9 @@ function share() {
   if (!canShare.value) return
   const who = picked.value.length === 1 ? picked.value[0].name : `${picked.value.length} recipients`
   const marks = shapes.value.length ? ` with ${shapes.value.length} annotation${shapes.value.length > 1 ? 's' : ''}` : ''
-  toast(`Shared “${props.tile.title}”${marks} to ${who}`, 'success')
+  if (isEmail.value) toast(`“${props.tile.title}” emailed as PDF${marks} to ${who}`, 'success')
+  else toast(`Shared “${props.tile.title}”${marks} to ${who}`, 'success')
   emit('close')
-}
-function copyLink() {
-  navigator.clipboard?.writeText(`${location.origin}${location.pathname}${location.hash}#tile=${props.tile.id}`).catch(() => {})
-  toast('Widget link copied')
 }
 </script>
 
@@ -135,7 +144,7 @@ function copyLink() {
     <div class="sw">
       <!-- header: title left, markup tools hard right, then close -->
       <header class="sw-h">
-        <b class="sw-t">Share widget</b>
+        <b class="sw-t">{{ isEmail ? 'Email as PDF' : 'Share widget' }}</b>
         <div class="grow" />
         <div class="tools" @click.stop>
           <button class="tl" :class="{ on: tool === 'pen' }" title="Draw freehand" @click="togglePen">
@@ -178,9 +187,10 @@ function copyLink() {
       <div class="sw-b">
         <!-- the widget, with a markup layer over it -->
         <div class="snap" :class="{ drawing }">
+          <!-- no Copy link: a widget has no URL of its own to hand out, so the button
+               copied a board link with a fragment nothing reads back -->
           <div class="snap-h">
             <b>{{ tile.title }}</b>
-            <button class="lnk" @click="copyLink"><Icon name="link" :size="13" /> Copy link</button>
           </div>
           <div class="snap-c">
             <div v-if="tile.type === 'kpi'" class="pv-kpi">{{ tile.value }}<span v-if="tile.unit" class="u">{{ tile.unit }}</span></div>
@@ -204,14 +214,15 @@ function copyLink() {
         </div>
 
         <!-- recipients -->
-        <label class="fl">Share with</label>
+        <label class="fl">{{ isEmail ? 'Email' : 'Share with' }}</label>
         <div class="rcpt" :class="{ focus: focused }">
           <span v-for="(p, i) in picked" :key="p.name" class="rchip">
-            <Icon :name="p.group ? 'users' : 'user'" :size="12" />{{ p.name }}
+            <Icon :name="p.email ? 'mail' : p.group ? 'users' : 'user'" :size="12" />{{ p.name }}
             <button @click="remove(i)"><Icon name="x" :size="12" /></button>
           </span>
           <input
-            v-model="query" :placeholder="picked.length ? '' : 'Add technician or technician group…'"
+            v-model="query" :type="isEmail ? 'email' : 'text'"
+            :placeholder="picked.length ? '' : isEmail ? 'Type an email address and press Enter…' : 'Add technician or technician group…'"
             @focus="focused = true" @blur="focused = false"
             @keydown.enter.prevent="addTyped" @keydown.backspace="!query && picked.length && remove(picked.length - 1)"
           />
@@ -224,14 +235,19 @@ function copyLink() {
           </div>
         </div>
 
-        <label class="fl">Note</label>
-        <textarea v-model="note" rows="2" placeholder="Add a note for the recipients…" />
+        <!-- the note is the EMAIL BODY, so it only exists in email mode. Sharing in-product
+             drops the recipient onto the widget itself; a covering note there had nowhere
+             to be read. -->
+        <template v-if="isEmail">
+          <label class="fl">Note</label>
+          <textarea v-model="note" rows="2" placeholder="Add a note for the recipients…" />
+        </template>
       </div>
 
       <footer class="sw-f">
         <button class="btn" @click="emit('close')">Cancel</button>
-        <button class="btn btn-primary" :disabled="!canShare" :title="canShare ? '' : 'Add at least one recipient'" @click="share">
-          <Icon name="share" :size="15" /> Share
+        <button class="btn btn-primary" :disabled="!canShare" :title="canShare ? '' : isEmail ? 'Add at least one email address' : 'Add at least one recipient'" @click="share">
+          <Icon :name="isEmail ? 'mail' : 'share'" :size="15" /> {{ isEmail ? 'Send PDF' : 'Share' }}
         </button>
       </footer>
     </div>

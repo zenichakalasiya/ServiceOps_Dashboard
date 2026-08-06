@@ -5,6 +5,7 @@ import ChartTile from './ChartTile.vue'
 import DataTable from './DataTable.vue'
 import FreeTextTile from './FreeTextTile.vue'
 import ShareWidgetModal from './ShareWidgetModal.vue'
+import ScheduleDialog from './ScheduleDialog.vue'
 import TableFilterBar from './TableFilterBar.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import { typesFor, isFrozen, frozenReason, whyDisabled } from '../../data/chartTypes.js'
@@ -293,6 +294,14 @@ function duplicate() { menu.value = false; emit('duplicate', props.tile) }
 // deleting a widget is destructive and one click away — confirm it by name
 const confirmDel = ref(false)
 const shareOpen = ref(false)
+const emailOpen = ref(false)      // Export ▸ Email as PDF — the same dialog, email mode
+const scheduleOpen = ref(false)   // recurring delivery of this one widget
+// a disabled schedule delivers nothing, so it does not light the badge
+const activeSchedules = computed(() => (props.tile.schedules || []).filter((s) => s.enabled))
+const schTitle = computed(() => {
+  const n = activeSchedules.value.length
+  return `${n} active schedule${n > 1 ? 's' : ''} — ${activeSchedules.value.map((s) => s.type).join(', ')}\nClick to manage`
+})
 // task 12: record IDs in a shortcut table are explorable → jump to their module record
 const ID_MODULE = { INC: 'Requests', REC: 'Records', CNT: 'Contracts', PRB: 'Problems', CHG: 'Changes', AST: 'Assets' }
 function isId(v) { return /^[A-Z]{2,4}-\d/.test(String(v).trim()) }
@@ -316,6 +325,13 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
         <span ref="infoEl" class="info" @mouseenter="showInfo" @mouseleave="infoHover = false">
           <Icon name="info" :size="14" />
         </span>
+        <!-- a scheduled widget says so at rest, the same way an overridden date does.
+             Without it you could set a widget to mail itself weekly and never see any
+             trace of that from the board. -->
+        <button
+          v-if="activeSchedules.length" class="sch-mark" :title="schTitle"
+          @click.stop="scheduleOpen = true"
+        ><Icon name="calendar2" :size="13" /></button>
       </div>
       <!-- Right side: the calendar is the ONLY thing at rest, at the far right. On hover
            the cluster grows around it on BOTH sides — AI to its left, the rest to its
@@ -489,10 +505,16 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
           <!-- Export → submenu (PDF / PNG / SVG) -->
           <div class="menu-item sub" @mouseenter="exportOpen = true; typeOpen = false" @mouseleave="exportOpen = false">
             <span class="mi-l"><Icon name="download" :size="15" /> Export</span><Icon name="chevron-right" :size="14" class="mi-c" />
-            <transition name="pop"><div v-if="exportOpen" class="submenu">
+            <transition name="pop"><div v-if="exportOpen" class="submenu ex">
               <button v-for="f in EXPORTS" :key="f" class="menu-item" @click="download(f)">{{ f }}</button>
+              <!-- Emailing is an export too — it produces the same PDF, it just leaves by
+                   a different door. Ruled off because it opens a dialog rather than
+                   downloading on the spot. -->
+              <div class="menu-sep" />
+              <button class="menu-item" @click="menu = false; exportOpen = false; emailOpen = true"><Icon name="mail" :size="15" /> Email as PDF</button>
             </div></transition>
           </div>
+          <button class="menu-item" @click="menu = false; scheduleOpen = true"><Icon name="calendar2" :size="15" /> Schedule</button>
           <template v-if="canDelete">
             <div class="menu-sep" />
             <button class="menu-item danger" @click="menu = false; confirmDel = true"><Icon name="trash" :size="15" /> Delete card</button>
@@ -561,6 +583,8 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
     <!-- Share widget: preview + screenshot-style markup + recipients -->
     <teleport to="body">
       <ShareWidgetModal v-if="shareOpen" :tile="tile" @close="shareOpen = false" />
+      <ShareWidgetModal v-if="emailOpen" :tile="tile" mode="email" @close="emailOpen = false" />
+      <ScheduleDialog v-if="scheduleOpen" :d="tile" @close="scheduleOpen = false" />
 
       <ConfirmDialog
         v-if="confirmDel"
@@ -675,6 +699,9 @@ function exploreId(id) { const m = ID_MODULE[String(id).split('-')[0]] || 'its m
 .tt-tag { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .2px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); color: #fff; }
 .tt-tag.predefined { background: rgba(139,92,246,.3); border-color: rgba(139,92,246,.55); color: #ded3ff; }
 .tt-tag.shared { background: rgba(76,177,254,.26); border-color: rgba(76,177,254,.5); color: #cfe8ff; }
+/* the schedule badge is always on — it reports a fact, it is not a hover action */
+.sch-mark { flex: none; width: 20px; height: 20px; border: none; background: transparent; color: var(--green); border-radius: 5px; display: grid; place-items: center; }
+.sch-mark:hover { background: var(--green-soft); }
 .info { position: relative; color: var(--muted-2); display: inline-grid; place-items: center; cursor: help; opacity: 0; transition: opacity .14s; }
 .tile:hover .info, .tile.acting .info { opacity: 1; }
 .info:hover { color: var(--primary); }
