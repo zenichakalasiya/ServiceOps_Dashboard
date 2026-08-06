@@ -665,7 +665,7 @@ function save(place) {
                      invites you to fill in something that will be ignored. -->
                 <label class="tgl-row" style="margin-top:14px">
                   <span class="tgl-txt">
-                    <b>Use custom sticky date</b>
+                    <b>Restrict Date Overrides</b>
                     <em>Keep this widget on its own dates. Changing the dashboard’s time filter won’t affect it.</em>
                   </span>
                   <button class="tgl" :class="{ on: cfg.stickyDate }" role="switch" :aria-checked="cfg.stickyDate"
